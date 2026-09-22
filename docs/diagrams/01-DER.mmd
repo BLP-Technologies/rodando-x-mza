@@ -1,0 +1,121 @@
+erDiagram
+USERS {
+int id PK
+varchar(50) name
+varchar(200) email
+varchar(255) password_hash
+boolean is_moderator
+datetime created_at
+datetime updated_at
+datetime? deleted_at
+}
+
+    USER_PLACES {
+        int id PK
+        int user_id FK
+        varchar(100) name
+        varchar(300)? description
+        geometry(Point) geom
+        datetime created_at
+        datetime updated_at
+    }
+
+    SAVED_ROUTES {
+        int id PK
+        int user_id FK
+        varchar(100) name "ej: Ir al trabajo"
+        geometry(Point) start_point "Punto A (Origen)"
+        geometry(Point) end_point "Punto B (Destino)"
+        datetime created_at
+        datetime updated_at
+    }
+
+    %% Nodos de conexión / Esquinas %%
+    KERB_NODES {
+        int id PK
+        geometry(Point) geom
+        varchar(10)? accessibility_level "FULL, PARTIAL, NONE"
+        boolean is_verified
+    }
+
+
+    %% Vereda, de cordón a cordón %%
+    SIDEWALKS {
+        int id PK
+        int start_node_id FK
+        int end_node_id FK
+        bigint osm_way_id "FK externo"
+        varchar(100)? street_name
+        char(1)? side "Lado de la calle (L / R / -)"
+        geometry(Linevarchar) geom
+        boolean is_verified
+        boolean is_accessible
+        float? width "Ancho de vereda"
+    }
+
+    %% Cruce peatonal sobre calzada %%
+    CROSSINGS {
+        int id PK
+        int start_node_id FK
+        int end_node_id FK
+        geometry(Linevarchar) geom
+        boolean has_traffic_light
+        boolean is_verified
+        boolean is_accessible
+    }
+
+    %% Obstáculos o barreras físicas puntuales %%
+    OBSTACLES {
+        int id PK
+        int? sidewalk_id FK
+        geometry(Point) geom
+        varchar type "POZO, ARBOL, ESCALON, PENDIENTE_EXCESIVA, ESTRECHAMIENTO"
+        varchar severity "CRITICAL, MODERATE, MINOR"
+        boolean is_resolved
+        datetime created_at
+        datetime updated_at
+        datetime? deleted_at
+    }
+
+    %% Reporte de obstáculos. No crea el obstáculo %%
+    REPORTS {
+        int id PK
+        int user_id FK
+        varchar(300) description
+        geometry(Point) geom
+        varchar(300)? image_url
+        varchar(20) status
+        int? obstacle_id FK "Relación opcional con un obstáculo"
+        datetime created_at
+        datetime updated_at
+        datetime? deleted_at
+    }
+
+    TUTORIALS {
+        int id PK
+        varchar(100) title
+        varchar(300) description
+        varchar(30) category
+        varchar(300) video_url
+        datetime created_at
+        datetime updated_at
+        datetime? deleted_at
+    }
+
+    USER_TUTORIALS {
+        int id PK
+        int user_id FK
+        int tutorial_id FK
+        datetime created_at
+        datetime updated_at
+    }
+
+    USERS ||--o{ USER_PLACES: "Tiene lugares favoritos"
+    USERS ||--o{ SAVED_ROUTES: "Puede guardar rutas"
+    KERB_NODES ||--o{ SIDEWALKS: "Nodo de inicio y fin"
+    KERB_NODES ||--o{ CROSSINGS: "Nodo de inicio y fin"
+    SIDEWALKS ||--o{ OBSTACLES: "Puede tener obstáculos"
+    USERS ||--o{ REPORTS: "Puede reportar obstáculos"
+    OBSTACLES ||--o{ REPORTS: "Reporta un obstáculo"
+    USERS ||--o{ USER_TUTORIALS: "Tiene tutoriales guardados"
+    TUTORIALS ||--o{ USER_TUTORIALS: "Es guardado por un usuario"

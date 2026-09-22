@@ -1,0 +1,53 @@
+usecase-beta
+direction LR
+
+actor R("Usuario Registrado")
+actor G("Usuario Invitado")
+actor M("Moderador")
+
+R -- "Herencia" --> G
+
+systemBoundary "Acceso Público"
+  Register("Registrar Usuario (C001)")
+  Login("Iniciar Sesión (C002)")
+  SearchRoute("Buscar recorrido accesible (C003)")
+  RouteDetails("Ver detalles de ruta (C004)")
+  GetTutorials("Consultar tutoriales (C005)")
+
+end
+
+systemBoundary "Requiere usuario registrado"
+  SavePlace("Guardar lugar frecuente (C006)")
+  SaveRoute("Guardar ruta frecuente (C007)")
+  GetSavedPlaces("Gestionar lugares guardados (C008)")
+  GetSavedRoutes("Gestionar rutas guardadas (C009)")
+  Report("Generar reporte de obstáculo (C010)")
+end
+
+systemBoundary "Administración"
+  GetReports("Obtener reportes (C011)")
+  CreateObstacle("Crear obstáculo (C012)")
+  GetObstacles("Gestionar obstáculos (C013)")
+  UpdateAccessibility("Cambiar accesibilidad de elemento (C014)")
+end
+
+G --> Register
+G --> Login
+G --> GetTutorials
+G --> SearchRoute
+
+R --> SavePlace
+R --> Report
+R --> GetSavedPlaces
+R --> GetSavedRoutes
+
+GetReports <-- M
+UpdateAccessibility <-- M
+CreateObstacle <-- M
+GetObstacles <-- M
+
+RouteDetails ..> : extend SearchRoute
+SaveRoute ..> : extend SearchRoute
+
+GetReports ..> : include Report
+CreateObstacle ..> : extend GetReports

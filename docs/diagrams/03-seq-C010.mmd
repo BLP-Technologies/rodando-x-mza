@@ -1,0 +1,37 @@
+sequenceDiagram
+    autonumber
+
+    actor U as Usuario
+    participant UI as App Mobile
+    participant B as Backend
+    participant ST as Servidor de Archivos
+
+    participant DB@{"type": "database"} as Base de Datos
+
+    U ->> UI: Completa datos del obstáculo<br/>(ubicación, tipo, foto)
+    U ->> UI: Presiona "Enviar Reporte"
+
+    activate UI
+    UI ->> B: POST /api/reports (formData)
+
+    opt Si el formulario incluye foto
+        B ->> ST: Guardar imagen
+        activate ST
+        ST -->> B: Retorna URL de la imagen
+        deactivate ST
+    end
+
+    activate B
+    Note over B,DB: El reporte se crea en estado pendiente.<br/>Aún no genera un obstáculo en el mapa.
+
+    B ->> DB: INSERT INTO reports (location, type, imageUrl, status='PENDING')
+
+    activate DB
+    DB -->> B: Reporte creado (ID: 123)
+    deactivate DB
+
+    B -->> UI: 201 Created (reportId: 123)
+    deactivate B
+
+    UI -->> U: Muestra mensaje<br/>"Reporte registrado con éxito"
+    deactivate UI

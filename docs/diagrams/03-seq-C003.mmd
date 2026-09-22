@@ -1,0 +1,31 @@
+sequenceDiagram
+    autonumber
+
+    actor U as Usuario
+    participant UI as App Mobile
+    participant B as Backend
+
+    participant DB@{"type": "database"} as Base de Datos
+
+    U ->> UI: Ingresa Origen y Destino
+    U ->> UI: Presiona "Buscar"
+
+    activate UI
+    UI ->> B: POST /api/routes/calculate(origin, destination)
+
+    Note over B,DB: El Backend invoca la función de ruteo
+
+    activate B
+    B ->> DB: SELECT pgr_dijkstra(...) <br/>(JOIN de veredas, accesibilidad y obstáculos activos)
+
+    Note over DB: La BD penaliza el peso de<br/>las veredas que tienen obstáculos
+
+    activate DB
+    DB -->> B: Retorna geometría de ruta accesible
+    deactivate DB
+
+    B -->> UI: 200 OK (Geometría de la ruta)
+    deactivate B
+
+    UI -->> U: Muestra ruta en el mapa
+    deactivate UI

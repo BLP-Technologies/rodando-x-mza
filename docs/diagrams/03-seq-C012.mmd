@@ -1,0 +1,61 @@
+sequenceDiagram
+    autonumber
+
+    actor M as Moderador
+    participant UI as Panel Web Admin
+    participant B as Backend
+    participant ST as Servidor de Archivos
+    participant DB@{"type": "database"} as Base de Datos
+
+    %% Fase 1: Consultar reportes
+    M ->> UI: Accede a sección reportes pendientes
+
+    activate UI
+    UI ->> B: GET /api/reports?status=PENDING
+
+    activate B
+    B ->> DB: SELECT * FROM reports WHERE status = 'PENDING'
+
+    activate DB
+    DB -->> B: Lista de reportes pendientes
+    deactivate DB
+
+    B -->> UI: 200 OK (Lista de reportes)
+    deactivate B
+
+    UI -->> M: Muestra tabla con reportes pendientes
+    deactivate UI
+
+    %% Fase 2: Creación del obstáculo
+    M ->> UI: Selecciona un reporte y presiona<br/>"Aprobar y Crear obstáculo"
+
+    activate UI
+
+    opt Si el reporte incluye imagen
+        UI ->> ST: Solicita imagen
+        activate ST
+        ST -->> UI: Retorna imagen
+        deactivate ST
+    end
+
+    UI ->> B: POST /api/obstacles (reportId, location, obstacleType, severity)
+
+    activate B
+
+    Note over B,DB: Inicia transacción BD:<br/>1. Registra el obstáculo formal<br/>2. Actualiza el costo/peso de la vereda en pgRouting<br/>3. Cambia estado del reporte a 'APPROVED'
+
+    B ->> DB: BEGIN TRANSACTION
+    B ->> DB: INSERT INTO obstacles (report_id, location, type, severity)
+    B ->> DB: UPDATE sidewalks SET weight = weight + penalty WHERE id = sidewalk_id
+    B ->> DB: UPDATE reports SET status = 'APPROVED' WHERE id = reportId
+    B ->> DB: COMMIT
+
+    activate DB
+    DB -->> B: Transacción exitosa
+    deactivate DB
+
+    B -->> UI: 201 Created (Obstáculo registrado y ruta actualizada)
+    deactivate B
+
+    UI -->> M: Muestra mensaje "Obstáculo creado y publicado en el mapa"
+    deactivate UI
