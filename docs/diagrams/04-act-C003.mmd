@@ -1,0 +1,71 @@
+swimlane-beta LR
+accTitle: C003 Planificar recorrido accesible - diagrama de actividades
+accDescr: Flujo de trabajo del cálculo de un recorrido accesible, desde que el usuario define el origen y el destino hasta que el recorrido se muestra en el mapa, con las decisiones de validación de datos, disponibilidad de los servicios y accesibilidad de la ruta.
+
+subgraph U["Usuario"]
+  inicio(["Inicio"])
+  definir["Define ORIGEN y DESTINO en NUEVO RECORRIDO"]
+  buscar["Presiona BUSCAR RECORRIDO ACCESIBLE"]
+  verMapa["Ve el recorrido en el mapa"]
+  decidir{"¿Qué hace con el recorrido?"}
+  fin(["Fin"])
+end
+
+subgraph A["App Mobile"]
+  validar{"¿Origen y destino válidos?"}
+  aviso["Informa el error y pide revisar los datos"]
+  pedido["POST /api/routes/calculate"]
+  autenticado{"¿Usuario autenticado?"}
+  guardar["Guarda el recorrido en la cuenta"]
+  pedirCuenta["Avisa que debe iniciar sesión o crear cuenta"]
+  detalle["Abre DETALLE DEL RECORRIDO"]
+  render["Muestra distancia, tiempo estimado y advertencias"]
+end
+
+subgraph B["Backend"]
+  responde{"¿Responden los servicios?"}
+  degradar["Informa la degradación y mantiene el mapa operativo"]
+  consultar["Consulta los obstáculos activos de la zona"]
+  ruteo["Calcula el trayecto con los pesos de accesibilidad"]
+  hayRuta{"¿Hay ruta libre de barreras?"}
+  trazar["Traza la ruta accesible"]
+  alternativa["Entrega la mejor ruta disponible y marca los tramos comprometidos"]
+  ia["Agente de IA: redacta el diagnóstico de transitabilidad"]
+end
+
+subgraph D["Base de Datos (PostGIS)"]
+  grafo["Recorre el grafo de veredas, cruces y nodos de cordón"]
+  penalizar["Penaliza las veredas con obstáculos activos"]
+  geom["Devuelve la geometría de la ruta"]
+end
+
+inicio --> definir
+definir --> buscar
+buscar --> validar
+validar -->|No| aviso
+aviso --> definir
+validar -->|Sí| pedido
+pedido --> responde
+responde -->|Sí| consultar
+responde -->|No| degradar
+degradar --> fin
+consultar --> grafo
+grafo --> penalizar
+penalizar --> geom
+geom --> ruteo
+ruteo --> hayRuta
+hayRuta -->|Sí| trazar
+hayRuta -->|No| alternativa
+trazar --> ia
+alternativa --> ia
+ia --> render
+render --> verMapa
+verMapa --> decidir
+decidir -->|Ver detalle| detalle
+decidir -->|Guardar recorrido| autenticado
+autenticado -->|Sí| guardar
+autenticado -->|No| pedirCuenta
+decidir -->|Finalizar| fin
+detalle --> fin
+guardar --> fin
+pedirCuenta --> fin

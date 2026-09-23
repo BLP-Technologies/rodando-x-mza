@@ -1,0 +1,69 @@
+swimlane-beta LR
+accTitle: C010 Generar reporte de obstáculo - diagrama de actividades
+accDescr: Flujo de trabajo del reporte colaborativo de una barrera urbana, desde que el usuario abre el formulario hasta que el reporte queda registrado con estado pendiente de moderación, sin crear todavía un obstáculo en el mapa.
+
+subgraph U["Usuario"]
+  inicio(["Inicio"])
+  abrir["Presiona REPORTAR UNA BARRERA"]
+  completar["Completa ubicación, tipo, lado de vereda, permanencia, severidad y descripción (teclado o dictado por voz)"]
+  confirma{"¿Confirma el envío?"}
+  fin(["Fin"])
+end
+
+subgraph A["App Mobile"]
+  capturar{"¿Hay ubicación disponible?"}
+  ubicManual["Pide marcar el punto en el mapa"]
+  validar{"¿Datos obligatorios completos y descripción de 5 caracteres o más?"}
+  alerta["Resalta los campos faltantes y no envía"]
+  resumen["Muestra el resumen del reporte"]
+  descartar["Descarta los datos temporales"]
+  post["POST /api/reports (formData)"]
+  exito["Muestra Reporte registrado con éxito"]
+end
+
+subgraph B["Backend"]
+  incluyeFoto{"¿El formulario incluye foto?"}
+  guardarImagen["Solicita guardar la imagen"]
+  subida{"¿La imagen se guardó?"}
+  sinFoto["Continúa el reporte sin la imagen"]
+  persistir["Persiste el reporte con estado PENDING"]
+  pendiente["Queda pendiente de moderación: no crea obstáculo ni altera el ruteo"]
+  responder["Responde 201 Created con el ID del reporte"]
+end
+
+subgraph S["Servidor de Archivos"]
+  almacenar["Guarda la imagen y devuelve su URL"]
+end
+
+subgraph D["Base de Datos"]
+  insertar["INSERT INTO reports (ubicación, tipo, imagen, estado PENDING)"]
+  devolver["Devuelve el reporte creado con su ID"]
+end
+
+inicio --> abrir
+abrir --> capturar
+capturar -->|Sí| completar
+capturar -->|No| ubicManual
+ubicManual --> completar
+completar --> validar
+validar -->|Sí| resumen
+validar -->|No| alerta
+alerta --> completar
+resumen --> confirma
+confirma -->|Sí| post
+confirma -->|No| descartar
+descartar --> fin
+post --> incluyeFoto
+incluyeFoto -->|Sí| guardarImagen
+incluyeFoto -->|No| persistir
+guardarImagen --> almacenar
+almacenar --> subida
+subida -->|Sí| persistir
+subida -->|No| sinFoto
+sinFoto --> persistir
+persistir --> insertar
+insertar --> devolver
+devolver --> pendiente
+pendiente --> responder
+responder --> exito
+exito --> fin

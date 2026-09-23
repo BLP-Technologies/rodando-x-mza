@@ -1,0 +1,71 @@
+swimlane-beta LR
+accTitle: C012 Crear obstáculo - diagrama de actividades
+accDescr: Flujo de trabajo del moderador que, a partir de un reporte pendiente, crea el obstáculo formal en el mapa, penaliza la vereda afectada en el grafo de ruteo y aprueba el reporte dentro de una misma transacción.
+
+subgraph M["Moderador"]
+  inicio(["Inicio"])
+  abrirLista["Abre la lista de reportes pendientes (C011)"]
+  revisar["Revisa el reporte, la foto y la ubicación en el mapa"]
+  ajustar["Ajusta el tipo de obstáculo o la severidad si hace falta"]
+  aprobar["Presiona Aprobar y Crear obstáculo"]
+  confirmar{"¿Confirma la creación?"}
+  verMensaje["Ve el mensaje Obstáculo creado y publicado en el mapa"]
+  fin(["Fin"])
+end
+
+subgraph P["Panel Web Admin"]
+  cargar["GET /api/reports?status=PENDING"]
+  mostrar["Muestra la tabla con los reportes pendientes"]
+  tieneImagen{"¿El reporte incluye imagen?"}
+  pedirImagen["Solicita la imagen del reporte"]
+  enviar["POST /api/obstacles (reportId, ubicación, tipo, severidad)"]
+  informar["Muestra el mensaje Obstáculo creado y publicado en el mapa"]
+  reintentar["Informa el error y permite reintentar"]
+end
+
+subgraph B["Backend"]
+  recibir["Recibe la solicitud de creación"]
+  abrirTx["Abre la transacción de base de datos"]
+  confirmarTx{"¿La transacción se confirmó?"}
+  revertir["Revierte los cambios: el reporte queda en su estado previo"]
+  responder["Responde 201 Created: obstáculo registrado y ruta actualizada"]
+end
+
+subgraph S["Servidor de Archivos"]
+  devolverImagen["Devuelve la imagen almacenada"]
+end
+
+subgraph D["Base de Datos"]
+  insertar["INSERT INTO obstacles (report_id, ubicación, tipo, severidad)"]
+  penalizar["UPDATE sidewalks SET weight = weight + penalización"]
+  marcarAprobado["UPDATE reports SET status = APPROVED"]
+  commit["COMMIT: confirma los tres cambios juntos"]
+end
+
+inicio --> abrirLista
+abrirLista --> cargar
+cargar --> mostrar
+mostrar --> revisar
+revisar --> ajustar
+ajustar --> aprobar
+aprobar --> confirmar
+confirmar -->|Sí| tieneImagen
+confirmar -->|No| fin
+tieneImagen -->|Sí| pedirImagen
+tieneImagen -->|No| enviar
+pedirImagen --> devolverImagen
+devolverImagen --> enviar
+enviar --> recibir
+recibir --> abrirTx
+abrirTx --> insertar
+insertar --> penalizar
+penalizar --> marcarAprobado
+marcarAprobado --> commit
+commit --> confirmarTx
+confirmarTx -->|Sí| responder
+responder --> informar
+informar --> verMensaje
+verMensaje --> fin
+confirmarTx -->|No| revertir
+revertir --> reintentar
+reintentar --> fin
