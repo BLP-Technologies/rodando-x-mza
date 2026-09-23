@@ -1,0 +1,39 @@
+stateDiagram-v2
+    accTitle: Ciclo de vida del obstáculo
+    accDescr: Estados del obstáculo que el moderador crea en el mapa a partir de un reporte aprobado, y su efecto sobre el peso de la vereda en el cálculo de recorridos accesibles.
+
+    state "ACTIVO" as ACTIVO
+    state "RESUELTO" as RESUELTO
+    state "ELIMINADO" as ELIMINADO
+
+    [*] --> ACTIVO: el moderador crea el obstáculo desde un reporte aprobado (C012)
+
+    ACTIVO --> RESUELTO: la barrera ya no está o fue reparada (C013)
+    RESUELTO --> ACTIVO: la barrera volvió a aparecer (C013)
+    ACTIVO --> ELIMINADO: baja lógica (deleted_at)
+    RESUELTO --> ELIMINADO: baja lógica (deleted_at)
+
+    note right of ACTIVO
+        Mientras está activo, el obstáculo se considera
+        en el cálculo de recorridos: la vereda afectada
+        se penaliza o directamente se evita.
+    end note
+
+    note left of ACTIVO
+        El tipo (pozo, árbol, escalón, pendiente excesiva,
+        estrechamiento) y la severidad (crítica, moderada,
+        menor) son atributos, no estados: el moderador los
+        ajusta sin que cambie el ciclo de vida.
+    end note
+
+    note left of RESUELTO
+        En el modelo de datos el estado se guarda con el
+        booleano obstacles.is_resolved, no con un estado
+        con nombre propio. Al resolverse, el peso de la
+        vereda vuelve a su valor normal.
+    end note
+
+    note right of ELIMINADO
+        La baja lógica (obstacles.deleted_at) saca el
+        obstáculo del mapa sin perder su historial.
+    end note

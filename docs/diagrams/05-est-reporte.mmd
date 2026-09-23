@@ -1,0 +1,51 @@
+stateDiagram-v2
+    accTitle: Ciclo de vida del reporte de obstáculo
+    accDescr: Estados del reporte que genera un usuario registrado, desde que lo envía hasta que se resuelve o se rechaza, y su vínculo con el obstáculo que crea el moderador.
+
+    state "PENDIENTE" as PENDIENTE
+    state "APROBADO" as APROBADO
+    state "EN REPARACIÓN" as EN_REPARACION
+    state "RESUELTO" as RESUELTO
+    state "RECHAZADO" as RECHAZADO
+    state "ELIMINADO" as ELIMINADO
+
+    [*] --> PENDIENTE: el usuario envía el reporte (C010)
+
+    PENDIENTE --> APROBADO: el moderador aprueba y crea el obstáculo (C012)
+    PENDIENTE --> EN_REPARACION: el moderador registra que la barrera está en reparación (C011)
+    PENDIENTE --> RECHAZADO: no corresponde, es incorrecto, duplicado o no se puede validar (C011)
+
+    APROBADO --> EN_REPARACION: la reparación está en curso (C011)
+    APROBADO --> RESUELTO: se resuelve el obstáculo asociado (C013)
+    EN_REPARACION --> RESUELTO: la barrera fue reparada (C011)
+
+    RECHAZADO --> ELIMINADO: baja lógica (deleted_at)
+    RESUELTO --> ELIMINADO: baja lógica (deleted_at)
+
+    note right of PENDIENTE
+        Todo reporte nace pendiente y no crea ningún
+        obstáculo: no altera el mapa ni el ruteo hasta
+        que un moderador lo trate.
+    end note
+
+    note left of APROBADO
+        En el modelo de datos el reporte guarda la
+        referencia al obstáculo creado (reports.obstacle_id).
+    end note
+
+    note right of EN_REPARACION
+        Mientras la barrera siga existiendo, el tramo
+        afectado sigue penalizado en el cálculo de
+        recorridos accesibles.
+    end note
+
+    note left of RESUELTO
+        Al resolverse, el tramo vuelve a considerarse
+        transitable. Si el reporte tenía un obstáculo
+        asociado, ese obstáculo también pasa a resuelto.
+    end note
+
+    note right of ELIMINADO
+        La baja lógica conserva el registro histórico:
+        el reporte deja de listarse pero no se borra.
+    end note

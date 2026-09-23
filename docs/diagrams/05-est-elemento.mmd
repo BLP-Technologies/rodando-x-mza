@@ -1,0 +1,45 @@
+stateDiagram-v2
+    accTitle: Ciclo de vida de accesibilidad y verificación de un elemento del grafo peatonal
+    accDescr: Estados de una vereda, una esquina (nodo de cordón) o un cruce peatonal según su nivel de accesibilidad y si el moderador ya verificó ese estado.
+
+    state "SIN VERIFICAR" as SIN_VERIFICAR
+    state "ACCESIBLE" as ACCESIBLE
+    state "PARCIALMENTE ACCESIBLE" as PARCIAL
+    state "NO ACCESIBLE" as NO_ACCESIBLE
+
+    [*] --> SIN_VERIFICAR
+
+    SIN_VERIFICAR --> ACCESIBLE: el moderador lo verifica y lo marca accesible (C014)
+    SIN_VERIFICAR --> PARCIAL: lo marca parcialmente accesible (solo nodos de cordón) (C014)
+    SIN_VERIFICAR --> NO_ACCESIBLE: lo marca no accesible (C014)
+
+    ACCESIBLE --> NO_ACCESIBLE: se deteriora o un nuevo relevamiento lo desmiente
+    NO_ACCESIBLE --> ACCESIBLE: se repara la rampa o se reconstruye la vereda
+    ACCESIBLE --> PARCIAL: el paso deja de ser completo
+    PARCIAL --> ACCESIBLE: se completa el rebaje o la rampa
+    PARCIAL --> NO_ACCESIBLE: el paso se vuelve intransitable
+
+    ACCESIBLE --> SIN_VERIFICAR: se revierte la verificación (C014)
+    PARCIAL --> SIN_VERIFICAR: se revierte la verificación (C014)
+    NO_ACCESIBLE --> SIN_VERIFICAR: se revierte la verificación (C014)
+
+    note right of SIN_VERIFICAR
+        Estado inicial: el elemento ya existe en el grafo
+        (importado de OpenStreetMap) pero nadie confirmó
+        todavía su estado real en la calle. El recorrido
+        lo advierte como tramo sin verificar.
+    end note
+
+    note right of ACCESIBLE
+        Verificado se guarda aparte del nivel de
+        accesibilidad: kerb_nodes.is_verified,
+        sidewalks.is_verified y crossings.is_verified.
+        Un elemento accesible pero no verificado
+        no debería darse por seguro.
+    end note
+
+    note left of NO_ACCESIBLE
+        Una vereda marcada como no accesible no se ofrece
+        en los recorridos, aunque el mapa común la muestre.
+        El ruteo lo evita; el nivel parcial lo penaliza.
+    end note
