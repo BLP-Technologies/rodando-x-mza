@@ -1,0 +1,59 @@
+flowchart TB
+    accTitle: Arquitectura de componentes de Rodando x MZA
+    accDescr: Componentes del sistema y sus interfaces: la app mobile en React Native y el portal web de moderación sobre una misma API, el backend con sus puertos y adaptadores, la base PostgreSQL con PostGIS y pgRouting como motor de ruteo interno, el almacenamiento de archivos separado de los datos y el proveedor de mapas como única dependencia externa.
+
+    subgraph CLIENTES["Clientes"]
+        APP["App mobile · React Native<br/>Usuario Invitado y Usuario Registrado"]
+        VOZ["Módulos nativos de voz<br/>dictado y lectura en voz alta"]
+        PORTAL["Portal web de moderación<br/>Moderador / Administrador"]
+    end
+
+    subgraph BACK["Backend"]
+        API["API REST<br/>HTTPS / JSON"]
+        AUTH["Autenticación y roles"]
+        CU["Aplicación<br/>casos de uso C001 a C014"]
+
+        subgraph ADAPT["Puertos y adaptadores"]
+            ARUT["Puerto de ruteo<br/>adaptador: pgRouting"]
+            APER["Puerto de persistencia<br/>adaptador: PostGIS"]
+            AARCH["Puerto de archivos<br/>adaptador: disco del servidor (MVP)"]
+            AMSG["Puerto de mensajes<br/>adaptador: motor de reglas"]
+            ALLM["Adaptador LLM<br/>opcional, fuera del MVP"]
+        end
+    end
+
+    subgraph DATOS["Datos"]
+        PG[("PostgreSQL + PostGIS<br/>tablas del DER y grafo peatonal")]
+        PGR["pgRouting<br/>pgr_dijkstra"]
+    end
+
+    subgraph ARCH["Archivos"]
+        DISCO["Almacenamiento de archivos<br/>disco del servidor (MVP)<br/>bucket de objetos a futuro"]
+    end
+
+    subgraph EXT["Servicio externo"]
+        MAPAS["Proveedor de teselas / SDK de mapas"]
+    end
+
+    subgraph ORIGEN["Origen de datos · importación, fuera de runtime"]
+        OSM["OpenStreetMap"]
+    end
+
+    APP -->|"HTTPS / REST JSON"| API
+    PORTAL -->|"HTTPS / REST JSON"| API
+    APP --- VOZ
+    APP -.->|"teselas y SDK · clave restringida por app"| MAPAS
+
+    API --> AUTH
+    API --> CU
+    CU --> ARUT
+    CU --> APER
+    CU --> AARCH
+    CU --> AMSG
+
+    ARUT -->|"SQL"| PGR
+    PGR --> PG
+    APER -->|"SQL"| PG
+    AMSG -.->|"a futuro"| ALLM
+    AARCH -->|"imágenes, separadas de los datos"| DISCO
+    OSM -.->|"importación por lotes"| PG
