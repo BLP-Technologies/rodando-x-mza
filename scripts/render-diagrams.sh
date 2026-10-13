@@ -9,13 +9,32 @@ imgs_dir="$diagrams_dir/imgs"
 config_file="$script_dir/mermaid-config.json"
 doc_file="docs/01-diagramas.md"
 
+# Escala del PNG por diagrama. mmdc ajusta el SVG al ancho del viewport (800 px
+# por defecto), asi que todo PNG mide ~784 px logicos x escala: la escala define la
+# densidad de pixeles, no el ancho del diagrama. Un diagrama denso (muchos nodos
+# en el mismo espacio) necesita mas densidad para poder ampliarlo sin perder
+# detalle. Los diagramas sin entrada usan la escala por defecto.
+default_scale=3
+forced_scale=""
+declare -A scale_overrides=(
+  [04-act-C003]=8
+  [04-act-C010]=8
+  [04-act-C012]=8
+  [05-est-elemento]=5
+  [05-est-obstaculo]=5
+  [05-est-reporte]=5
+  [06-comp-arquitectura]=5
+)
+
 usage() {
   cat <<'EOF'
-Uso: render-diagrams.sh [--svg | --both] [diagrama...]
+Uso: render-diagrams.sh [--scale N] [--svg | --both] [diagrama...]
 
 Genera las imagenes de los diagramas mermaid del proyecto en docs/diagrams/imgs/.
 
-Sin opciones genera PNG (escala 3) de todos los diagramas de docs/diagrams/.
+Sin opciones genera PNG de todos los diagramas de docs/diagrams/, cada uno con su
+propia escala (por defecto 3; mayor en los diagramas densos).
+  --scale N      fuerza la escala N en todos los PNG, ignorando la escala por diagrama
   --svg          genera SVG (con htmlLabels: false, para que los visores muestren el texto)
   --both         genera PNG y SVG
   -h, --help     muestra esta ayuda
@@ -23,6 +42,7 @@ Sin opciones genera PNG (escala 3) de todos los diagramas de docs/diagrams/.
 
 Ejemplos:
   ./scripts/render-diagrams.sh
+  ./scripts/render-diagrams.sh --scale 5 04-act-C003
   ./scripts/render-diagrams.sh --svg 02-casos_uso
   ./scripts/render-diagrams.sh --both docs/diagrams/01-DER.mmd
 EOF
@@ -47,6 +67,11 @@ formats=(png)
 args=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --scale)
+      [[ $# -ge 2 ]] || { echo "ERROR: --scale necesita un valor" >&2; exit 2; }
+      forced_scale="$2"
+      shift
+      ;;
     --svg) formats=(svg) ;;
     --both) formats=(png svg) ;;
     -h|--help) usage; exit 0 ;;
@@ -101,7 +126,8 @@ for file in "${files[@]}"; do
     output="$imgs_dir/$base.$format"
     cmd=(mmdc -i "$file" -o "$output" -q)
     if [[ "$format" == "png" ]]; then
-      cmd+=(-s 3)
+      scale="${forced_scale:-${scale_overrides[$base]:-$default_scale}}"
+      cmd+=(-s "$scale")
     else
       cmd+=(-c "$config_file")
     fi

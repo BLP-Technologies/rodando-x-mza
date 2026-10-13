@@ -95,6 +95,13 @@ mermaid 12.
 | `03-seq-C003.mmd` | Secuencia | C003, buscar recorrido accesible |
 | `03-seq-C010.mmd` | Secuencia | C010, generar reporte de obstáculo |
 | `03-seq-C012.mmd` | Secuencia | C012, crear obstáculo desde un reporte (incluye la consulta de C011) |
+| `04-act-C003.mmd` | Actividades (`swimlane-beta`) | C003, planificar recorrido accesible |
+| `04-act-C010.mmd` | Actividades (`swimlane-beta`) | C010, generar reporte de obstáculo |
+| `04-act-C012.mmd` | Actividades (`swimlane-beta`) | C012, crear obstáculo desde un reporte |
+| `05-est-elemento.mmd` | Estados | Ciclo de vida de accesibilidad y verificación de un elemento del grafo peatonal |
+| `05-est-obstaculo.mmd` | Estados | Ciclo de vida del obstáculo |
+| `05-est-reporte.mmd` | Estados | Ciclo de vida del reporte de obstáculo |
+| `06-comp-arquitectura.mmd` | Componentes | Arquitectura de componentes del sistema |
 
 ## 4. Generación de las imágenes
 
@@ -108,11 +115,24 @@ idempotente: se puede ejecutar las veces que haga falta.
 ./scripts/render-diagrams.sh --svg        # SVG (ver §5)
 ./scripts/render-diagrams.sh --both       # PNG y SVG
 ./scripts/render-diagrams.sh 02-casos_uso # un solo diagrama (nombre, archivo o ruta)
+./scripts/render-diagrams.sh --scale 6    # todos los PNG a escala 6
 ```
 
 El script verifica que el `mmdc` disponible soporte mermaid 12 antes de generar
 (con un diagrama de prueba), avisa si hay imágenes sin `.mmd` asociado y
 devuelve un código de error si falla algún render.
+
+#### Escala por diagrama
+
+mmdc ajusta el SVG al ancho del viewport (800 px por defecto), así que **todo PNG
+mide ~784 px lógicos × escala**: la escala define la densidad de píxeles, no el
+ancho del diagrama. Un diagrama denso (muchos nodos en el mismo espacio) necesita
+más densidad para poder ampliarlo sin perder detalle; uno simple no gana nada con
+escala alta.
+
+Por eso el script asigna la escala **por diagrama** (defecto 3; 8 en las
+actividades y 5 en estados y componentes). `--scale N` fuerza una escala única e
+ignora esos valores, por ejemplo para regenerar todo con más detalle.
 
 ### A mano (CLI de mermaid)
 
@@ -125,9 +145,11 @@ mmdc -i 01-DER.mmd -o imgs/01-DER.png -s 3
 
 Parámetros útiles:
 
-- `-s 3`: escala del render. Para PNG es la opción de calidad: multiplica la
-  resolución (un diagrama de 391x171 px se exporta a 1173x513 px). Con 3 alcanza;
-  valores mayores agrandan el archivo sin mejora visible.
+- `-s N`: escala del render. Para PNG es la opción de calidad: multiplica la
+  resolución (un diagrama de 391x171 px se exporta a 1173x513 px). El script usa
+  3 por defecto, pero sube a 8 en las actividades y a 5 en estados y componentes
+  (ver §4); a igual legibilidad, valores mayores agrandan el archivo sin mejora
+  visible.
 - `-w` / `-H`: definen el viewport de la página (800x600 por defecto), pero el
   PNG se recorta al diagrama: no cambian el tamaño final.
 - `-b transparent`: fondo transparente (por defecto, blanco).
@@ -203,7 +225,10 @@ Las imágenes pueden quedar desactualizadas respecto de su `.mmd`. Reglas:
 - Un cambio en un `.mmd` **no está terminado** hasta regenerar su imagen en el
   mismo commit (ver §6 de [00-reglas-documentacion.md](00-reglas-documentacion.md)).
 - Ante la duda de si una imagen está al día, regenerarla: el script es
-  idempotente y el resultado es determinista.
+  idempotente y, salvo los diagramas de actividades (`swimlane-beta`, §8), el
+  resultado es determinista byte a byte. Esos diagramas rinden con mínimas
+  diferencias de *anti-aliasing* entre corridas: la imagen cambia en bytes, no a
+  la vista, por lo que conviene compararlas visualmente en vez de por hash.
 - Al agregar o renombrar un diagrama, regenerar todas las imágenes y revisar que
   no queden imágenes huérfanas (el script lo advierte).
 
@@ -241,3 +266,45 @@ Fuente: [`03-seq-C010.mmd`](./diagrams/03-seq-C010.mmd)
 ![Secuencia del caso de uso C012](./diagrams/imgs/03-seq-C012.png)
 
 Fuente: [`03-seq-C012.mmd`](./diagrams/03-seq-C012.mmd)
+
+### Actividades C003: planificar recorrido accesible
+
+![Actividades del caso de uso C003](./diagrams/imgs/04-act-C003.png)
+
+Fuente: [`04-act-C003.mmd`](./diagrams/04-act-C003.mmd)
+
+### Actividades C010: generar reporte de obstáculo
+
+![Actividades del caso de uso C010](./diagrams/imgs/04-act-C010.png)
+
+Fuente: [`04-act-C010.mmd`](./diagrams/04-act-C010.mmd)
+
+### Actividades C012: crear obstáculo desde un reporte
+
+![Actividades del caso de uso C012](./diagrams/imgs/04-act-C012.png)
+
+Fuente: [`04-act-C012.mmd`](./diagrams/04-act-C012.mmd)
+
+### Estado: elemento del grafo peatonal
+
+![Ciclo de vida de accesibilidad y verificación de un elemento del grafo peatonal](./diagrams/imgs/05-est-elemento.png)
+
+Fuente: [`05-est-elemento.mmd`](./diagrams/05-est-elemento.mmd)
+
+### Estado: obstáculo
+
+![Ciclo de vida del obstáculo](./diagrams/imgs/05-est-obstaculo.png)
+
+Fuente: [`05-est-obstaculo.mmd`](./diagrams/05-est-obstaculo.mmd)
+
+### Estado: reporte de obstáculo
+
+![Ciclo de vida del reporte de obstáculo](./diagrams/imgs/05-est-reporte.png)
+
+Fuente: [`05-est-reporte.mmd`](./diagrams/05-est-reporte.mmd)
+
+### Componentes: arquitectura
+
+![Arquitectura de componentes del sistema](./diagrams/imgs/06-comp-arquitectura.png)
+
+Fuente: [`06-comp-arquitectura.mmd`](./diagrams/06-comp-arquitectura.mmd)
