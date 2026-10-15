@@ -1,0 +1,29 @@
+services:
+  db:
+    # Imagen oficial de pgRouting: Postgres 16 + PostGIS 3.5 + pgRouting 4.0.
+    # Trae las dos extensiones ya compiladas, así no hace falta instalar nada
+    # por apt (el repo PGDG de bullseye dejó de existir). El prefijo docker.io
+    # fija el registro de origen (Docker Hub) y evita que el motor busque en
+    # mirrors alternativos que no tienen la imagen.
+    image: docker.io/pgrouting/pgrouting:16-3.5-4.0
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: rodando
+      POSTGRES_PASSWORD: rodando
+      POSTGRES_DB: rodando
+    ports:
+      - "5432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      # Aprovisionamiento: se corre una sola vez, al inicializar el volumen.
+      # `z` (SELinux, compartido) es necesario en Fedora/RHEL; se ignora donde no
+      # hay SELinux. Sin él, el contenedor no arranca en esas distros.
+      - ./initdb:/docker-entrypoint-initdb.d:ro,z
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rodando -d rodando"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  db-data:
