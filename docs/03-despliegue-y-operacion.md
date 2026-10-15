@@ -115,11 +115,18 @@ no se recomienda. El crecimiento esperado lo absorbe primero el disco
 
 ## 5. Base de datos en producción
 
-- **Imagen.** Contenedor PostgreSQL con las extensiones `postgis` y `pgrouting`
-  (las que ya usa el `infra/docker-compose.yml` de desarrollo). La imagen oficial
-  de PostGIS **no** incluye pgRouting: se agrega en el Dockerfile del servicio.
-- **Usuario.** La API se conecta con un usuario de aplicación dueño del esquema y
-  sin privilegios de superusuario.
+- **Imagen.** La misma que en desarrollo: `pgrouting/pgrouting` (Postgres 16 +
+  PostGIS 3.5 + pgRouting 4.0). Trae las dos extensiones ya compiladas, así que no
+  hace falta un Dockerfile propio ni instalar nada por apt.
+- **Extensiones.** `postgis` y `pgrouting` se habilitan en el **aprovisionamiento**
+  (una sola vez, con un rol con privilegios), no en las migraciones: son parte de la
+  plataforma, no del esquema que evoluciona con el código. Ver §8. En desarrollo eso
+  lo hace el script `infra/initdb/` al inicializar el contenedor.
+- **Usuario.** La API se conecta con un usuario **dueño del esquema y sin
+  privilegios de superusuario**: puede crear y alterar sus tablas —lo que necesitan
+  las migraciones— y operar la aplicación, pero no administra el cluster. A futuro,
+  con usuarios reales, se separa en dos roles: `migrator` (dueño del esquema) y
+  `app` (solo permisos de datos).
 - **Puerto.** No se publica al exterior; se accede solo desde la red interna de
   Compose o por SSH con un túnel cuando hace falta operar a mano.
 - **Migraciones.** Se aplican con `node-pg-migrate` como paso previo al arranque
@@ -127,7 +134,7 @@ no se recomienda. El crecimiento esperado lo absorbe primero el disco
   atrás** (primero agregar, después migrar datos, recién después eliminar lo
   viejo), de modo que una migración no deje a la versión en ejecución sin
   funcionar mientras el contenedor se recrea.
-- **Extensión y grafo.** El grafo peatonal y las tablas con columna `geometry`
+- **Grafo.** El grafo peatonal y las tablas con columna `geometry`
   viven en el mismo esquema; la importación de datos de OpenStreetMap es un
   proceso por lotes que corre fuera del horario de uso, no una tarea del runtime.
 
@@ -157,18 +164,25 @@ no se recomienda. El crecimiento esperado lo absorbe primero el disco
 
 ## 8. Procedimiento de despliegue
 
+**Primer despliegue (una sola vez).** Antes del primer arranque hay que aprovisionar
+la base: crear la base y el rol de aplicación, y habilitar las extensiones `postgis`
+y `pgrouting` con un rol con privilegios. En desarrollo esto lo hace el script
+`infra/initdb/` cuando el contenedor inicializa el volumen; en el servidor se corre
+el equivalente a mano una vez. Después no se repite.
+
 1. Se integra el cambio en la rama principal del repositorio.
 2. En el servidor: `git pull` y build de las imágenes afectadas.
 3. **Migraciones** contra la base de producción (`node-pg-migrate up`), antes de
    levantar la versión nueva.
 4. `docker compose up -d`, que recrea solo los contenedores con imagen nueva.
-5. **Verificación**: `/health` responde, los logs no muestran errores y el flujo
-   principal del sistema funciona (consulta de recorrido y envío de un reporte).
+5. **Verificación**: `/api/health/ready` responde, los logs no muestran errores y
+   el flujo principal del sistema funciona (consulta de recorrido y envío de un
+   reporte).
 6. Si algo falla, se vuelve a la imagen anterior y se evalúa la migración
    aplicada; por eso §5 exige migraciones compatibles hacia atrás.
 
 La verificación automática del repositorio (`eslint`, `tsc`, `vitest`, render de
-diagramas — [02-stack-y-estructura.md](02-stack-y-estructura.md) §8) corre antes
+diagramas — [02-stack-y-estructura.md](02-stack-y-estructura.md) §9) corre antes
 de integrar; el despliegue no reemplaza ese paso.
 
 Una vez estable, este procedimiento puede automatizarse con CI por SSH. En el
@@ -199,13 +213,15 @@ APK desde la misma rama integrada, para que lo que se prueba sea lo documentado.
 
 ## 10. Monitoreo y operación
 
-- **Healthcheck.** El backend expone `/health`, que además consulta la base. Es el
-  chequeo que usan el monitoreo externo y el propio Compose.
+- **Healthcheck.** El backend expone `/api/health/ready`, que además consulta la
+  base; es al que le pega el monitoreo externo. `/api/health` (sin `ready`) es
+  liveness: responde aunque la base esté caída. El healthcheck del propio Compose
+  apunta al contenedor de la base (`pg_isready`), no a la API.
 - **Reinicio automático.** Todos los servicios corren con
   `restart: unless-stopped`, así que sobreviven a un reinicio del servidor o a la
   caída de un proceso.
-- **Aviso de caída.** Un chequeo externo gratuito golpea `/health` y avisa por el
-  canal de mensajería del equipo si no responde.
+- **Aviso de caída.** Un chequeo externo gratuito golpea `/api/health/ready` y avisa
+  por el canal de mensajería del equipo si no responde.
 - **Logs.** Se consultan con `docker compose logs` y rotan por tamaño para no
   llenar el disco.
 - **Disco.** Es el recurso que primero se agota (imágenes de reportes). Se controla
