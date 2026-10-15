@@ -9,10 +9,11 @@
 
 ## 1. Alcance
 
-Este documento responde tres preguntas y no las repite en ningún otro lado:
+Este documento responde cuatro preguntas y no las repite en ningún otro lado:
 
 - **Con qué** se construye: lenguajes, frameworks y librerías, con sus versiones.
 - **Dónde** vive cada cosa: la estructura de carpetas del repositorio.
+- **Cómo** se escribe el código: idioma, nombres y convenciones (§5).
 - **Por qué**, cuando hubo una decisión real que tomar (y qué la haría cambiar).
 
 No describe el dominio ni los casos de uso: eso está en
@@ -28,7 +29,7 @@ deliberada, no automática.
 | --- | --- | --- |
 | Runtime | Node.js | 22 LTS |
 | Gestor de paquetes | pnpm | 10+ |
-| Lenguaje | TypeScript | 7 (`strict`) |
+| Lenguaje | TypeScript | 6.0 (`strict`) |
 | Backend | Express | 5 |
 | Acceso a datos | Kysely | 0.29 |
 | Driver Postgres | pg | 8 |
@@ -42,9 +43,10 @@ deliberada, no automática.
 | Linter | ESLint + typescript-eslint | 10 / 8 |
 | Tests | Vitest | 5 |
 
-> **TypeScript 7.** Es la versión más reciente. Si alguna herramienta del
-> ecosistema (ESLint, Next, Expo) todavía no la acompaña, se fija la última 5.x
-> y el resto del documento no cambia.
+> **TypeScript 6.0, no 7.** La última versión es la 7, pero `typescript-eslint`
+> 8.71 declara `typescript >=4.8.4 <6.1.0`, así que con la 7 el lint falla al
+> arrancar (`does not support TS 7.0`). Se fija la 6.0.3, la estable más nueva
+> dentro de ese rango. Se sube cuando `typescript-eslint` anuncie soporte para la 7.
 
 ## 3. Estructura de carpetas
 
@@ -56,7 +58,7 @@ rodando-x-mza/
 ├── backend/      # API REST: Express 5 + TypeScript
 ├── web/          # Portal de moderación: Next.js
 ├── mobile/       # App principal: Expo React Native
-├── infra/        # docker-compose (PostGIS + pgRouting) y migraciones SQL
+├── infra/        # docker-compose, aprovisionamiento (initdb/) y migraciones SQL
 ├── docs/         # documentación del proyecto (este directorio)
 └── scripts/      # herramientas de desarrollo (render de diagramas, etc.)
 ```
@@ -70,12 +72,42 @@ monorepo agrega configuración (hoisting, resolución de tipos entre paquetes, M
 de Expo sobre workspaces) sin un consumidor que la aproveche.
 
 El mismo beneficio —una sola fuente de verdad del contrato— se logra sin workspace:
-el contrato vive en el backend como esquemas Zod y de ahí sale un OpenAPI (§5), del
+el contrato vive en el backend como esquemas Zod y de ahí sale un OpenAPI (§6), del
 que cada cliente genera su cliente tipado.
 
 **Condición de revisión:** cuando arranque el segundo cliente (web o mobile), y el
 contrato empiece a duplicarse o a desincronizarse, se evalúa convertir el repo en
 workspace de pnpm. Es barato de agregar y barato de deshacer.
+
+### Estructura interna de cada aplicación
+
+Dentro de cada aplicación el código se organiza **por funcionalidad**, no por capa
+técnica. Cada caso de uso vive en su propia carpeta con todo lo que necesita; las
+pocas piezas transversales (`http/`, `db/`) quedan aparte.
+
+```
+backend/src/
+├── index.ts      # arranque del proceso
+├── app.ts        # construye la app Express
+├── config.ts     # variables de entorno validadas con Zod
+├── logger.ts     # logger pino
+├── routes.ts     # compone los routers de cada funcionalidad
+├── http/         # capa de transporte compartida (no es una funcionalidad)
+├── db/           # conexión y tipos de la base
+└── auth/         # una funcionalidad (p. ej. C001/C002)
+```
+
+Regla para decidir dónde va un archivo:
+
+| Pregunta | Destino |
+| --- | --- |
+| ¿Habla HTTP/Express pero no del dominio? | `http/` |
+| ¿Es una capacidad del negocio? | su carpeta de funcionalidad (`auth/`, `reports/`, …) |
+| ¿Es acceso a datos genérico? | `db/` |
+
+Dentro de una funcionalidad, el rol del archivo se marca en el nombre:
+`auth.router.ts`, `auth.schemas.ts`, `auth.service.ts`, `auth.repository.ts`. El
+test va junto al archivo que prueba (`auth.router.test.ts`).
 
 ## 4. TypeScript y calidad
 
@@ -96,7 +128,34 @@ alcanza; se habilitan también las banderas que atrapan los errores más comunes
 —la fila cruda que devuelve PostGIS/pgRouting en `$queryRaw`— se usa `unknown` y se
 valida con Zod; nunca `any`.
 
-## 5. Contrato de la API
+## 5. Convenciones
+
+### Idioma
+
+El idioma depende de quién lee cada cosa. Código e interno en inglés; lo que ve el
+usuario final, en español.
+
+| Qué | Idioma |
+| --- | --- |
+| Identificadores, nombres de archivos, tipos | Inglés |
+| Comentarios de código | Español |
+| Mensajes para desarrolladores (logs, `Error.message` internos, validación de configuración) | Inglés |
+| Valores de máquina de la API: códigos de error, estados | Inglés |
+| Texto que ve el usuario final | Español, y lo produce **cada cliente** |
+
+### Nombres de archivos
+
+- `kebab-case`: `error-handler.ts`.
+- Dentro de una funcionalidad, `funcionalidad.rol.ts`: `auth.service.ts`.
+
+### Errores y mensajes al usuario
+
+El contrato de errores —forma de la respuesta, catálogo de códigos y quién escribe
+el texto que ve el usuario— está en
+[04-errores-y-mensajes.md](04-errores-y-mensajes.md). Regla corta: el backend nunca
+manda texto para el usuario; manda un código, y cada cliente lo traduce al español.
+
+## 6. Contrato de la API
 
 El contrato es una sola cosa y vive en un solo lugar: **esquemas Zod en el
 backend**. De ahí salen dos consumidores:
@@ -109,7 +168,10 @@ backend**. De ahí salen dos consumidores:
 Esto evita mantener a mano la forma de la API en tres lugares. Cuando cambia un
 esquema, cambia el OpenAPI y los clientes se regeneran.
 
-## 6. Acceso a datos
+Los **errores** también son parte del contrato, y se describen en
+[04-errores-y-mensajes.md](04-errores-y-mensajes.md).
+
+## 7. Acceso a datos
 
 Se usa **Kysely + migraciones SQL** (`node-pg-migrate`), no un ORM como Prisma.
 
@@ -148,16 +210,17 @@ Drizzle es una alternativa válida si en algún momento se prefiere definir el s
 en código; la diferencia práctica es que Kysely gana cuando la mayoría del trabajo
 no trivial es SQL crudo, que es este caso.
 
-## 7. Entorno de desarrollo
+## 8. Entorno de desarrollo
 
-- **Base de datos**: `infra/docker-compose.yml` levanta PostgreSQL con las
-  extensiones `postgis` y `pgrouting`. Requiere contenedores (Docker o Podman).
+La puesta en marcha (requisitos, comandos, verificación y problemas comunes) está
+en [05-desarrollo.md](05-desarrollo.md). Reglas que sí son de este documento:
+
 - **Migraciones**: en `infra/`, versionadas en git, aplicadas con `node-pg-migrate`.
   Un cambio de schema no está terminado hasta que su migración está en el commit.
-- **Variables de entorno**: sin secretos versionados; se documentan en un
+- **Variables de entorno**: sin secretos versionados; se documentan en el
   `.env.example` y cada desarrollador provee el valor real.
 
-## 8. Verificación
+## 9. Verificación
 
 Corre en CI y antes de cada commit:
 
@@ -170,16 +233,23 @@ Corre en CI y antes de cada commit:
 Un cambio no está terminado hasta que estos pasos pasan y la documentación
 afectada está actualizada ([00-reglas-documentacion.md](00-reglas-documentacion.md) §6).
 
-## 9. Decisiones descartadas
+## 10. Decisiones descartadas
 
 | Decisión | Estado | Razón | Revisar cuando |
 | --- | --- | --- | --- |
 | Monorepo con workspaces | Diferida | No hay segundo cliente que consuma el contrato | Arranca web o mobile |
-| Prisma como ORM | Descartada | No soporta PostGIS/pgRouting nativamente (§6) | PostGIS deje de ser central |
+| Prisma como ORM | Descartada | No soporta PostGIS/pgRouting nativamente (§7) | PostGIS deje de ser central |
+| Texto de usuario desde el backend | Descartada | El cliente traduce códigos al español ([04](04-errores-y-mensajes.md)) | Nunca |
 
-## 10. Documentos relacionados
+## 11. Documentos relacionados
 
 - [00-reglas-documentacion.md](00-reglas-documentacion.md): reglas de la
 documentación.
 - [01-diagramas.md](01-diagramas.md): diagramas del sistema (DER, casos de uso,
   secuencias, componentes).
+- [03-despliegue-y-operacion.md](03-despliegue-y-operacion.md): despliegue y
+  operación en producción.
+- [04-errores-y-mensajes.md](04-errores-y-mensajes.md): contrato de errores y
+  mensajes al usuario.
+- [05-desarrollo.md](05-desarrollo.md): puesta en marcha y problemas comunes.
+- [06-windows-wsl.md](06-windows-wsl.md): trabajar desde Windows con WSL2.
