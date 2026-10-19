@@ -20,3 +20,4 @@ Vive en [`docs/`](docs/):
 - [04 — Errores y mensajes](docs/04-errores-y-mensajes.md)
 - [05 — Puesta en marcha](docs/05-desarrollo.md)
 - [06 — Windows con WSL2](docs/06-windows-wsl.md)
+- [07 — Plan de trabajo](docs/07-plan-de-trabajo.md)
