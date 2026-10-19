@@ -37,7 +37,8 @@ acá, versionada, y las tareas se crean a partir de ella.
 | 5. Portal de moderación | Gestión de reportes, obstáculos y accesibilidad | C011–C014 | Fase 3 |
 | 6. Cierre | Despliegue, operación y Manual Técnico | — | Fases 4 y 5 |
 
-Cada fase es un **milestone** en GitHub.
+Cada fase es un **milestone** en GitHub. Tener el milestone **no** implica tener las
+tareas: las de cada fase se definen a medida que se avanza (§9).
 
 El **camino crítico** pasa por la Fase 1: hasta que exista el grafo peatonal ruteable
 no hay C003, y C003 es el corazón del producto. Las fases 3 y 4 pueden avanzar en
@@ -106,16 +107,61 @@ El criterio es simple: **una tarea que no se entiende sin preguntarle a quien la
 escribió no sirve para tomarla.** Por eso los criterios de aceptación son
 obligatorios y el entregable tiene que ser concreto.
 
-## 8. Qué evita que el backlog se vuelva inútil
+El procedimiento para producir una tanda completa —no una tarea suelta— está en §8.
+
+## 8. Cómo se derivan las tareas de una fase
+
+Una tanda se deriva de la fase, no de la intuición. El procedimiento:
+
+1. **Partir del objetivo de la fase** (§3) y de los casos de uso que habilita, más
+   los diagramas: `02-casos_uso.mmd`, el DER y las secuencias.
+2. **Dividir en unidades tomables.** Cada tarea tiene que poder terminarla una
+   persona en una o dos sesiones. Si no, se parte.
+3. **Separar lo incierto en *spikes*.** Donde no se sabe cómo se hace, la tarea no es
+   código: es una investigación acotada con un entregable (una decisión escrita).
+4. **Escribir criterios verificables.** Si un criterio no se puede chequear, no es un
+   criterio.
+5. **Marcar las dependencias** como referencias reales (`Bloqueado por #NN`), no como
+   texto suelto.
+6. **Clasificar** cada tarea: área, tipo y caso de uso (§6).
+7. **Detallar solo la fase en curso y, como mucho, la siguiente.** El resto queda
+   como milestone, sin tareas.
+
+Los issues ya escritos son el ejemplo del nivel de detalle esperado: antes de
+redactar una tanda nueva, conviene leer dos o tres.
+
+## 9. Cómo cambia el backlog
+
+Este documento define el marco; el backlog es **vivo**. Concretamente:
+
+- **No hay un número fijo de tareas por fase.** La definición inicial de una fase es
+  un punto de partida, no un contrato.
+- Durante el trabajo **aparecen tareas nuevas**, una tarea puede **desdoblarse** (era
+  dos cosas) o **fusionarse** con otra (era la misma). Cuando se descubre que una
+  tarea ya está cubierta por otra, se cierra y se deja la nota.
+- Por eso, que una fase tenga una lista inicial de quince tareas no significa que vaya
+  a terminar con quince, ni que esas sean las únicas posibles: puede crecer y, más
+  raramente, achicarse.
+
+De ahí se desprende algo que conviene tener claro: **no es obligatorio definir las
+tareas de la fase siguiente.** Se hace cuando hace falta, y en general sucede cuando
+la fase en curso se está quedando sin trabajo disponible.
+
+Para saber qué fase toca detallar, alcanza con mirar los milestones de §3: la primera
+que todavía no tenga tareas definidas es la candidata. La materia prima ya está en la
+documentación —los casos de uso en `02-casos_uso.mmd`, el modelo en el DER y el
+alcance de la fase en §3—, así que no hace falta recuperar ninguna conversación.
+
+## 10. Qué evita que el backlog se vuelva inútil
 
 - **Tareas enormes**: no se pueden repartir. Se dividen hasta que duran una sesión o
   dos.
-- **Refinar decenas de tareas antes de empezar**: se detalla la fase en curso y la
-  siguiente; el resto queda como milestone.
+- **Tratar la lista inicial como un contrato**: las tareas aparecen, se desdoblan y
+  se fusionan a medida que se trabaja (§9).
 - **Tareas escritas para uno mismo**: cualquier persona tiene que poder tomarlas.
 - **Usar el repositorio como tablero**: conflictos de merge en cada edición.
 
-## 9. Documentos relacionados
+## 11. Documentos relacionados
 
 - [00-reglas-documentacion.md](00-reglas-documentacion.md): reglas de la
   documentación.
