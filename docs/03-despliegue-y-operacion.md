@@ -38,7 +38,7 @@ externos de cómputo ni de base de datos.
               └────┬───────┬────┘
                    │       │
         ┌──────────▼──┐ ┌──▼──────────┐
-        │   backend   │ │     web     │
+        │   backend   │ │   portal    │
         │ Express 5   │ │  Next.js    │
         └──────┬──────┘ └─────────────┘
                │ SQL
@@ -58,7 +58,7 @@ externos de cómputo ni de base de datos.
 | ---------- | ----------------------------------- | --------------------------- |
 | `nginx`    | imagen oficial de nginx             | Sí (80 y 443)               |
 | `backend`  | build del `backend/` (Express 5)    | No, solo por la red interna |
-| `web`      | build de `web/` (Next.js)           | No, solo por la red interna |
+| `portal`   | build de `portal/` (Next.js)       | No, solo por la red interna |
 | `db`       | PostgreSQL con PostGIS + pgRouting  | No, solo por la red interna |
 | `uploads`  | volumen Docker montado en `backend` | No                          |
 

@@ -56,7 +56,7 @@ propio `package.json`.
 ```
 rodando-x-mza/
 ├── backend/      # API REST: Express 5 + TypeScript
-├── web/          # Portal de moderación: Next.js
+├── portal/       # Portal de moderación: Next.js
 ├── mobile/       # App principal: Expo React Native
 ├── infra/        # docker-compose, aprovisionamiento (initdb/) y migraciones SQL
 ├── docs/         # documentación del proyecto (este directorio)
