@@ -1,7 +1,7 @@
 import React from 'react';
-import { TouchableOpacity, View, Text, StyleSheet } from 'react-native';
+import { TouchableOpacity, View, Text } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '@/theme/ThemeContext';
+import { useStyles, Theme } from '@/theme';
 
 interface MenuActionCardProps {
   title: string;
@@ -18,76 +18,78 @@ export const MenuActionCard = ({
   onPress,
   accessibilityLabel,
 }: MenuActionCardProps) => {
-  const theme = useTheme();
-
-  const colorNavy = theme.colors.brand?.navy || '#002B49';
-  const colorOrange = theme.colors.brand?.orange || '#E67E22';
-  const colorBorder = theme.colors.border?.default || '#B0C4DE';
-  const colorSubtext = theme.colors.text?.secondary || '#6B7280';
+  const { styles, theme } = useStyles(getStyles);
 
   return (
     <TouchableOpacity
-      style={[
-        styles.cardContainer,
-        {
-          borderColor: colorBorder,
-          backgroundColor: theme.colors.surface?.card || '#FFFFFF',
-        },
-      ]}
+      style={styles.cardContainer}
       onPress={onPress}
       activeOpacity={0.7}
       accessible={true}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel || `${title}, ${subtitle}`}
     >
-      <View style={[styles.iconWrapper, { backgroundColor: colorOrange }]}>
-        <Ionicons name={iconName} size={24} color="#FFFFFF" />
+      <View style={styles.iconWrapper}>
+        <Ionicons
+          name={iconName}
+          size={24}
+          color={theme.colors.brand.white}
+        />
       </View>
 
       <View style={styles.textContainer}>
-        <Text style={[styles.title, { color: colorNavy }]}>{title}</Text>
-        <Text style={[styles.subtitle, { color: colorSubtext }]}>
-          {subtitle}
-        </Text>
+        <Text style={styles.title}>{title}</Text>
+        <Text style={styles.subtitle}>{subtitle}</Text>
       </View>
 
-      <Ionicons name="chevron-forward" size={20} color={colorNavy} />
+      <Ionicons
+        name="chevron-forward"
+        size={20}
+        color={theme.colors.brand.navy}
+      />
     </TouchableOpacity>
   );
 };
 
-const styles = StyleSheet.create({
+const getStyles = (theme: Theme) => ({
   cardContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     borderWidth: 1.5,
-    borderRadius: 20,
-    paddingVertical: 18,
-    paddingHorizontal: 16,
-    marginBottom: 16,
+    borderColor: theme.colors.border.default,
+    backgroundColor: theme.colors.surface.card,
+    borderRadius: theme.metrics.radius.card, // 20
+    paddingVertical: theme.spacing.lg,       // 16 o 18
+    paddingHorizontal: theme.spacing.lg,     // 16
+    marginBottom: theme.spacing.lg,          // 16
     minHeight: 80,
     maxHeight: 100,
     maxWidth: 351,
   },
   iconWrapper: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 16,
+    width: theme.metrics.minTouch,           // 48 (WCAG touch target)
+    height: theme.metrics.minTouch,          // 48
+    borderRadius: theme.metrics.radius.input, // 12 o 14
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    backgroundColor: theme.colors.brand.orange,
+    marginRight: theme.spacing.lg,           // 16
   },
   textContainer: {
     flex: 1,
   },
   title: {
-    fontSize: 15,
-    fontWeight: '800',
+    color: theme.colors.brand.navy,
+    fontSize: theme.metrics.font.body.size,           // 15
+    lineHeight: theme.metrics.font.body.lineHeight,   // 22
+    fontWeight: '800' as const,
     letterSpacing: 0.5,
-    marginBottom: 2,
+    marginBottom: theme.spacing.xs / 2,               // 2
   },
   subtitle: {
-    fontSize: 13,
-    fontWeight: '400',
+    color: theme.colors.text.secondary,
+    fontSize: theme.metrics.font.caption.size,        // 13
+    lineHeight: theme.metrics.font.caption.lineHeight,// 18
+    fontWeight: '400' as const,
   },
 });

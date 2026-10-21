@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '@/theme/ThemeContext';
+import { useStyles, useTheme, Theme } from '@/theme';
 
 interface AppHeaderProps {
   userInitial?: string;
@@ -9,16 +9,20 @@ interface AppHeaderProps {
 }
 
 export const AppHeader = ({ userInitial = 'C', onLogout }: AppHeaderProps) => {
-  const theme = useTheme();
+  
+  const { styles, theme } = useStyles(getStyles);
+
+
+  
   const colorNavy = theme.colors.brand?.navy || '#002B49';
   const colorTeal = theme.colors.brand?.teal || '#17A2B8';
 
   return (
     <View style={styles.headerContainer}>
-      {/* Reemplazá con tu asset real de logo: require('@/assets/images/logo.png') */}
+      {/* Reemplazar con asset real de logo: require('@/assets/images/logo.png') */}
       <View style={styles.logoPlaceholder}>
-        <Text style={[styles.logoText, { color: colorNavy }]}>
-          RODANDO<Text style={{ color: colorTeal }}>XMZA</Text>
+        <Text style={styles.logoText}>
+          RODANDO<Text style={{ color: theme.colors.brand.teal }}>XMZA</Text>
         </Text>
       </View>
 
@@ -28,68 +32,74 @@ export const AppHeader = ({ userInitial = 'C', onLogout }: AppHeaderProps) => {
         accessibilityRole="button"
         accessibilityLabel="Cerrar sesión"
       >
-        <View style={[styles.avatarCircle, { backgroundColor: colorTeal }]}>
+        <View style={styles.avatarCircle}>
           <Text style={styles.avatarText}>{userInitial}</Text>
         </View>
         <View style={styles.logoutButton}>
-          <Ionicons name="exit-outline" size={18} color={colorNavy} />
-          <Text style={[styles.logoutText, { color: colorNavy }]}>Salir</Text>
+          <Ionicons name="exit-outline" size={18} color={theme.colors.brand.navy} />
+          <Text style={styles.logoutText}>Salir</Text>
         </View>
       </TouchableOpacity>
     </View>
   );
 };
 
-const styles = StyleSheet.create({
+const getStyles = (theme: Theme) => ({
   headerContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 14,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    paddingHorizontal: theme.spacing.xl||20,
+    paddingTop: theme.spacing.sm||8,
+    paddingBottom: theme.spacing.md||12,
     borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
+    borderBottomColor: theme.colors.surface.subtle, 
   },
   logoPlaceholder: {
-    justifyContent: 'center',
+    justifyContent: 'center' as const,
   },
   logoText: {
-    fontSize: 18,
-    fontWeight: '900',
+    fontSize: theme.metrics.font.title.size,
+    lineHeight: theme.metrics.font.title.lineHeight,
+    fontWeight: '900' as const,
     letterSpacing: 0.5,
   },
   profileBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#E6EFF5',
-    borderRadius: 24,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    backgroundColor: theme.colors.surface.subtle,
+    borderRadius: theme.metrics.radius.card,
     borderWidth: 1,
-    borderColor: '#002B49',
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    gap: 8,
+    borderColor: theme.colors.border.focus,
+    paddingVertical: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.sm,
+    gap: theme.spacing.sm,
+    minHeight: theme.metrics.btnHeight.sm,
   },
   avatarCircle: {
     width: 32,
     height: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderRadius: theme.metrics.radius.pill,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    backgroundColor: theme.colors.brand.teal,
   },
   avatarText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 16,
+    color: theme.colors.text.inverse,
+    fontWeight: '700' as const,
+    fontSize: theme.metrics.font.body.size,
+    lineHeight: theme.metrics.font.body.lineHeight,
   },
   logoutButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingRight: 4,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.xs,
+    paddingRight: theme.spacing.xs,
   },
   logoutText: {
-    fontSize: 12,
-    fontWeight: '700',
+    fontSize: theme.metrics.font.caption.size,
+    fontWeight: '700' as const,
+    lineHeight: theme.metrics.font.caption.lineHeight,
+    color: theme.colors.brand.navy,
   },
 });

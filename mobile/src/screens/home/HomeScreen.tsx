@@ -1,34 +1,33 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { BottomTabParamList } from '@/navigation/types';
-import { useTheme } from '@/theme/ThemeContext';
+import { useStyles, Theme } from '@/theme';
 import { AppHeader } from '@/components/common/AppHeader';
 import { MenuActionCard } from '@/components/common/MenuActionCard';
 
 type NavigationProp = BottomTabNavigationProp<BottomTabParamList, 'Inicio'>;
 
 export const HomeScreen = () => {
-  const theme = useTheme();
+  const { styles, theme } = useStyles(getStyles);
   const navigation = useNavigation<NavigationProp>();
 
-  const colorNavy = theme.colors.brand?.navy || '#002B49';
-  const colorTeal = theme.colors.brand?.teal || '#17A2B8';
-  const colorWelcome = theme.colors.surface?.welcome || '#FAF8F5';
-
   const handleLogout = () => {
-    // Acá llamarás al método logout() de tu AuthContext
+    // Llamada al método logout() de AuthContext cuando esté integrado
     console.log('Cerrar sesión');
   };
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: colorWelcome }]} edges={['top']}>
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
       <AppHeader userInitial="C" onLogout={handleLogout} />
 
-      <ScrollView contentContainerStyle={styles.contentContainer} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.contentContainer}
+        showsVerticalScrollIndicator={false}
+      >
         {/* Botón Volver */}
         <TouchableOpacity
           style={styles.backButton}
@@ -36,18 +35,22 @@ export const HomeScreen = () => {
           accessibilityRole="button"
           accessibilityLabel="Volver atrás"
         >
-          <Ionicons name="chevron-back" size={24} color={colorNavy} />
+          <Ionicons
+            name="chevron-back"
+            size={24}
+            color={theme.colors.brand.navy}
+          />
         </TouchableOpacity>
 
         {/* Sección de Saludo */}
         <View style={styles.greetingContainer}>
-          <Text style={[styles.eyebrow, { color: colorTeal }]}>
+          <Text style={styles.eyebrow}>
             TU CIUDAD, A TU MANERA
           </Text>
-          <Text style={[styles.greetingTitle, { color: colorNavy }]}>
+          <Text style={styles.greetingTitle}>
             ¡Hola, Ciro! 👋
           </Text>
-          <Text style={[styles.greetingSubtitle, { color: colorNavy }]}>
+          <Text style={styles.greetingSubtitle}>
             ¿A dónde querés ir hoy?
           </Text>
         </View>
@@ -80,41 +83,48 @@ export const HomeScreen = () => {
   );
 };
 
-const styles = StyleSheet.create({
+const getStyles = (theme: Theme) => ({
   safeArea: {
     flex: 1,
+    backgroundColor: theme.colors.surface.welcome,
   },
   contentContainer: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 24,
+    paddingHorizontal: theme.spacing.xl, // 20
+    paddingTop: theme.spacing.lg,        // 16
+    paddingBottom: theme.spacing.xxl,    // 24
   },
   backButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    marginBottom: 12,
+    width: theme.metrics.minTouch,       // 48 (accesibilidad táctil)
+    height: theme.metrics.minTouch,
+    justifyContent: 'center' as const,
+    marginBottom: theme.spacing.md,      // 12
   },
   greetingContainer: {
-    marginBottom: 28,
+    marginBottom: theme.spacing.xxl + theme.spacing.xs, // 28
   },
   eyebrow: {
-    fontSize: 13,
-    fontWeight: '800',
+    color: theme.colors.brand.teal,
+    fontSize: theme.metrics.font.caption.size,         // 13
+    lineHeight: theme.metrics.font.caption.lineHeight, // 18
+    fontWeight: '800' as const,
     letterSpacing: 0.8,
-    marginBottom: 6,
-    textTransform: 'uppercase',
+    marginBottom: theme.spacing.xs + 2,                // 6
+    textTransform: 'uppercase' as const,
   },
   greetingTitle: {
-    fontSize: 26,
-    fontWeight: '800',
-    marginBottom: 4,
+    color: theme.colors.brand.navy,
+    fontSize: theme.metrics.font.header.size - 2,      // 26
+    lineHeight: theme.metrics.font.header.lineHeight,  // 32
+    fontWeight: '800' as const,
+    marginBottom: theme.spacing.xs,                    // 4
   },
   greetingSubtitle: {
-    fontSize: 22,
-    fontWeight: '700',
+    color: theme.colors.brand.navy,
+    fontSize: theme.metrics.font.title.size + 4,       // 22
+    lineHeight: theme.metrics.font.title.lineHeight + 4,
+    fontWeight: '700' as const,
   },
   cardsSection: {
-    marginTop: 8,
+    marginTop: theme.spacing.sm, // 8
   },
 });
