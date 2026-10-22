@@ -7,16 +7,9 @@ import { BottomTabParamList } from './types';
 
 //screens
 import { HomeScreen } from '@/screens/home/HomeScreen';
+import { RouteStackNavigator } from '@/navigation/RootStackNavigator';
 
 // Pantallas mockup provisionales
-const RouteScreen = () => {
-  const { styles } = useStyles(getStyles);
-  return (
-    <View style={styles.center}>
-      <Text style={styles.mockText}>Recorrido</Text>
-    </View>
-  );
-};
 
 const ReportsScreen = () => {
   const { styles } = useStyles(getStyles);
@@ -108,7 +101,7 @@ export const BottomTabNavigator = () => {
       />
       <Tab.Screen
         name="Recorrido"
-        component={RouteScreen}
+        component={RouteStackNavigator}
         options={{
           tabBarLabel: 'Recorrido',
           tabBarAccessibilityLabel: 'Pestaña Recorrido',
