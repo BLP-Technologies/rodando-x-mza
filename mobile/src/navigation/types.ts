@@ -6,7 +6,7 @@ import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 export type RouteStackParamList = {
   RouteHome: undefined;
   MyPlaces: undefined;
-  // MyRoutes: undefined, 
+  MyRoutes: undefined, 
   // NewRoute: undefined
 };
 

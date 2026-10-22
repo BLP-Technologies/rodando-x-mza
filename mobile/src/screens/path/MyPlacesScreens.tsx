@@ -7,6 +7,7 @@ import { useStyles, Theme } from '@/theme';
 import { AppHeader } from '@/components/common/AppHeader';
 import { PrimaryButton } from '@/components/common/PrimaryButton';
 import { PlaceCard } from '@/components/path/PlaceCard';
+import { ScreenHeader } from '@/components/common/ScreenHeader';
 
 interface SavedPlace {
   id: string;
@@ -19,9 +20,9 @@ const INITIAL_PLACES: SavedPlace[] = [
   { id: '1', title: 'CASA', address: 'Mi Dirección', iconName: 'home-outline' },
   { id: '2', title: 'ESCUELA', address: 'Mi Dirección', iconName: 'home-outline' },
   { id: '3', title: 'PLAZA', address: 'Mi Dirección', iconName: 'home-outline' },
-  { id: '4', title: 'CASA', address: 'Mi Dirección', iconName: 'home-outline' },
-  { id: '5', title: 'ESCUELA', address: 'Mi Dirección', iconName: 'home-outline' },
-  { id: '6', title: 'PLAZA', address: 'Mi Dirección', iconName: 'home-outline' },
+  { id: '4', title: 'TRABAJO', address: 'Av. San Martín 1234', iconName: 'home-outline' },
+  { id: '5', title: 'GIMNASIO', address: 'Calle Belgrano 567', iconName: 'home-outline' },
+  { id: '6', title: 'CLUB', address: 'Paso de los Andes 890', iconName: 'home-outline' },
 ];
 
 export const MyPlacesScreen = () => {
@@ -62,34 +63,15 @@ export const MyPlacesScreen = () => {
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <AppHeader userInitial="C" onLogout={handleLogout} />
 
-      <ScrollView
-        style={styles.scrollView} // <-- habilita de scrollView
-        contentContainerStyle={styles.contentContainer}
-        showsVerticalScrollIndicator={false}
-        bounces={true}
-      >
+
         {/* Botón Volver */}
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-          accessibilityRole="button"
-          accessibilityLabel="Volver atrás"
-        >
-          <Ionicons
-            name="chevron-back"
-            size={24}
-            color={theme.colors.brand.navy}
-          />
-        </TouchableOpacity>
+      <View style={styles.fixedHeaderContainer}> 
 
         {/* Encabezado */}
-        <View style={styles.headerSection}>
-          <Text style={styles.eyebrow}>TU CIUDAD, A TU MANERA</Text>
-          <Text style={styles.title}>Mis lugares</Text>
-          <Text style={styles.description}>
-            Guardá tus lugares frecuentes para encontrarlos rápidamente al crear un recorrido.
-          </Text>
-        </View>
+          <ScreenHeader
+              title="Mis lugares"
+              description="Guardá tus lugares frecuentes para encontrarlos rápidamente al crear un recorrido."
+          />
 
         {/* Botón Reutilizable AGREGAR LUGAR */}
         <PrimaryButton
@@ -97,7 +79,15 @@ export const MyPlacesScreen = () => {
           onPress={handleAddPlace}
           style={styles.addButton}
         />
+      </View>  
 
+      <ScrollView
+        style={styles.scrollView} // <-- habilita de scrollView
+        contentContainerStyle={styles.scrollContentContainer}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        bounces={true}
+      >
         {/* Lista de Tarjetas Reutilizables PlaceCard */}
         <View style={styles.placesList}>
           {places.map((place) => (
@@ -121,22 +111,19 @@ const getStyles = (theme: Theme) => ({
     flex: 1,
     backgroundColor: theme.colors.surface.welcome,
   },
-  scrollView: {
-    flex: 1, // Permite que el área de scroll ocupe todo el espacio vertical disponible
-  },
-  contentContainer: {
-    paddingHorizontal: theme.spacing.xl, // 20
-    paddingTop: theme.spacing.lg,        // 16
-    paddingBottom: theme.spacing.xxl,    // 24
+  fixedHeaderContainer: {
+    paddingHorizontal: theme.spacing.xl, // 20px de margen a los lados
+    paddingTop: theme.spacing.md,        // 12px de separación con AppHeader
+    paddingBottom: theme.spacing.sm,     // 8px antes de la lista
   },
   backButton: {
-    width: theme.metrics.minTouch,
+    width: theme.metrics.minTouch,       // 48px
     height: theme.metrics.minTouch,
     justifyContent: 'center' as const,
-    marginBottom: theme.spacing.md,
+    marginBottom: theme.spacing.xs,
   },
   headerSection: {
-    marginBottom: theme.spacing.xl,
+    marginBottom: theme.spacing.lg,      // 16px
   },
   eyebrow: {
     color: theme.colors.brand.teal,
@@ -144,7 +131,7 @@ const getStyles = (theme: Theme) => ({
     lineHeight: theme.metrics.font.caption.lineHeight,
     fontWeight: '800' as const,
     letterSpacing: 0.8,
-    marginBottom: theme.spacing.xs + 2,
+    marginBottom: theme.spacing.xs,
     textTransform: 'uppercase' as const,
   },
   title: {
@@ -152,7 +139,7 @@ const getStyles = (theme: Theme) => ({
     fontSize: theme.metrics.font.header.size,
     lineHeight: theme.metrics.font.header.lineHeight,
     fontWeight: '800' as const,
-    marginBottom: theme.spacing.sm,
+    marginBottom: theme.spacing.xs,
   },
   description: {
     color: theme.colors.text.muted,
@@ -161,9 +148,18 @@ const getStyles = (theme: Theme) => ({
     fontWeight: '400' as const,
   },
   addButton: {
-    marginBottom: theme.spacing.xxl,
+    marginTop: theme.spacing.xs,
+    marginBottom: theme.spacing.sm,      // Margen inferior del botón
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContentContainer: {
+    paddingHorizontal: theme.spacing.xl, // 20px idéntico a fixedHeaderContainer
+    paddingTop: theme.spacing.md,        // 12px de aire arriba para que las cards no toquen el botón
+    paddingBottom: 130,                  // Margen inferior para librar el Bottom Tab
   },
   placesList: {
-    gap: theme.spacing.lg, // 16
+    gap: theme.spacing.lg,               // 16px
   },
 });

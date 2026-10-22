@@ -8,6 +8,7 @@ import { BottomTabParamList, RouteScreenNavigationProp } from '@/navigation/type
 import { useStyles, Theme } from '@/theme';
 import { AppHeader } from '@/components/common/AppHeader';
 import { MenuActionCard } from '@/components/common/MenuActionCard';
+import { ScreenHeader } from '@/components/common/ScreenHeader';
 
 type NavigationProp = BottomTabNavigationProp<BottomTabParamList, 'Recorrido'>;
 
@@ -25,7 +26,7 @@ export const RouteScreen = () => {
   };
 
   const handleMyRoutes = () => {
-    // Próximo paso(ToDo)
+    navigation.navigate('MyRoutes');
     console.log('Navegar a Mis Recorridos');
   };
 
@@ -42,32 +43,12 @@ export const RouteScreen = () => {
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
       >
-        {/* Botón Volver */}
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-          accessibilityRole="button"
-          accessibilityLabel="Volver atrás"
-        >
-          <Ionicons
-            name="chevron-back"
-            size={24}
-            color={theme.colors.brand.navy}
-          />
-        </TouchableOpacity>
 
         {/* Sección de Encabezado */}
-        <View style={styles.headerSection}>
-          <Text style={styles.eyebrow}>
-            TU CIUDAD, A TU MANERA
-          </Text>
-          <Text style={styles.title}>
-            Recorridos
-          </Text>
-          <Text style={styles.description}>
-            Encontrá rutas accesibles o volvé rápidamente a tus recorridos frecuentes.
-          </Text>
-        </View>
+        <ScreenHeader
+            title="Recorridos"
+            description="Encontrá rutas accesibles o volvé rápidamente a tus recorridos frecuentes."
+        />
 
         {/* Lista de Acciones */}
         <View style={styles.cardsSection}>
