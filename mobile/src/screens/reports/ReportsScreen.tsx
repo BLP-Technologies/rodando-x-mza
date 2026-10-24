@@ -9,10 +9,11 @@ import { PrimaryButton } from '@/components/common/PrimaryButton';
 import { FormInput } from '@/components/common/FormInput';
 import { LocationModeSelector, LocationMode } from '@/components/report/LocationModeSelector';
 import { BarrierTypeSelector } from '@/components/report/BarrierTypeSelector';
+import { PhotoUploader } from '@/components/report/PhotoUploader';
 
 export const ReportsScreen = () => {
   const { styles, theme } = useStyles(getStyles);
-
+  const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [locationMode, setLocationMode] = useState<LocationMode>('current');
   const [selectedBarrier, setSelectedBarrier] = useState<string | null>(null);
   const [description, setDescription] = useState('');
@@ -65,19 +66,7 @@ export const ReportsScreen = () => {
         />
 
         {/* 3. Subir foto */}
-        <TouchableOpacity
-          style={styles.photoUploadBox}
-          onPress={handlePickPhoto}
-          accessibilityRole="button"
-          accessibilityLabel="Agregar foto del obstáculo"
-        >
-          <Ionicons
-            name="images-outline"
-            size={22}
-            color={theme.colors.brand.teal}
-          />
-          <Text style={styles.photoUploadText}>Agregar foto</Text>
-        </TouchableOpacity>
+        <PhotoUploader imageUri={photoUri} onImageChange={setPhotoUri} />
 
         {/* 4. Input multilínea común */}
         <FormInput
@@ -114,24 +103,7 @@ const getStyles = (theme: Theme) => ({
     paddingTop: theme.spacing.md,
     paddingBottom: 130,
   },
-  photoUploadBox: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-    gap: theme.spacing.sm,
-    borderWidth: 1.5,
-    borderColor: theme.colors.border.default,
-    borderStyle: 'dashed' as const,
-    borderRadius: theme.metrics.radius.card,
-    backgroundColor: theme.colors.surface.card,
-    paddingVertical: theme.spacing.lg,
-    marginBottom: theme.spacing.xl,
-  },
-  photoUploadText: {
-    fontSize: theme.metrics.font.body.size,
-    fontWeight: '600' as const,
-    color: theme.colors.brand.navy,
-  },
+  
   continueButton: {
     marginTop: theme.spacing.xs,
   },
