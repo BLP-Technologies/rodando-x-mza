@@ -7,18 +7,11 @@ import { BottomTabParamList } from './types';
 
 //screens
 import { HomeScreen } from '@/screens/home/HomeScreen';
+import { ReportsScreen } from '@/screens/reports/ReportsScreen';
 import { RouteStackNavigator } from '@/navigation/RootStackNavigator';
 
 // Pantallas mockup provisionales
 
-const ReportsScreen = () => {
-  const { styles } = useStyles(getStyles);
-  return (
-    <View style={styles.center}>
-      <Text style={styles.mockText}>Reportar</Text>
-    </View>
-  );
-};
 
 const TutorialScreen = () => {
   const { styles } = useStyles(getStyles);

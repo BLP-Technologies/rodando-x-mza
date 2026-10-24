@@ -6,7 +6,8 @@ import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 export type RouteStackParamList = {
   RouteHome: undefined;
   MyPlaces: undefined;
-  MyRoutes: undefined, 
+  MyRoutes: undefined;
+  Reports: undefined;
   // NewRoute: undefined
 };
 
@@ -37,4 +38,10 @@ export type HomeScreenNavigationProp = CompositeNavigationProp<
 export type RouteScreenNavigationProp = CompositeNavigationProp<
   NativeStackNavigationProp<RouteStackParamList>,
   BottomTabNavigationProp<BottomTabParamList>
+>;
+
+// Para ReportsScreen (para goBack o saltar entre tabs)
+export type ReportsScreenNavigationProp = CompositeNavigationProp<
+  BottomTabNavigationProp<BottomTabParamList, 'Reportar'>,
+  NativeStackNavigationProp<RootStackParamList>
 >;

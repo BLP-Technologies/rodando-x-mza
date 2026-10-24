@@ -4,6 +4,7 @@ import { RouteStackParamList } from './types';
 import { RouteScreen } from '@/screens/path/RouteScreen';
 import { MyRoutesScreen } from '@/screens/path/MyRoutesScreen';
 import { MyPlacesScreen } from '@/screens/path/MyPlacesScreens';
+import { ReportsScreen } from'@/screens/reports/ReportsScreen';
 
 const Stack = createNativeStackNavigator<RouteStackParamList>();
 
@@ -16,6 +17,8 @@ export const RouteStackNavigator = () => {
       <Stack.Screen name="RouteHome" component={RouteScreen} />
       <Stack.Screen name="MyRoutes" component={MyRoutesScreen} />
       <Stack.Screen name="MyPlaces" component={MyPlacesScreen} />
+      <Stack.Screen name="Reports" component={ReportsScreen} />
+
     </Stack.Navigator>
   );
 };
