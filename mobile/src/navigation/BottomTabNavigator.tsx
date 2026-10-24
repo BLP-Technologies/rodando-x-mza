@@ -7,7 +7,8 @@ import { BottomTabParamList } from './types';
 
 //screens
 import { HomeScreen } from '@/screens/home/HomeScreen';
-import { ReportsScreen } from '@/screens/reports/ReportsScreen';
+//import { ReportsScreen } from '@/screens/reports/ReportsScreen';
+import { ReportStackNavigator } from './ReportStackNavigator';
 import { RouteStackNavigator } from '@/navigation/RootStackNavigator';
 
 // Pantallas mockup provisionales
@@ -102,7 +103,7 @@ export const BottomTabNavigator = () => {
       />
       <Tab.Screen
         name="Reportar"
-        component={ReportsScreen}
+        component={ReportStackNavigator}
         options={{
           tabBarLabel: 'Reportes',
           tabBarAccessibilityLabel: 'Pestaña Lista de reportes',

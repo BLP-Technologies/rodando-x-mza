@@ -12,7 +12,7 @@ import { useStyles, Theme } from '@/theme';
 interface PrimaryButtonProps {
   title: string;
   onPress: () => void;
-  variant?: 'orange' | 'teal' | 'navy';
+  variant?: 'orange' | 'teal' | 'navy' | 'outline';
   disabled?: boolean;
   loading?: boolean;
   style?: ViewStyle;
@@ -32,8 +32,12 @@ export const PrimaryButton = ({
 }: PrimaryButtonProps) => {
   const { styles, theme } = useStyles(getStyles);
 
+  const isOutline = variant === 'outline';
+
   const getBackgroundColor = () => {
     if (disabled) return theme.colors.state.unverified;
+    if (isOutline) return theme.colors.surface.card; //fondo blanco/card
+    
     switch (variant) {
       case 'teal':
         return theme.colors.brand.teal;
@@ -45,11 +49,18 @@ export const PrimaryButton = ({
     }
   };
 
+  const getTextColor = () => {
+    if (disabled) return theme.colors.text.muted;
+    if (isOutline) return theme.colors.brand.navy;
+    return theme.colors.text.inverse;
+  };
+
   return (
     <TouchableOpacity
       style={[
         styles.button,
         { backgroundColor: getBackgroundColor() },
+        isOutline && styles.outlineButton,
         style,
       ]}
       onPress={onPress}
@@ -60,9 +71,13 @@ export const PrimaryButton = ({
       accessibilityLabel={accessibilityLabel || title}
     >
       {loading ? (
-        <ActivityIndicator color={theme.colors.text.inverse} size="small" />
+        <ActivityIndicator 
+          color={theme.colors.text.inverse} 
+          size="small" />
       ) : (
-        <Text style={[styles.text, textStyle]}>{title}</Text>
+        <Text style={[styles.text, textStyle]}>
+          {title}
+        </Text>
       )}
     </TouchableOpacity>
   );
@@ -82,8 +97,14 @@ const getStyles = (theme: Theme) => ({
     shadowRadius: 6,
     elevation: 3,
   },
+  outlineButton: {
+    borderWidth: 2,
+    borderColor: theme.colors.brand.teal,
+    shadowOpacity: 0,
+    elevation: 0,
+  },
   text: {
-    color: theme.colors.text.inverse,
+    //color: theme.colors.text.inverse,
     fontSize: theme.metrics.font.body.size,
     lineHeight: theme.metrics.font.body.lineHeight,
     fontWeight: '800' as const,

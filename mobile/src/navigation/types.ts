@@ -15,7 +15,7 @@ export type RouteStackParamList = {
 export type BottomTabParamList = {
   Inicio: undefined;
   Recorrido: NavigatorScreenParams<RouteStackParamList> | undefined;
-  Reportar: undefined;
+  Reportar: NavigatorScreenParams<ReportStackParamList> | undefined;
   Tutoriales: undefined;
 };
 
@@ -45,3 +45,17 @@ export type ReportsScreenNavigationProp = CompositeNavigationProp<
   BottomTabNavigationProp<BottomTabParamList, 'Reportar'>,
   NativeStackNavigationProp<RootStackParamList>
 >;
+// Paraámetros que se envían a ReportDetailScreen
+export interface ReportDataParams {
+  locationMode: 'current' | 'map';
+  barrierId: string;
+  barrierLabel: string;
+  photoUri: string | null;
+  description: string;
+}
+
+// Sub-stack para el flujo de Reportes (mantiene la barra inferior visible)
+export type ReportStackParamList = {
+  ReportForm: undefined;
+  ConfirmReport: ReportDataParams;
+};
