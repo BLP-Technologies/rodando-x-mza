@@ -8,8 +8,9 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useStyles, Theme } from '@/theme';
+import { PrimaryButton } from './PrimaryButton';
 
-export type StatusType = 'success' | 'error';
+export type StatusType = 'success' | 'error' | 'warning';
 
 interface StatusModalProps {
   visible: boolean;
@@ -17,6 +18,9 @@ interface StatusModalProps {
   title: string;
   message: string;
   onClose: () => void;
+  confirmText?: string;
+  onConfirm?: () => void;
+  cancelText?: string;
 }
 
 export const StatusModal = ({
@@ -25,12 +29,35 @@ export const StatusModal = ({
   title,
   message,
   onClose,
+  confirmText,
+  onConfirm,
+  cancelText,
 }: StatusModalProps) => {
   const { styles, theme } = useStyles(getStyles);
 
-  const isSuccess = type === 'success';
-  const iconColor = isSuccess ? theme.colors.brand.teal : theme.colors.state.danger;
-  const iconName = isSuccess ? 'checkmark' : 'alert';
+ const getIconDetails = () => {
+    switch (type) {
+      case 'warning':
+        return {
+          color: theme.colors.brand.orange,
+          name: 'help' as const,
+        };
+      case 'error':
+        return {
+          color: theme.colors.state.danger,
+          name: 'alert' as const,
+        };
+      case 'success':
+      default:
+        return {
+          color: theme.colors.brand.teal,
+          name: 'checkmark' as const,
+        };
+    }
+  };
+
+  const { color: iconColor, name: iconName } = getIconDetails();
+
 
   return (
     <Modal
@@ -58,19 +85,35 @@ export const StatusModal = ({
                 />
               </TouchableOpacity>
 
-              {/* Ícono de Estado */}
-              <View
-                style={[
-                  styles.iconCircle,
-                  { borderColor: iconColor },
-                ]}
-              >
+              {/* Ícono circular */}
+              <View style={[styles.iconCircle, { borderColor: iconColor }]}>
                 <Ionicons name={iconName} size={36} color={iconColor} />
               </View>
 
               {/* Textos */}
               <Text style={styles.title}>{title}</Text>
               <Text style={styles.message}>{message}</Text>
+            
+            {/* Botones de confirmación (si se especifican) */}
+              {onConfirm && (
+                <View style={styles.buttonGroup}>
+                  <PrimaryButton
+                    title={confirmText || 'SÍ, CANCELAR'}
+                    variant="orange"
+                    onPress={onConfirm}
+                    style={styles.actionBtn}
+                  />
+                  <PrimaryButton
+                    title={cancelText || 'VOLVER'}
+                    variant="outline"
+                    onPress={onClose}
+                    style={styles.actionBtn}
+                  />
+                </View>
+              )}
+
+
+
             </View>
           </TouchableWithoutFeedback>
         </View>
@@ -82,20 +125,20 @@ export const StatusModal = ({
 const getStyles = (theme: Theme) => ({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(23, 42, 58, 0.45)', // Overlay semitransparente con el navy institucional
+    backgroundColor: 'rgba(23, 42, 58, 0.45)',
     justifyContent: 'center' as const,
     alignItems: 'center' as const,
-    paddingHorizontal: theme.spacing.xl, // 20
+    paddingHorizontal: theme.spacing.xl,
   },
   card: {
     width: '100%' as const,
     maxWidth: 340,
     backgroundColor: theme.colors.surface.card,
-    borderRadius: theme.metrics.radius.card, // 20
+    borderRadius: theme.metrics.radius.card,
     borderWidth: 1.5,
     borderColor: theme.colors.border.default,
-    paddingVertical: theme.spacing.xxl, // 24
-    paddingHorizontal: theme.spacing.xl, // 20
+    paddingVertical: theme.spacing.xxl,
+    paddingHorizontal: theme.spacing.xl,
     alignItems: 'center' as const,
     position: 'relative' as const,
     shadowColor: theme.colors.brand.navy,
@@ -124,7 +167,7 @@ const getStyles = (theme: Theme) => ({
     marginTop: theme.spacing.xs,
   },
   title: {
-    fontSize: theme.metrics.font.title.size - 2, // ~18-20
+    fontSize: theme.metrics.font.title.size - 2,
     lineHeight: theme.metrics.font.title.lineHeight,
     fontWeight: '800' as const,
     color: theme.colors.brand.navy,
@@ -132,10 +175,19 @@ const getStyles = (theme: Theme) => ({
     marginBottom: theme.spacing.xs,
   },
   message: {
-    fontSize: theme.metrics.font.body.size - 1, // ~15
+    fontSize: theme.metrics.font.body.size - 1,
     lineHeight: theme.metrics.font.body.lineHeight,
     color: theme.colors.brand.navy,
     textAlign: 'center' as const,
     fontWeight: '500' as const,
+    marginBottom: theme.spacing.sm,
+  },
+  buttonGroup: {
+    width: '100%' as const,
+    marginTop: theme.spacing.md,
+    gap: theme.spacing.sm,
+  },
+  actionBtn: {
+    minHeight: 46,
   },
 });

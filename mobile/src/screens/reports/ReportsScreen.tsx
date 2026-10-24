@@ -1,14 +1,17 @@
 import React, { useState } from 'react';
-import { ScrollView, Alert } from 'react-native';
+import { View, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import { CompositeNavigationProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { ReportStackParamList } from '@/navigation/types';
+import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import { ReportStackParamList, BottomTabParamList } from '@/navigation/types';
 import { useStyles, Theme } from '@/theme';
 import { AppHeader } from '@/components/common/AppHeader';
 import { ScreenHeader } from '@/components/common/ScreenHeader';
 import { PrimaryButton } from '@/components/common/PrimaryButton';
 import { FormInput } from '@/components/common/FormInput';
+import { StatusModal } from '@/components/common/StatusModal';
 import { LocationModeSelector, LocationMode } from '@/components/report/LocationModeSelector';
 import {
   BarrierTypeSelector,
@@ -27,11 +30,21 @@ export const ReportsScreen = () => {
   const [selectedBarrier, setSelectedBarrier] = useState<string | null>(null);
   const [description, setDescription] = useState('');
 
+  const [validationModalVisible, setValidationModalVisible] = useState(false);
+  const [cancelModalVisible, setCancelModalVisible] = useState(false);
+
   const handleLogout = () => console.log('Cerrar sesión');
+
+  const handleResetForm = () => {
+    setPhotoUri(null);
+    setLocationMode('current');
+    setSelectedBarrier(null);
+    setDescription('');
+  };
 
   const handleContinue = () => {
     if (!selectedBarrier) {
-      Alert.alert('Atención', 'Por favor seleccioná el tipo de barrera.');
+      setValidationModalVisible(true);
       return;
     }
 
@@ -48,6 +61,14 @@ export const ReportsScreen = () => {
       photoUri,
       description,
     });
+  };
+
+
+  // Confirmación de cancelación: limpia datos y va a Inicio
+  const handleConfirmCancel = () => {
+    setCancelModalVisible(false);
+    handleResetForm();
+    navigation.getParent<BottomTabNavigationProp<BottomTabParamList>>()?.navigate('Inicio');
   };
 
   return (
@@ -97,9 +118,36 @@ export const ReportsScreen = () => {
         <PrimaryButton
           title="CONTINUAR"
           onPress={handleContinue}
-          style={styles.continueButton}
+          style={styles.Button}
+        />
+        <PrimaryButton
+            title="CANCELAR"
+            variant="outline"
+            onPress={() => setCancelModalVisible(true)}
+            style={styles.Button}
         />
       </ScrollView>
+
+     {/* Modal de advertencia si no seleccionó tipo de barrera */}
+      <StatusModal
+        visible={validationModalVisible}
+        type="error"
+        title="Dato obligatorio"
+        message="Por favor, seleccioná el tipo de barrera antes de continuar."
+        onClose={() => setValidationModalVisible(false)}
+      />
+
+      {/* Modal de Cancelación */}
+      <StatusModal
+        visible={cancelModalVisible}
+        type="warning"
+        title="¿Cancelar reporte?"
+        message="Se perderán los datos que hayas completado hasta el momento."
+        confirmText="SÍ, CANCELAR"
+        cancelText="VOLVER"
+        onConfirm={handleConfirmCancel}
+        onClose={() => setCancelModalVisible(false)}
+      /> 
     </SafeAreaView>
   );
 };
@@ -117,7 +165,7 @@ const getStyles = (theme: Theme) => ({
     paddingTop: theme.spacing.md,
     paddingBottom: 130, // Espacio para librar el BottomTab
   },
-  continueButton: {
-    marginTop: theme.spacing.xs,
+  Button: {
+    marginTop: theme.spacing.xxl,
   },
 });

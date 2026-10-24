@@ -51,7 +51,7 @@ export const PrimaryButton = ({
 
   const getTextColor = () => {
     if (disabled) return theme.colors.text.muted;
-    if (isOutline) return theme.colors.brand.navy;
+    if (isOutline) return theme.colors.brand.teal;
     return theme.colors.text.inverse;
   };
 
@@ -90,6 +90,7 @@ const getStyles = (theme: Theme) => ({
     justifyContent: 'center' as const,
     alignItems: 'center' as const,
     paddingHorizontal: theme.spacing.xl,
+    marginBotton: theme.spacing.xl,
     // Sombra accesible
     shadowColor: theme.colors.brand.navy,
     shadowOffset: { width: 0, height: 3 },
