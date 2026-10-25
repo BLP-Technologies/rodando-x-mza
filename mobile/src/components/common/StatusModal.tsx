@@ -16,11 +16,14 @@ interface StatusModalProps {
   visible: boolean;
   type?: StatusType;
   title: string;
-  message: string;
+  message?: string;
   onClose: () => void;
   confirmText?: string;
   onConfirm?: () => void;
   cancelText?: string;
+  layout?: 'center' | 'row'; 
+  buttonDirection?: 'column' | 'row';
+  showCloseButton?: boolean;
 }
 
 export const StatusModal = ({
@@ -32,6 +35,9 @@ export const StatusModal = ({
   confirmText,
   onConfirm,
   cancelText,
+  layout = 'row',
+  buttonDirection = 'column',
+  showCloseButton = true,
 }: StatusModalProps) => {
   const { styles, theme } = useStyles(getStyles);
 
@@ -40,23 +46,30 @@ export const StatusModal = ({
       case 'warning':
         return {
           color: theme.colors.brand.orange,
-          name: 'help' as const,
+          bgColor: theme.colors.brand.navy,
+          iconColor: theme.colors.text.inverse,
+          name: 'alert' as const,
         };
       case 'error':
         return {
-          color: theme.colors.state.danger,
-          name: 'alert' as const,
+          color: theme.colors.state.danger || '#991B1B',
+          bgColor: theme.colors.surface.card,
+          iconColor: theme.colors.state.danger || '#991B1B',
+          name: 'close' as const,
         };
       case 'success':
       default:
         return {
           color: theme.colors.brand.teal,
+          bgColor: theme.colors.surface.card,
+          iconColor: theme.colors.brand.teal,
           name: 'checkmark' as const,
         };
     }
   };
 
-  const { color: iconColor, name: iconName } = getIconDetails();
+  const { color: borderColor, bgColor, iconColor, name: iconName } = getIconDetails();
+  const isRowLayout = layout === 'row';
 
 
   return (
@@ -71,43 +84,76 @@ export const StatusModal = ({
           <TouchableWithoutFeedback>
             <View style={styles.card}>
               {/* Botón X de cierre */}
-              <TouchableOpacity
-                style={styles.closeButton}
-                onPress={onClose}
-                accessibilityRole="button"
-                accessibilityLabel="Cerrar modal"
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
+              {showCloseButton && (
+                <TouchableOpacity
+                  style={styles.closeButton}
+                  onPress={onClose}
+                  accessibilityRole="button"
+                  accessibilityLabel="Cerrar modal"
+                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                >
                 <Ionicons
                   name="close"
                   size={24}
                   color={theme.colors.brand.navy}
                 />
               </TouchableOpacity>
+              )}
 
-              {/* Ícono circular */}
-              <View style={[styles.iconCircle, { borderColor: iconColor }]}>
-                <Ionicons name={iconName} size={36} color={iconColor} />
-              </View>
+            {/* Contenedor principal: Fila horizontal o Columna centrada */}
+              <View style={isRowLayout ? styles.rowHeader : styles.centerHeader}>
+                {/* Ícono circular */}
+                <View 
+                    style={[
+                      styles.iconCircle, 
+                      { 
+                        borderColor: iconColor, 
+                        backgroundColor: bgColor,
+                      },
+                      isRowLayout && styles.iconCircleRow,
+                    ]}
+                  >
+                  <Ionicons name={iconName} size={36} color={iconColor} />
+                </View>
+                {/* Textos */}
+                <View style={isRowLayout ? styles.rowTextContainer : styles.centerTextContainer}>
+                  <Text 
+                    style={[
+                      styles.title,
+                      isRowLayout && styles.titleLeft,
+                    ]}
+                  >
+                    {title}
+                  </Text>
+                {message ? (
+                  <Text 
+                    style={[
+                      styles.message,
+                      isRowLayout && styles.messageLeft,
+                    ]}  
+                  >
+                    {message}
+                  </Text>
+                ) : null}
+                  
+                </View> 
+              </View>  
 
-              {/* Textos */}
-              <Text style={styles.title}>{title}</Text>
-              <Text style={styles.message}>{message}</Text>
-            
+
             {/* Botones de confirmación (si se especifican) */}
               {onConfirm && (
-                <View style={styles.buttonGroup}>
+                <View style={styles.buttonGroupRow}>
                   <PrimaryButton
-                    title={confirmText || 'SÍ, CANCELAR'}
+                    title={confirmText || 'CONFIRMAR'}
                     variant="orange"
                     onPress={onConfirm}
-                    style={styles.actionBtn}
+                    style={styles.halfBtn}
                   />
                   <PrimaryButton
-                    title={cancelText || 'VOLVER'}
+                    title={cancelText || 'CANCELAR'}
                     variant="outline"
                     onPress={onClose}
-                    style={styles.actionBtn}
+                    style={styles.halfBtn}
                   />
                 </View>
               )}
@@ -146,6 +192,7 @@ const getStyles = (theme: Theme) => ({
     shadowOpacity: 0.2,
     shadowRadius: 10,
     elevation: 8,
+    
   },
   closeButton: {
     position: 'absolute' as const,
@@ -154,6 +201,15 @@ const getStyles = (theme: Theme) => ({
     width: 36,
     height: 36,
     justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+    zIndex: 10,
+  },
+  rowHeader: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    paddingRight: theme.spacing.lg,
+  },
+  centerHeader: {
     alignItems: 'center' as const,
   },
   iconCircle: {
@@ -166,6 +222,16 @@ const getStyles = (theme: Theme) => ({
     marginBottom: theme.spacing.lg,
     marginTop: theme.spacing.xs,
   },
+  iconCircleRow: {
+    marginRight: theme.spacing.lg,
+  },
+  rowTextContainer: {
+    flex: 1,
+  },
+  centerTextContainer: {
+    alignItems: 'center' as const,
+    marginTop: theme.spacing.md,
+  },
   title: {
     fontSize: theme.metrics.font.title.size - 2,
     lineHeight: theme.metrics.font.title.lineHeight,
@@ -173,6 +239,9 @@ const getStyles = (theme: Theme) => ({
     color: theme.colors.brand.navy,
     textAlign: 'center' as const,
     marginBottom: theme.spacing.xs,
+  },
+  titleLeft: {
+    textAlign: 'left' as const,
   },
   message: {
     fontSize: theme.metrics.font.body.size - 1,
@@ -182,12 +251,16 @@ const getStyles = (theme: Theme) => ({
     fontWeight: '500' as const,
     marginBottom: theme.spacing.sm,
   },
-  buttonGroup: {
+  messageLeft: {
+    textAlign: 'left' as const,
+  },
+  buttonGroupRow: {
     width: '100%' as const,
     marginTop: theme.spacing.md,
     gap: theme.spacing.sm,
   },
-  actionBtn: {
-    minHeight: 46,
+  halfBtn: {
+    minWidth: 105,
+    minHeight: theme.metrics.minTouch,
   },
 });

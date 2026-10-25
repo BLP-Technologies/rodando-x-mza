@@ -4,9 +4,6 @@ import {
   Text,
   ScrollView,
   TouchableOpacity,
-  TextInput,
-  Image,
-  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -14,10 +11,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { useStyles, Theme } from '@/theme';
 import { RouteStackParamList } from '@/navigation/types';
 import { AppHeader } from '@/components/common/AppHeader';
-import { PrimaryButton } from '@/components/common/PrimaryButton';
 import { FormInput } from '@/components/common/FormInput';
 import { OSMRouteMap } from '@/components/path/OSMRouteMap';
 import { ActionButton } from '@/components/common/ActionButton';
+import { StatusModal, StatusType } from '@/components/common/StatusModal';
 
 type RouteResultProp = RouteProp<RouteStackParamList, 'RouteResult'>;
 
@@ -25,6 +22,7 @@ export const RouteResultScreen = () => {
   const { styles, theme } = useStyles(getStyles);
   const navigation = useNavigation<any>();
   const route = useRoute<RouteResultProp>();
+ 
 
   // Parámetros recibidos de NewRouteScreen (con fallback por si se abre directo)
   const { origin, destination } = route.params || {
@@ -33,6 +31,20 @@ export const RouteResultScreen = () => {
   };
 
   const [customName, setCustomName] = useState('');
+  
+  // Control de estado para StatusModal
+  const [modalConfig, setModalConfig] = useState<{
+    visible: boolean;
+    type: StatusType;
+    title: string;
+    message?: string;
+  }>({
+    visible: false,
+    type: 'success',
+    title: '',
+  });
+  // const [isModalVisible, setIsModalVisible] = useState(false);
+  
 
   // Simulación de cálculo de ruta (Mock para conectar luego al backend)
   const routeMetrics = {
@@ -50,13 +62,31 @@ export const RouteResultScreen = () => {
     });
   };
 
-  const handleSaveRoute = () => {
-    const finalName = customName.trim() || `${origin.label} a ${destination.label}`;
-    Alert.alert(
-      'Recorrido guardado',
-      `"${finalName}" se agregó a tu lista de Mis Recorridos.`,
-      [{ text: 'Aceptar', onPress: () => navigation.navigate('MyRoutes') }]
-    );
+  const handleSaveRoute = async () => {
+    try {
+      // Simulación de guardado (ToDo: reemplazar con llamada real a API)
+      setModalConfig({
+        visible: true,
+        type: 'success',
+        title: 'Recorrido guardado\nexitosamente',
+      });
+    } catch (err: any) {
+      setModalConfig({
+        visible: true,
+        type: 'error',
+        title: 'No se pudo guardar\nel recorrido',
+        message: err?.message || 'Revisá la conexión e intentalo de nuevo.',
+      });
+    }
+  };
+
+  // Al cerrar el modal navegamos a Mis Recorridos o permanecemos en la pantalla
+  const handleCloseModal = () => {
+    const wasSuccess = modalConfig.type === 'success';
+    setModalConfig((prev) => ({ ...prev, visible: false }));
+    if (wasSuccess) {
+      navigation.navigate('MyRoutes');
+    }
   };
 
   return (
@@ -148,6 +178,17 @@ export const RouteResultScreen = () => {
           />
         </View>
       </ScrollView>
+
+      {/* Modal de confirmación de guardado */}
+      <StatusModal
+        visible={modalConfig.visible}
+        type={modalConfig.type}
+        layout="row"
+        title={modalConfig.title}
+        message={modalConfig.message}
+        onClose={handleCloseModal}
+      />
+
     </SafeAreaView>
   );
 };
@@ -196,20 +237,6 @@ const getStyles = (theme: Theme) => ({
     fontSize: 12,
     fontWeight: '700' as const,
     color: '#7A4D00',
-  },
-  mapContainer: {
-    height: 220,
-    borderRadius: theme.metrics.radius.card,
-    overflow: 'hidden' as const,
-    borderWidth: 1.5,
-    borderColor: theme.colors.border.default,
-    position: 'relative' as const,
-    backgroundColor: '#E5E7EB',
-    marginBottom: theme.spacing.lg,
-  },
-  mapImage: {
-    width: '100%' as const,
-    height: '100%' as const,
   },
   infoSection: {
     marginTop: theme.spacing.xs,
@@ -262,33 +289,9 @@ const getStyles = (theme: Theme) => ({
     gap: theme.spacing.md,
     marginBottom: theme.spacing.xl,
   },
-  actionBtn: {
+  flexButton: {
     flex: 1,
     paddingHorizontal: 4,
   },
-  flexButton: {
-    flex: 1,
-  },
-  inputSection: {
-    marginTop: theme.spacing.xs,
-  },
-  inputLabel: {
-    fontSize: theme.metrics.font.title.size - 2,
-    fontWeight: '800' as const,
-    color: theme.colors.brand.navy,
-    marginBottom: theme.spacing.sm,
-  },
-  inputWrapper: {
-    backgroundColor: theme.colors.surface.card,
-    borderRadius: theme.metrics.radius.card - 4,
-    borderWidth: 1.5,
-    borderColor: theme.colors.brand.teal,
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
-  },
-  textInput: {
-    fontSize: theme.metrics.font.body.size,
-    color: theme.colors.brand.navy,
-  },
-  
+    
 });

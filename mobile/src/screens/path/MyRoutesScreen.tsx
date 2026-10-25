@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, ScrollView,  Alert } from 'react-native';
+import { View, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -9,6 +9,7 @@ import { AppHeader } from '@/components/common/AppHeader';
 import { PrimaryButton } from '@/components/common/PrimaryButton';
 import { RouteCard } from '@/components/path/RouteCard';
 import { ScreenHeader } from '@/components/common/ScreenHeader';
+import { StatusModal } from '@/components/common/StatusModal';
 
 interface SavedRoute {
   id: string;
@@ -49,29 +50,30 @@ export const MyRoutesScreen = () => {
   const navigation = useNavigation<MyRoutesNavProp>();
   const [routes, setRoutes] = useState<SavedRoute[]>(INITIAL_ROUTES);
 
+  // 1. Estado para almacenar el id del recorrido a eliminar
+  const [routeToDelete, setRouteToDelete] = useState<string | null>(null);
+
   const handleLogout = () => console.log('Cerrar sesión');
-  
+
   const handleNewRoute = () => {
     navigation.navigate('NewRoute');
-  }
+  };
 
   const handleSearchRoute = (route: SavedRoute) => {
     console.log(`Buscando ruta accesible: ${route.origin} a ${route.destination}`);
   };
 
-  const handleDeleteRoute = (id: string, label: string) => {
-    Alert.alert(
-      'Eliminar recorrido',
-      `¿Estás seguro de que querés eliminar "${label}"?`,
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Eliminar',
-          style: 'destructive',
-          onPress: () => setRoutes((prev) => prev.filter((r) => r.id !== id)),
-        },
-      ]
-    );
+  // 2. Al presionar el tacho, activamos el modal guardando el ID
+  const handleDeleteRoute = (id: string) => {
+    setRouteToDelete(id);
+  };
+
+  // 3. Confirmación: borra el elemento y cierra el modal
+  const handleConfirmDelete = () => {
+    if (routeToDelete) {
+      setRoutes((prev) => prev.filter((r) => r.id !== routeToDelete));
+      setRouteToDelete(null);
+    }
   };
 
   return (
@@ -81,8 +83,8 @@ export const MyRoutesScreen = () => {
       {/* SECCIÓN FIJA */}
       <View style={styles.fixedHeaderContainer}>
         <ScreenHeader
-            title="Mis recorridos"
-            description="Guardamos origen y destino, la ruta se recalcula cada vez."
+          title="Mis recorridos"
+          description="Guardamos origen y destino, la ruta se recalcula cada vez."
         />
 
         <PrimaryButton
@@ -109,11 +111,25 @@ export const MyRoutesScreen = () => {
               destination={route.destination}
               lastConsulted={route.lastConsulted}
               onSearchRoute={() => handleSearchRoute(route)}
-              onDelete={() => handleDeleteRoute(route.id, route.label)}
+              onDelete={() => handleDeleteRoute(route.id)}
             />
           ))}
         </View>
       </ScrollView>
+
+      {/* Modal con layout horizontal y botones Cancelar/Confirmar alineados */}
+      <StatusModal
+        visible={routeToDelete !== null}
+        type="warning"
+        layout="row"
+        buttonDirection="row"
+        showCloseButton={false}
+        title={'¿Seguro que querés\neliminar este\nrecorrido?'}
+        cancelText="Cancelar"
+        confirmText="Confirmar"
+        onClose={() => setRouteToDelete(null)}
+        onConfirm={handleConfirmDelete}
+      />
     </SafeAreaView>
   );
 };
@@ -124,9 +140,9 @@ const getStyles = (theme: Theme) => ({
     backgroundColor: theme.colors.surface.welcome,
   },
   fixedHeaderContainer: {
-    paddingHorizontal: theme.spacing.xl, // 20
-    paddingTop: theme.spacing.md,        // 12
-    paddingBottom: theme.spacing.sm,     // 8
+    paddingHorizontal: theme.spacing.xl,
+    paddingTop: theme.spacing.md,
+    paddingBottom: theme.spacing.sm,
   },
   addButton: {
     marginTop: theme.spacing.xs,
@@ -138,9 +154,9 @@ const getStyles = (theme: Theme) => ({
   scrollContentContainer: {
     paddingHorizontal: theme.spacing.xl,
     paddingTop: theme.spacing.md,
-    paddingBottom: 130, // Margen para el BottomTab
+    paddingBottom: 130,
   },
   routesList: {
-    gap: theme.spacing.lg, // 16
+    gap: theme.spacing.lg,
   },
 });
