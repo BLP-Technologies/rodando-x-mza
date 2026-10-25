@@ -10,6 +10,7 @@ import { HomeScreen } from '@/screens/home/HomeScreen';
 import { ReportStackNavigator } from './ReportStackNavigator';
 import { RouteStackNavigator } from '@/navigation/RootStackNavigator';
 import { TutorialsScreen } from '@/screens/tutorials/TutorialsScreens';
+import { TutorialsStackNavigator } from './TutorialsStackNavigator';
 
 
 const Tab = createBottomTabNavigator<BottomTabParamList>();
@@ -100,10 +101,17 @@ export const BottomTabNavigator = () => {
       />
       <Tab.Screen
         name="Tutoriales"
-        component={TutorialsScreen}
+        component={TutorialsStackNavigator}
         options={{
           tabBarLabel: 'Tutoriales',
           tabBarAccessibilityLabel: 'Pestaña Lista de tutoriales',
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons
+              name={focused ? 'play' : 'play-outline'}
+              size={size}
+              color={color}
+            />
+          ),
         }}
       />
     </Tab.Navigator>

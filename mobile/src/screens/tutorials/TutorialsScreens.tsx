@@ -6,6 +6,17 @@ import { AppHeader } from '@/components/common/AppHeader';
 import { ScreenHeader } from '@/components/common/ScreenHeader';
 import { FormInput } from '@/components/common/FormInput';
 import { TutorialCard, TutorialItem } from '@/components/tutorials/TutorialCard';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { TutorialsStackParamList } from '@/navigation/types';
+
+
+// Definimos tipo específico para esta pantalla
+type TutorialsScreenNavProp = NativeStackNavigationProp<
+  TutorialsStackParamList,
+  'TutorialsList'
+>;
+
 
 const TUTORIALS_DATA: TutorialItem[] = [
   {
@@ -39,6 +50,7 @@ const TUTORIALS_DATA: TutorialItem[] = [
 
 export const TutorialsScreen = () => {
   const { styles } = useStyles(getStyles);
+  const navigation = useNavigation<TutorialsScreenNavProp>();
   const [searchQuery, setSearchQuery] = useState('');
 
   const handleLogout = () => console.log('Cerrar sesión');
@@ -50,7 +62,7 @@ export const TutorialsScreen = () => {
   );
 
   const handleOpenTutorial = (tutorial: TutorialItem) => {
-    Alert.alert(tutorial.title, 'Próximamente: Reproductor del tutorial.');
+   navigation.navigate('TutorialDetail', { tutorial });
   };
 
   return (
@@ -125,7 +137,7 @@ const getStyles = (theme: Theme) => ({
     paddingBottom: 130, // Despeje para la barra inferior
   },
   prototypeBanner: {
-    backgroundColor: theme.colors.brand.green, // Tono menta del diseño
+    backgroundColor: theme.colors.surface.subtle, // Tono menta del diseño
     borderRadius: theme.metrics.radius.card - 4,
     borderLeftWidth: theme.spacing.xs,
     borderLeftColor: theme.colors.brand.navy,
@@ -136,7 +148,7 @@ const getStyles = (theme: Theme) => ({
   prototypeText: {
     fontSize: theme.metrics.font.caption.size + 0.5,
     lineHeight: 18,
-    color: theme.colors.brand.white,
+    color: theme.colors.brand.navy,
     fontWeight: '500' as const,
   },
   cardsList: {
