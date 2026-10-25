@@ -60,17 +60,6 @@ export const NewRouteScreen = () => {
     }
   };
 
-
-//   const handleSelectOrigin = () => {
-//     //ToDo
-//     Alert.alert('Seleccionar origen', 'Abrir buscador de direcciones o lugares guardados');
-//   };
-
-//   const handleSelectDestination = () => {
-//      //ToDo
-//     Alert.alert('Seleccionar destino', 'Abrir buscador de direcciones o lugares guardados');
-//   };
-
   const handleSearchAccessibleRoute = () => {
     if (!destination.latitude || !destination.longitude || destination.label === 'Mi destino') {
       Alert.alert('Atención', 'Por favor elegí un destino válido.');
@@ -87,12 +76,19 @@ export const NewRouteScreen = () => {
       destination,
     });
 
-    // Próximo paso: navigation.navigate('AccessibleRouteMap', { origin, destination });
-    Alert.alert(
-      'Coordenadas listas',
-      `Origen: ${origin.label} (${origin.latitude?.toFixed(4)}, ${origin.longitude?.toFixed(4)})\n` +
-      `Destino: ${destination.label} (${destination.latitude?.toFixed(4)}, ${destination.longitude?.toFixed(4)})`
-    );
+    // Navegación con los datos listos
+    navigation.navigate('RouteResult', {
+      origin: {
+        label: origin.label,
+        latitude: origin.latitude,
+        longitude: origin.longitude,
+      },
+      destination: {
+        label: destination.label,
+        latitude: destination.latitude,
+        longitude: destination.longitude,
+      },
+    });
   };
 
   const handleManagePlaces = () => {

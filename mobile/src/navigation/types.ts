@@ -9,6 +9,10 @@ export type RouteStackParamList = {
   MyRoutes: undefined;
   Reports: undefined;
   NewRoute: undefined;
+  RouteResult: {
+    origin: RoutePointParam;
+    destination: RoutePointParam;
+  };
 };
 
 // 2. Pantallas de la barra inferior de navegación
@@ -26,7 +30,7 @@ export type RootStackParamList = {
   NewReport: { latitude: number; longitude: number };
 };
 
-// Tipos compuestos para facilitar el tipado en hooks useNavigation:
+// 4. Tipos compuestos para facilitar el tipado en hooks useNavigation:
 
 // Para usar dentro de HomeScreen
 export type HomeScreenNavigationProp = CompositeNavigationProp<
@@ -45,7 +49,7 @@ export type ReportsScreenNavigationProp = CompositeNavigationProp<
   BottomTabNavigationProp<BottomTabParamList, 'Reportar'>,
   NativeStackNavigationProp<RootStackParamList>
 >;
-// Paraámetros que se envían a ReportDetailScreen
+// Parámetros que se envían a ReportDetailScreen
 export interface ReportDataParams {
   locationMode: 'current' | 'map';
   barrierId: string;
@@ -58,4 +62,10 @@ export interface ReportDataParams {
 export type ReportStackParamList = {
   ReportForm: undefined;
   ConfirmReport: ReportDataParams;
+};
+
+export type RoutePointParam = {
+  label: string;
+  latitude: number;
+  longitude: number;
 };
