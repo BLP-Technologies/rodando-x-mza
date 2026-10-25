@@ -105,13 +105,6 @@ export const BottomTabNavigator = () => {
         options={{
           tabBarLabel: 'Tutoriales',
           tabBarAccessibilityLabel: 'Pestaña Lista de tutoriales',
-          tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons
-              name={focused ? 'play' : 'play-outline'}
-              size={size}
-              color={color}
-            />
-          ),
         }}
       />
     </Tab.Navigator>

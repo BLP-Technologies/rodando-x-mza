@@ -22,6 +22,27 @@ export type TutorialParams = {
   youtubeId?: string;
 };
 
+//3. Para pantalla Detalle recorrido
+export type RouteStepStatus =
+  | 'accessible'
+  | 'unverified'
+  | 'partially_accessible'
+  | 'not_accessible';
+
+export type RouteStep = {
+  id: string;
+  stepNumber: number;
+  instruction: string;
+  distance?: string;
+  status?: RouteStepStatus;
+};
+
+export type RouteDetailParams = {
+  originLabel: string;
+  destinationLabel: string;
+  steps?: RouteStep[];
+};
+
 
 //______________________________________________________________________
 // Para mantener visible el Bottom Tab: Pantallas dentro de los flujos 
@@ -36,6 +57,7 @@ export type RouteStackParamList = {
     origin: RoutePointParam;
     destination: RoutePointParam;
   };
+  RouteDetail: RouteDetailParams;
 };
 
 // 2. Reportar

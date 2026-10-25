@@ -44,7 +44,10 @@ export const RouteResultScreen = () => {
   const handleLogout = () => console.log('Cerrar sesión');
 
   const handleViewDetail = () => {
-    Alert.alert('Detalle de ruta', 'Próximamente: Lista paso a paso de calles y accesos.');
+    navigation.navigate('RouteDetail', {
+      originLabel: origin.label,
+      destinationLabel: destination.label,
+    });
   };
 
   const handleSaveRoute = () => {
