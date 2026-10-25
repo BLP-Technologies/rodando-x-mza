@@ -4,11 +4,11 @@ import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 
 // 1. Pantallas dentro del flujo interno de Recorridos (mantienen visible el Bottom Tab)
 export type RouteStackParamList = {
-  RouteHome: undefined;
+  Recorridos: undefined;
   MyPlaces: undefined;
   MyRoutes: undefined;
   Reports: undefined;
-  // NewRoute: undefined
+  NewRoute: undefined;
 };
 
 // 2. Pantallas de la barra inferior de navegación
@@ -36,7 +36,7 @@ export type HomeScreenNavigationProp = CompositeNavigationProp<
 
 // Para usar dentro de RouteScreen y MyPlacesScreen
 export type RouteScreenNavigationProp = CompositeNavigationProp<
-  NativeStackNavigationProp<RouteStackParamList>,
+  NativeStackNavigationProp<RouteStackParamList, 'Recorridos'>,
   BottomTabNavigationProp<BottomTabParamList>
 >;
 

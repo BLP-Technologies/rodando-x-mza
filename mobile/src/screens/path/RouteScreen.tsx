@@ -1,7 +1,6 @@
 import React from 'react';
 import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { BottomTabParamList, RouteScreenNavigationProp } from '@/navigation/types';
@@ -21,8 +20,7 @@ export const RouteScreen = () => {
   };
 
   const handleNewRoute = () => {
-    // Próximo paso(ToDo): navegar al buscador/mapa de nuevo recorrido
-    console.log('Navegar a Nuevo Recorrido');
+    navigation.navigate('NewRoute');
   };
 
   const handleMyRoutes = () => {

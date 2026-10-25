@@ -1,9 +1,9 @@
-// src/screens/route/MyRoutesScreen.tsx
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { View, ScrollView,  Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RouteStackParamList } from '@/navigation/types';
 import { useStyles, Theme } from '@/theme';
 import { AppHeader } from '@/components/common/AppHeader';
 import { PrimaryButton } from '@/components/common/PrimaryButton';
@@ -42,13 +42,18 @@ const INITIAL_ROUTES: SavedRoute[] = [
   },
 ];
 
+type MyRoutesNavProp = NativeStackNavigationProp<RouteStackParamList, 'MyRoutes'>;
+
 export const MyRoutesScreen = () => {
-  const { styles, theme } = useStyles(getStyles);
-  const navigation = useNavigation();
+  const { styles } = useStyles(getStyles);
+  const navigation = useNavigation<MyRoutesNavProp>();
   const [routes, setRoutes] = useState<SavedRoute[]>(INITIAL_ROUTES);
 
   const handleLogout = () => console.log('Cerrar sesión');
-  const handleNewRoute = () => console.log('Navegar a Nuevo Recorrido');
+  
+  const handleNewRoute = () => {
+    navigation.navigate('NewRoute');
+  }
 
   const handleSearchRoute = (route: SavedRoute) => {
     console.log(`Buscando ruta accesible: ${route.origin} a ${route.destination}`);
@@ -122,37 +127,6 @@ const getStyles = (theme: Theme) => ({
     paddingHorizontal: theme.spacing.xl, // 20
     paddingTop: theme.spacing.md,        // 12
     paddingBottom: theme.spacing.sm,     // 8
-  },
-  backButton: {
-    width: theme.metrics.minTouch,
-    height: theme.metrics.minTouch,
-    justifyContent: 'center' as const,
-    marginBottom: theme.spacing.xs,
-  },
-  headerSection: {
-    marginBottom: theme.spacing.lg,
-  },
-  eyebrow: {
-    color: theme.colors.brand.teal,
-    fontSize: theme.metrics.font.caption.size,
-    lineHeight: theme.metrics.font.caption.lineHeight,
-    fontWeight: '800' as const,
-    letterSpacing: 0.8,
-    marginBottom: theme.spacing.xs,
-    textTransform: 'uppercase' as const,
-  },
-  title: {
-    color: theme.colors.brand.navy,
-    fontSize: theme.metrics.font.header.size,
-    lineHeight: theme.metrics.font.header.lineHeight,
-    fontWeight: '800' as const,
-    marginBottom: theme.spacing.xs,
-  },
-  description: {
-    color: theme.colors.text.muted,
-    fontSize: theme.metrics.font.body.size,
-    lineHeight: theme.metrics.font.body.lineHeight,
-    fontWeight: '400' as const,
   },
   addButton: {
     marginTop: theme.spacing.xs,

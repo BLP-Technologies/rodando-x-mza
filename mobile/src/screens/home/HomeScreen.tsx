@@ -43,7 +43,7 @@ export const HomeScreen = () => {
             title="RECORRIDOS ACCESIBLES"
             subtitle="Encontrá el mejor camino"
             iconName="search"
-            onPress={() => navigation.navigate('Recorrido', { screen: 'RouteHome' })}
+            onPress={() => navigation.navigate('Recorrido', { screen: 'Recorridos' })}
           />
 
           <MenuActionCard
