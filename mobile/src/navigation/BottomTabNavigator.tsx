@@ -7,21 +7,10 @@ import { BottomTabParamList } from './types';
 
 //screens
 import { HomeScreen } from '@/screens/home/HomeScreen';
-//import { ReportsScreen } from '@/screens/reports/ReportsScreen';
 import { ReportStackNavigator } from './ReportStackNavigator';
 import { RouteStackNavigator } from '@/navigation/RootStackNavigator';
+import { TutorialsScreen } from '@/screens/tutorials/TutorialsScreens';
 
-// Pantallas mockup provisionales
-
-
-const TutorialScreen = () => {
-  const { styles } = useStyles(getStyles);
-  return (
-    <View style={styles.center}>
-      <Text style={styles.mockText}>Tutoriales</Text>
-    </View>
-  );
-};
 
 const Tab = createBottomTabNavigator<BottomTabParamList>();
 
@@ -111,10 +100,10 @@ export const BottomTabNavigator = () => {
       />
       <Tab.Screen
         name="Tutoriales"
-        component={TutorialScreen}
+        component={TutorialsScreen}
         options={{
           tabBarLabel: 'Tutoriales',
-          tabBarAccessibilityLabel: 'Pestaña Tutoriales',
+          tabBarAccessibilityLabel: 'Pestaña Lista de tutoriales',
         }}
       />
     </Tab.Navigator>
