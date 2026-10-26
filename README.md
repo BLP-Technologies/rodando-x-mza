@@ -21,3 +21,4 @@ Vive en [`docs/`](docs/):
 - [05 — Puesta en marcha](docs/05-desarrollo.md)
 - [06 — Windows con WSL2](docs/06-windows-wsl.md)
 - [07 — Plan de trabajo](docs/07-plan-de-trabajo.md)
+- [08 — Integración continua](docs/08-integracion-continua.md)

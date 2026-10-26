@@ -28,7 +28,7 @@ deliberada, no automática.
 | Componente | Tecnología | Versión |
 | --- | --- | --- |
 | Runtime | Node.js | 22 LTS |
-| Gestor de paquetes | pnpm | 10+ |
+| Gestor de paquetes | pnpm | 12.4.1 (`packageManager`) |
 | Lenguaje | TypeScript | 6.0 (`strict`) |
 | Backend | Express | 5 |
 | Acceso a datos | Kysely | 0.29 |
@@ -55,6 +55,7 @@ propio `package.json`.
 
 ```
 rodando-x-mza/
+├── .github/      # configuración de GitHub: workflows (08) y plantilla de tareas (07)
 ├── backend/      # API REST: Express 5 + TypeScript
 ├── portal/       # Portal de moderación: Next.js
 ├── mobile/       # App principal: Expo React Native
@@ -222,8 +223,9 @@ en [05-desarrollo.md](05-desarrollo.md). Reglas que sí son de este documento:
 
 ## 9. Verificación
 
-Corre en CI —en cada pull request y en cada push a `main`, mediante
-`.github/workflows/backend.yml`— y conviene correrlo también antes de cada commit:
+Corre en CI —en cada pull request y en cada push a `main` (ver
+[08-integracion-continua.md](08-integracion-continua.md))— y conviene correrlo también
+antes de cada commit:
 
 - `eslint` (incluye la prohibición de `any`),
 - `tsc --noEmit` (chequeo de tipos),
@@ -254,3 +256,7 @@ documentación.
   mensajes al usuario.
 - [05-desarrollo.md](05-desarrollo.md): puesta en marcha y problemas comunes.
 - [06-windows-wsl.md](06-windows-wsl.md): trabajar desde Windows con WSL2.
+- [07-plan-de-trabajo.md](07-plan-de-trabajo.md): fases, definición de terminado y
+  flujo de trabajo del equipo.
+- [08-integracion-continua.md](08-integracion-continua.md): verificación automática en
+  GitHub Actions y reglas que protegen `main`.
