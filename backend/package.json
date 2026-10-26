@@ -4,6 +4,7 @@
   "private": true,
   "description": "API REST de Rodando x MZA",
   "type": "module",
+  "packageManager": "pnpm@12.4.1",
   "engines": {
     "node": ">=22"
   },

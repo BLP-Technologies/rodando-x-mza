@@ -222,7 +222,8 @@ en [05-desarrollo.md](05-desarrollo.md). Reglas que sí son de este documento:
 
 ## 9. Verificación
 
-Corre en CI y antes de cada commit:
+Corre en CI —en cada pull request y en cada push a `main`, mediante
+`.github/workflows/backend.yml`— y conviene correrlo también antes de cada commit:
 
 - `eslint` (incluye la prohibición de `any`),
 - `tsc --noEmit` (chequeo de tipos),

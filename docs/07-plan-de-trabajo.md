@@ -60,8 +60,12 @@ Una tarea está terminada cuando:
 - [ ] Los criterios de aceptación de la tarea se cumplen.
 - [ ] El cambio se integró a `main` mediante un pull request que referencia la tarea.
 
-El repositorio todavía no tiene verificación automática (CI); se agrega cuando exista
-el flujo de pull requests.
+El repositorio verifica estos pasos automáticamente: el workflow
+`.github/workflows/backend.yml` corre `pnpm install --frozen-lockfile`, `pnpm lint`,
+`pnpm typecheck` y `pnpm test` en cada pull request y en cada push a `main`, con las
+versiones de Node y de pnpm declaradas en el repositorio. Un resultado en rojo
+bloquea el merge solo si el chequeo `Lint, tipos y tests` figura como requerido en
+la protección de la rama `main` (Settings → Rules → Require status checks).
 
 ## 5. Cómo se toma una tarea
 
