@@ -53,6 +53,7 @@ export const MyPlacesScreen = () => {
       placesService.getAll().then((data) => {
         if (isActive) {
           setPlaces(data);
+          console.log('📌 LUGARES GUARDADOS EN EL JSON:', JSON.stringify(data, null, 2));
         }
       });
       return () => {

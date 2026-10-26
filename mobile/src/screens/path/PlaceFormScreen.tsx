@@ -1,11 +1,13 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { useStyles, Theme } from '@/theme';
+import { Ionicons } from '@expo/vector-icons';
 import { RouteStackParamList } from '@/navigation/types';
 import { PlaceCategory, PlaceSchema } from '@/navigation/types';
 import { placesService } from '@/services/placesService';
+import { searchAddressSuggestions, PlaceSuggestion } from '@/services/geocoding';
 import { AppHeader } from '@/components/common/AppHeader';
 import { ScreenHeader } from '@/components/common/ScreenHeader';
 import { FormInput } from '@/components/common/FormInput';
@@ -14,6 +16,11 @@ import { PrimaryButton } from '@/components/common/PrimaryButton';
 import { StatusModal, StatusType } from '@/components/common/StatusModal';
 
 type PlaceFormRouteProp = RouteProp<RouteStackParamList, 'EditPlace'>;
+type CoordinatesState = {
+  latitude: number | null;
+  longitude: number | null;
+};
+
 
 export const PlaceFormScreen = () => {
   const { styles, theme } = useStyles(getStyles);
@@ -30,10 +37,16 @@ export const PlaceFormScreen = () => {
   const [category, setCategory] = useState<PlaceCategory>('CASA');
 
   // Coordenadas simuladas/fijas para Mendoza
-  const [coordinates, setCoordinates] = useState({
-    latitude: -32.8942,
-    longitude: -68.8475,
+  const [coordinates, setCoordinates] = useState<CoordinatesState>({
+    latitude: null,
+    longitude: null,
   });
+
+  // Estados para sugerencias de Photon
+  const [suggestions, setSuggestions] = useState<PlaceSuggestion[]>([]);
+  const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Modal de feedback (éxito o error)
   const [modalConfig, setModalConfig] = useState<{
@@ -55,22 +68,79 @@ export const PlaceFormScreen = () => {
           setName(place.name);
           setAddress(place.address);
           setCategory(place.category);
-          setCoordinates({ latitude: place.latitude, longitude: place.longitude });
+          setCoordinates({ 
+            latitude: place.latitude, 
+            longitude: place.longitude });
         }
       });
     }
   }, [placeId]);
 
+// Manejo de búsqueda en tiempo real con debounce
+  const handleAddressChange = (text: string) => {
+    setAddress(text);
+    setCoordinates({ latitude: null, longitude: null });
+
+    if (debounceTimer.current) {
+      clearTimeout(debounceTimer.current);
+    }
+
+    if (text.trim().length < 3) {
+      setSuggestions([]);
+      setShowSuggestions(false);
+      setIsLoadingSuggestions(false);
+      return;
+    }
+
+    setIsLoadingSuggestions(true);
+    setShowSuggestions(true);
+
+    debounceTimer.current = setTimeout(async () => {
+      const results = await searchAddressSuggestions(text);
+      setSuggestions(results);
+      setIsLoadingSuggestions(false);
+    }, 400);
+  };
+
+  // Al tocar una sugerencia del listado
+  const handleSelectSuggestion = (suggestion: PlaceSuggestion) => {
+    setAddress(suggestion.fullAddress || suggestion.name);
+    setCoordinates({
+      latitude: suggestion.latitude,
+      longitude: suggestion.longitude,
+    });
+    setSuggestions([]);
+    setShowSuggestions(false);
+  };
+
+
   const handleLogout = () => console.log('Cerrar sesión');
 
   const handleSubmit = async () => {
-    // 1. Validación con Zod
+
+// 1. Obtener coordenadas exactas usando Photon si no están fijadas
+    let lat = coordinates.latitude;
+    let lon = coordinates.longitude;
+
+    if (!lat || !lon) {
+      const suggestions = await searchAddressSuggestions(address);
+      if (suggestions.length > 0) {
+        lat = suggestions[0].latitude;
+        lon = suggestions[0].longitude;
+      } else {
+        // Fallback geográfico dentro del Gran Mendoza
+        lat = -32.8895;
+        lon = -68.8458;
+      }
+    }
+
+    // 2. Validación con Zod
     const validation = PlaceSchema.safeParse({
       name,
       address,
       category,
-      latitude: coordinates.latitude,
-      longitude: coordinates.longitude,
+      latitude: lat,
+      longitude: lon,
     });
 
     if (!validation.success) {
@@ -84,32 +154,16 @@ export const PlaceFormScreen = () => {
       return;
     }
 
-    // if (!validation.success) {
-    //   const formErrors = validation.error.flatten();
-    //   const firstError =
-    //     formErrors.formErrors[0] ||
-    //     Object.values(formErrors.fieldErrors)[0]?.[0] ||
-    //     'Verifica los datos ingresados';
 
-    //   setModalConfig({
-    //     visible: true,
-    //     type: 'error',
-    //     title: 'Datos incompletos',
-    //     message: firstError,
-    //   });
-    //   return;
-    // }
-
-
-    // 2. Persistir en el almacenamiento JSON
+    // 3. Persistir en el almacenamiento JSON con las coordenadas exactas
     try {
       if (isEditing && placeId) {
         await placesService.update(placeId, {
           name,
           address,
           category,
-          latitude: coordinates.latitude,
-          longitude: coordinates.longitude,
+          latitude: lat,
+          longitude: lon,
         });
         setModalConfig({
           visible: true,
@@ -121,8 +175,8 @@ export const PlaceFormScreen = () => {
           name,
           address,
           category,
-          latitude: coordinates.latitude,
-          longitude: coordinates.longitude,
+          latitude: lat,
+          longitude: lon,
         });
         setModalConfig({
           visible: true,
@@ -178,15 +232,53 @@ export const PlaceFormScreen = () => {
           />
 
           {/* Dirección */}
-          <FormInput
-            label="DIRECCIÓN"
-            placeholder="Ej. Brasil 1550"
-            value={address}
-            onChangeText={setAddress}
-            multiline={false}
-            numberOfLines={1}
-            enableVoiceInput={false}
-          />
+          <View style={styles.addressInputWrapper}>
+            <FormInput
+              label="DIRECCIÓN"
+              placeholder="Ej. Brasil 1550"
+              value={address}
+              onChangeText={handleAddressChange}
+              multiline={false}
+              numberOfLines={1}
+              enableVoiceInput={false}
+            />
+
+            {/* Spinner mientras busca en Photon */}
+            {isLoadingSuggestions && (
+              <View style={styles.loaderContainer}>
+                <ActivityIndicator size="small" color={theme.colors.brand.teal} />
+              </View>
+            )}
+
+            {/* Desplegable de Sugerencias de Photon */}
+            {showSuggestions && suggestions.length > 0 && (
+              <View style={styles.suggestionsContainer}>
+                {suggestions.map((item) => (
+                  <TouchableOpacity
+                    key={item.id}
+                    style={styles.suggestionItem}
+                    onPress={() => handleSelectSuggestion(item)}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons
+                      name="location-outline"
+                      size={20}
+                      color={theme.colors.brand.teal}
+                      style={styles.suggestionIcon}
+                    />
+                    <View style={styles.suggestionTextContainer}>
+                      <Text style={styles.suggestionName} numberOfLines={1}>
+                        {item.name}
+                      </Text>
+                      <Text style={styles.suggestionSubtitle} numberOfLines={1}>
+                        {item.fullAddress}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+          </View>
 
           {/* Selector de Categoría */}
           <CategoryDropdown value={category} onSelect={setCategory} />
@@ -230,6 +322,48 @@ const getStyles = (theme: Theme) => ({
   formContainer: {
     marginTop: theme.spacing.sm,
     gap: theme.spacing.md,
+  },
+  addressInputWrapper: {
+    position: 'relative' as const,
+    zIndex: 10,
+  },
+  loaderContainer: {
+    position: 'absolute' as const,
+    right: theme.spacing.md,
+    top: 38,
+  },
+  suggestionsContainer: {
+    backgroundColor: theme.colors.surface.card,
+    borderRadius: theme.metrics.radius.card - 8,
+    borderWidth: 1.5,
+    borderColor: theme.colors.border.default,
+    marginTop: theme.spacing.xs,
+    overflow: 'hidden' as const,
+    elevation: 3,
+  },
+  suggestionItem: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    paddingVertical: theme.spacing.sm + 2,
+    paddingHorizontal: theme.spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border.subtle,
+  },
+  suggestionIcon: {
+    marginRight: theme.spacing.sm,
+  },
+  suggestionTextContainer: {
+    flex: 1,
+  },
+  suggestionName: {
+    fontSize: theme.metrics.font.body.size,
+    fontWeight: '700' as const,
+    color: theme.colors.text.main,
+  },
+  suggestionSubtitle: {
+    fontSize: theme.metrics.font.caption.size,
+    color: theme.colors.text.muted,
+    marginTop: 2,
   },
   submitButton: {
     marginTop: theme.spacing.lg,

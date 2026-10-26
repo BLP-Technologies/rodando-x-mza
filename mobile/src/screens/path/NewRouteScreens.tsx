@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useStyles, Theme } from '@/theme';
 import { AppHeader } from '@/components/common/AppHeader';
 import { ScreenHeader } from '@/components/common/ScreenHeader';
@@ -10,6 +10,11 @@ import { RoutePointCard } from '@/components/path/RoutePointCard';
 import { SwapButton } from '@/components/path/SwapButton';
 import { AddressSearchModal } from '@/components/path/AddressSearchModal';
 import { PlaceSuggestion } from '@/services/geocoding';
+import { placesService } from '@/services/placesService';
+import { Place } from '@/navigation/types';
+import { StatusModal, StatusType } from '@/components/common/StatusModal';
+
+
 
 interface RoutePoint {
   label: string;
@@ -17,15 +22,13 @@ interface RoutePoint {
   longitude: number | null;
 }
 
-
 export const NewRouteScreen = () => {
   const { styles } = useStyles(getStyles);
   const navigation = useNavigation<any>();
 
-// Estados con nombre y coordenadas
   const [origin, setOrigin] = useState<RoutePoint>({
     label: 'Mi ubicación',
-    latitude: -32.8895, // Mendoza centro default
+    latitude: -32.8895,
     longitude: -68.8458,
   });
 
@@ -35,18 +38,48 @@ export const NewRouteScreen = () => {
     longitude: null,
   });
 
+  const [savedPlaces, setSavedPlaces] = useState<Place[]>([]);
   const [searchTarget, setSearchTarget] = useState<'origin' | 'destination' | null>(null);
- 
+
+  // Controla cuál acordeón está desplegado: 'origin', 'destination' o null
+  const [openDropdown, setOpenDropdown] = useState<'origin' | 'destination' | null>(null);
+
+  useFocusEffect(
+    useCallback(() => {
+      let isActive = true;
+      placesService.getAll().then((data) => {
+        if (isActive) {
+          setSavedPlaces(data);
+        }
+      });
+      return () => {
+        isActive = false;
+      };
+    }, [])
+  );
+
+
+  //Estados para el modal
+  const [modalConfig, setModalConfig] = useState<{
+    visible: boolean;
+    type: StatusType;
+    title: string;
+    message?: string;
+  }>({
+    visible: false,
+    type: 'warning',
+    title: '',
+  });
+
   const handleLogout = () => console.log('Cerrar sesión');
 
-  // Intercambiar origen y destino
   const handleSwap = () => {
     const temp = origin;
     setOrigin(destination);
     setDestination(temp);
   };
 
-  const handleSelectPlace = (place: PlaceSuggestion) => {
+  const handleSelectModalPlace = (place: PlaceSuggestion) => {
     const pointData: RoutePoint = {
       label: place.name,
       latitude: place.latitude,
@@ -60,41 +93,73 @@ export const NewRouteScreen = () => {
     }
   };
 
+  // Selección directa desde el chip del desplegable
+  const handleSelectSavedPlace = (target: 'origin' | 'destination', place: Place) => {
+    const pointData: RoutePoint = {
+      label: place.name,
+      latitude: place.latitude,
+      longitude: place.longitude,
+    };
+
+    if (target === 'origin') {
+      setOrigin(pointData);
+    } else {
+      setDestination(pointData);
+    }
+
+    // Cerramos el acordeón al elegir
+    setOpenDropdown(null);
+  };
+
+
   const handleSearchAccessibleRoute = () => {
-    if (!destination.latitude || !destination.longitude || destination.label === 'Mi destino') {
-      Alert.alert('Atención', 'Por favor elegí un destino válido.');
-      return;
-    }
-
-    if (!origin.latitude || !origin.longitude) {
-      Alert.alert('Atención', 'Por favor elegí un origen válido.');
-      return;
-    }
-
-    console.log('Recorrido listo para trazar:', {
-      origin,
-      destination,
+  if (!destination.latitude || !destination.longitude || destination.label === 'Mi destino') {
+    setModalConfig({
+      visible: true,
+      type: 'warning',
+      title: 'Destino no válido',
+      message: 'Por favor elegí un destino para calcular el recorrido.',
     });
+    return;
+  }
 
-    // Navegación con los datos listos
-    navigation.navigate('RouteResult', {
-      origin: {
-        label: origin.label,
-        latitude: origin.latitude,
-        longitude: origin.longitude,
-      },
-      destination: {
-        label: destination.label,
-        latitude: destination.latitude,
-        longitude: destination.longitude,
-      },
+  if (!origin.latitude || !origin.longitude) {
+    setModalConfig({
+      visible: true,
+      type: 'warning',
+      title: 'Origen no válido',
+      message: 'Por favor elegí un punto de origen válido.',
     });
-  };
+    return;
+  }
 
-  const handleManagePlaces = () => {
-    // Navegar a la pantalla de Mis Lugares
-    navigation.navigate('MyPlaces');
-  };
+  // Validación: Origen y destino no pueden ser el mismo
+  const areCoordinatesEqual =
+    origin.latitude === destination.latitude &&
+    origin.longitude === destination.longitude;
+
+  const areLabelsEqual =
+    origin.label.trim().toLowerCase() === destination.label.trim().toLowerCase();
+
+  if (areCoordinatesEqual || areLabelsEqual) {
+    setModalConfig({
+      visible: true,
+      type: 'warning',
+      title: 'Puntos coincidentes',
+      message: 'El origen y el destino no pueden ser el mismo lugar. Elegí dos puntos diferentes para trazar la ruta.',
+    });
+    return;
+  }
+
+  // Navegación con los datos válidos
+  navigation.navigate('RouteResult', {
+    origin,
+    destination,
+  });
+};
+
+
+  
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -112,12 +177,18 @@ export const NewRouteScreen = () => {
           showBackButton={true}
         />
 
-        {/* Bloque de selección Origen / Destino con botón Swap superpuesto */}
+        {/* Grupo de selección Origen y Destino */}
         <View style={styles.routeCardGroup}>
           <RoutePointCard
             label="ORIGEN"
             value={origin.label}
-            onPress={() => setSearchTarget('origin')}
+            isOpen={openDropdown === 'origin'}
+            onToggleOpen={() =>
+              setOpenDropdown((prev) => (prev === 'origin' ? null : 'origin'))
+            }
+            onPressText={() => setSearchTarget('origin')}
+            savedPlaces={savedPlaces}
+            onSelectPlace={(place) => handleSelectSavedPlace('origin', place)}
           />
 
           <SwapButton onPress={handleSwap} />
@@ -125,7 +196,13 @@ export const NewRouteScreen = () => {
           <RoutePointCard
             label="DESTINO"
             value={destination.label}
-            onPress={() => setSearchTarget('destination')}
+            isOpen={openDropdown === 'destination'}
+            onToggleOpen={() =>
+              setOpenDropdown((prev) => (prev === 'destination' ? null : 'destination'))
+            }
+            onPressText={() => setSearchTarget('destination')}
+            savedPlaces={savedPlaces}
+            onSelectPlace={(place) => handleSelectSavedPlace('destination', place)}
           />
         </View>
 
@@ -138,24 +215,31 @@ export const NewRouteScreen = () => {
 
         {/* Enlace Administrar mis lugares */}
         <TouchableOpacity
-          onPress={handleManagePlaces}
+          onPress={() => navigation.navigate('MyPlaces')}
           style={styles.managePlacesContainer}
           accessibilityRole="link"
-          accessibilityLabel="Administrar mis lugares guardados"
         >
           <Text style={styles.managePlacesText}>Administrar mis lugares</Text>
         </TouchableOpacity>
       </ScrollView>
 
-        {/* Modal buscador de direcciones autocompletadas */}
-        <AddressSearchModal
-            visible={searchTarget !== null}
-            title={searchTarget === 'origin' ? 'Elegir origen' : 'Elegir destino'}
-            onClose={() => setSearchTarget(null)}
-            onSelect={handleSelectPlace}
-        />
+      {/* Modal buscador manual */}
+      <AddressSearchModal
+        visible={searchTarget !== null}
+        title={searchTarget === 'origin' ? 'Elegir origen' : 'Elegir destino'}
+        onClose={() => setSearchTarget(null)}
+        onSelect={handleSelectModalPlace}
+      />
 
-
+      {/* Modal de advertencia/validación */}
+      <StatusModal
+        visible={modalConfig.visible}
+        type={modalConfig.type}
+        layout="row"
+        title={modalConfig.title}
+        message={modalConfig.message}
+        onClose={() => setModalConfig((prev) => ({ ...prev, visible: false }))}
+      />
     </SafeAreaView>
   );
 };
@@ -175,6 +259,7 @@ const getStyles = (theme: Theme) => ({
   },
   routeCardGroup: {
     marginBottom: theme.spacing.xxl,
+    gap: theme.spacing.sm,
   },
   searchButton: {
     marginBottom: theme.spacing.xl,
