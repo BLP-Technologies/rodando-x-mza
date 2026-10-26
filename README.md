@@ -22,3 +22,4 @@ Vive en [`docs/`](docs/):
 - [06 — Windows con WSL2](docs/06-windows-wsl.md)
 - [07 — Plan de trabajo](docs/07-plan-de-trabajo.md)
 - [08 — Integración continua](docs/08-integracion-continua.md)
+- [09 — Modelo de datos](docs/09-modelo-de-datos.md)
