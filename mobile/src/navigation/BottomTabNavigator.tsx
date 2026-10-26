@@ -9,7 +9,6 @@ import { BottomTabParamList } from './types';
 import { HomeScreen } from '@/screens/home/HomeScreen';
 import { ReportStackNavigator } from './ReportStackNavigator';
 import { RouteStackNavigator } from '@/navigation/RootStackNavigator';
-import { TutorialsScreen } from '@/screens/tutorials/TutorialsScreens';
 import { TutorialsStackNavigator } from './TutorialsStackNavigator';
 
 

@@ -4,6 +4,9 @@
     "strict": true,
     "paths": {
       "@/*": ["./src/*"]
-    }
+    },
+    //habilita la importación de archivos .json
+    "resolveJsonModule": true,
+    "esModuleInterop": true 
   }
 }

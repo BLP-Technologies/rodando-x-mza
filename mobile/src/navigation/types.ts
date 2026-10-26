@@ -1,7 +1,7 @@
 import type { NavigatorScreenParams, CompositeNavigationProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
-
+import {z} from 'zod';
 
 
 //Definición de tipos de Parámetros de distintas pantallas
@@ -43,6 +43,37 @@ export type RouteDetailParams = {
   steps?: RouteStep[];
 };
 
+//4. Para las pantallas Crear y Editar lugares
+export const PLACE_CATEGORIES = [
+  'CASA',
+  'TRABAJO',
+  'ESTUDIO',
+  'MEDICO',
+  'RECREATIVO',
+  'OTRO',
+] as const;
+
+export type PlaceCategory = (typeof PLACE_CATEGORIES)[number];
+
+export const PlaceSchema = z.object({
+  id: z.string().optional(),
+  name: z.string().trim().min(2, 'El nombre debe tener al menos 2 caracteres'),
+  address: z.string().trim().min(4, 'La dirección es requerida'),
+  category: z.enum(PLACE_CATEGORIES, {
+    message: 'Selecciona una categoría válida',
+  }),
+  latitude: z.number(),
+  longitude: z.number(),
+});
+
+export type Place = z.infer<typeof PlaceSchema> & {
+  id: string;
+};
+
+
+
+
+
 
 //______________________________________________________________________
 // Para mantener visible el Bottom Tab: Pantallas dentro de los flujos 
@@ -58,6 +89,8 @@ export type RouteStackParamList = {
     destination: RoutePointParam;
   };
   RouteDetail: RouteDetailParams;
+  CreatePlace: undefined;
+  EditPlace: {placeId: string};
 };
 
 // 2. Reportar

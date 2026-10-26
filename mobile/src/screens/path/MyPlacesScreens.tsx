@@ -1,76 +1,107 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import React, { useState, useCallback } from 'react';
+import { View, ScrollView,  Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RouteStackParamList, PlaceCategory, Place } from '@/navigation/types';
 import { useStyles, Theme } from '@/theme';
+import { placesService } from '@/services/placesService';
 import { AppHeader } from '@/components/common/AppHeader';
+import { ScreenHeader } from '@/components/common/ScreenHeader';
 import { PrimaryButton } from '@/components/common/PrimaryButton';
 import { PlaceCard } from '@/components/path/PlaceCard';
-import { ScreenHeader } from '@/components/common/ScreenHeader';
+import { StatusModal } from '@/components/common/StatusModal';
 
-interface SavedPlace {
-  id: string;
-  title: string;
-  address: string;
-  iconName: keyof typeof Ionicons.glyphMap;
-}
 
-const INITIAL_PLACES: SavedPlace[] = [
-  { id: '1', title: 'CASA', address: 'Mi Dirección', iconName: 'home-outline' },
-  { id: '2', title: 'ESCUELA', address: 'Mi Dirección', iconName: 'home-outline' },
-  { id: '3', title: 'PLAZA', address: 'Mi Dirección', iconName: 'home-outline' },
-  { id: '4', title: 'TRABAJO', address: 'Av. San Martín 1234', iconName: 'home-outline' },
-  { id: '5', title: 'GIMNASIO', address: 'Calle Belgrano 567', iconName: 'home-outline' },
-  { id: '6', title: 'CLUB', address: 'Paso de los Andes 890', iconName: 'home-outline' },
-];
+//Función Auxiliar para mapear categoría a íconos
+const getCategoryIcon = (category: PlaceCategory): keyof typeof Ionicons.glyphMap => {
+  switch (category) {
+    case 'CASA':
+      return 'home-outline';
+    case 'TRABAJO':
+      return 'briefcase-outline';
+    case 'ESTUDIO':
+      return 'school-outline';
+    case 'MEDICO':
+      return 'medkit-outline';
+    case 'RECREATIVO':
+      return 'bicycle-outline';
+    case 'OTRO':
+    default:
+      return 'location-outline';
+  }
+};
+
+
+//tipo
+type MyPlacesNavProp = NativeStackNavigationProp<RouteStackParamList, 'MyPlaces'>;
+
+
 
 export const MyPlacesScreen = () => {
-  const { styles, theme } = useStyles(getStyles);
-  const navigation = useNavigation();
-  const [places, setPlaces] = useState<SavedPlace[]>(INITIAL_PLACES);
+  const { styles } = useStyles(getStyles);
+  const navigation = useNavigation<MyPlacesNavProp>();
+  
+  const [places, setPlaces] = useState<Place[]>([]);
+  const [placeToDelete, setPlaceToDelete] = useState<string | null>(null);
+
+  // Cargar y refrescar los lugares cada vez que la pantalla toma foco
+  useFocusEffect(
+    useCallback(() => {
+      let isActive = true;
+      placesService.getAll().then((data) => {
+        if (isActive) {
+          setPlaces(data);
+        }
+      });
+      return () => {
+        isActive = false;
+      };
+    }, [])
+  );
+
 
   const handleLogout = () => {
     console.log('Cerrar sesión');
   };
 
+  //Enlace hacia la pantalla Crear Lugar
   const handleAddPlace = () => {
     console.log('Abrir formulario o modal para agregar lugar');
+    navigation.navigate('CreatePlace');
   };
 
-  const handleEditPlace = (place: SavedPlace) => {
-    console.log('Editar lugar:', place.title);
+  //Enlace hacia la pantalla Editar Lugar
+  const handleEditPlace = (placeId: string) => {
+    navigation.navigate('EditPlace', { placeId });
   };
 
-  const handleDeletePlace = (id: string, title: string) => {
-    Alert.alert(
-      'Eliminar lugar',
-      `¿Estás seguro de que querés eliminar "${title}" de tus lugares guardados?`,
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Eliminar',
-          style: 'destructive',
-          onPress: () => {
-            setPlaces((prev) => prev.filter((p) => p.id !== id));
-          },
-        },
-      ]
-    );
+  //Manejo de la eliminación de un lugar
+ const handleDeletePlace = (id: string) => {
+    setPlaceToDelete(id);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (placeToDelete) {
+      await placesService.delete(placeToDelete);
+      setPlaces((prev) => prev.filter((p) => p.id !== placeToDelete));
+      setPlaceToDelete(null);
+    }
   };
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <AppHeader userInitial="C" onLogout={handleLogout} />
 
-
-        {/* Botón Volver */}
       <View style={styles.fixedHeaderContainer}> 
 
         {/* Encabezado */}
           <ScreenHeader
+              eyebrow="TU CIUDAD, A TU MANERA"
               title="Mis lugares"
               description="Guardá tus lugares frecuentes para encontrarlos rápidamente al crear un recorrido."
+              showBackButton={true}
           />
 
         {/* Botón Reutilizable AGREGAR LUGAR */}
@@ -93,15 +124,31 @@ export const MyPlacesScreen = () => {
           {places.map((place) => (
             <PlaceCard
               key={place.id}
-              title={place.title}
+              title={place.name}
               address={place.address}
-              iconName={place.iconName}
-              onEdit={() => handleEditPlace(place)}
-              onDelete={() => handleDeletePlace(place.id, place.title)}
+              iconName={getCategoryIcon(place.category)}
+              onEdit={() => handleEditPlace(place.id)}
+              onDelete={() => handleDeletePlace(place.id)}
             />
           ))}
         </View>
       </ScrollView>
+      
+      {/* Modal de confirmación para eliminar */}
+      <StatusModal
+        visible={placeToDelete !== null}
+        type="warning"
+        layout="row"
+        buttonDirection="row"
+        showCloseButton={false}
+        title={'¿Seguro que querés\neliminar este\nlugar?'}
+        cancelText="Cancelar"
+        confirmText="Confirmar"
+        onClose={() => setPlaceToDelete(null)}
+        onConfirm={handleConfirmDelete}
+      />
+
+
     </SafeAreaView>
   );
 };
@@ -116,40 +163,11 @@ const getStyles = (theme: Theme) => ({
     paddingTop: theme.spacing.md,        // 12px de separación con AppHeader
     paddingBottom: theme.spacing.sm,     // 8px antes de la lista
   },
-  backButton: {
-    width: theme.metrics.minTouch,       // 48px
-    height: theme.metrics.minTouch,
-    justifyContent: 'center' as const,
-    marginBottom: theme.spacing.xs,
-  },
-  headerSection: {
-    marginBottom: theme.spacing.lg,      // 16px
-  },
-  eyebrow: {
-    color: theme.colors.brand.teal,
-    fontSize: theme.metrics.font.caption.size,
-    lineHeight: theme.metrics.font.caption.lineHeight,
-    fontWeight: '800' as const,
-    letterSpacing: 0.8,
-    marginBottom: theme.spacing.xs,
-    textTransform: 'uppercase' as const,
-  },
-  title: {
-    color: theme.colors.brand.navy,
-    fontSize: theme.metrics.font.header.size,
-    lineHeight: theme.metrics.font.header.lineHeight,
-    fontWeight: '800' as const,
-    marginBottom: theme.spacing.xs,
-  },
-  description: {
-    color: theme.colors.text.muted,
-    fontSize: theme.metrics.font.body.size,
-    lineHeight: theme.metrics.font.body.lineHeight,
-    fontWeight: '400' as const,
-  },
+
   addButton: {
     marginTop: theme.spacing.xs,
     marginBottom: theme.spacing.sm,      // Margen inferior del botón
+    minHeight: theme.metrics.minTouch,
   },
   scrollView: {
     flex: 1,
