@@ -8,9 +8,10 @@
 
 ## 1. Alcance
 
-Los comandos exactos para pasar de un repositorio clonado a la API respondiendo,
-el porqué de la base en un contenedor, y el catálogo de problemas frecuentes. No
-repite las decisiones de stack ni la estructura del código: eso está en
+Los comandos exactos para pasar de un repositorio clonado a la API respondiendo, el
+porqué de la base en un contenedor, cómo reiniciarla desde cero cuando algo queda a
+medio camino, cómo consultarla, y el catálogo de problemas frecuentes. No repite las
+decisiones de stack ni la estructura del código: eso está en
 [02-stack-y-estructura.md](02-stack-y-estructura.md).
 
 ## 2. Requisitos previos
@@ -18,7 +19,7 @@ repite las decisiones de stack ni la estructura del código: eso está en
 | Herramienta | Versión | Para qué |
 | --- | --- | --- |
 | Node.js | 22 LTS | correr el backend |
-| pnpm | 10 o superior | gestor de paquetes |
+| pnpm | 12.4.1 (fijada en `packageManager`) | gestor de paquetes |
 | Git | — | clonar y versionar |
 | Docker (con Compose v2) | — | levantar la base |
 
@@ -93,7 +94,68 @@ contenedor corre `infra/initdb/`, que habilita las extensiones `postgis` y
 `pnpm dev` y `pnpm migrate` toman las variables de `.env` automáticamente. En
 PowerShell, el `cp` del paso 3 equivale a `Copy-Item .env.example .env`.
 
-## 5. Verificación
+## 5. Reiniciar la base desde cero
+
+En desarrollo el esquema cambia mucho: una migración a medio escribir, un archivo de
+migración que se corrige después de aplicarlo, datos de prueba que estorban. La salida
+rápida es tirar la base y reconstruirla.
+
+> [!WARNING]
+> Este procedimiento **borra todos los datos** de la base de desarrollo y no se puede
+> deshacer. En producción nunca se hace así: ver
+> [03-despliegue-y-operacion.md](03-despliegue-y-operacion.md).
+
+```sh
+cd infra
+docker compose down -v      # -v borra el volumen: no queda nada
+docker compose up -d        # vuelve a crear el contenedor y lo inicializa
+docker compose ps           # esperar a que el estado sea "healthy"
+
+cd ../backend
+pnpm migrate                # volver a aplicar todas las migraciones
+```
+
+El último paso es el que más se olvida: **levantar la base no aplica las migraciones.**
+Un volumen nuevo queda sin tablas hasta que corra `pnpm migrate`.
+
+Qué hace exactamente `down -v`, y por eso es lo que arregla los problemas raros:
+
+- Borra el volumen, no solo el contenedor.
+- Al levantar de nuevo, el contenedor corre `infra/initdb/` una vez, que es donde se
+  habilitan `postgis` y `pgrouting`. Esa es la razón por la que un volumen creado antes
+  de agregar `initdb/` nunca tiene las extensiones: no hay forma de arreglarlo sin
+  recrearlo.
+
+Para confirmar que quedó limpia y migrada:
+
+```sh
+cd infra
+docker compose exec db psql -U rodando -d rodando -c '\dt'
+docker compose exec db psql -U rodando -d rodando -c 'select name, run_on from pgmigrations'
+```
+
+Si preferís no borrar el volumen, se puede deshacer migración por migración con
+`pnpm migrate:down` (revierte la última) o
+`pnpm exec node-pg-migrate down N --envPath .env -m ../infra/migrations` en `backend/`
+(revierte las últimas `N`). Eso conserva lo que no hayan tocado esas migraciones.
+
+## 6. Consultar la base
+
+Las credenciales son las del compose y son **solo para desarrollo**:
+`rodando` / `rodando`, base `rodando`, puerto `5432`.
+
+Con `psql` dentro del contenedor, sin instalar nada:
+
+```sh
+cd infra
+docker compose exec db psql -U rodando -d rodando
+docker compose exec db psql -U rodando -d rodando -c '\dt'
+```
+
+Con un cliente gráfico como pgAdmin, DBeaver o TablePlus: host `localhost`, puerto
+`5432`, base `rodando`, usuario `rodando`, contraseña `rodando`.
+
+## 7. Verificación
 
 ```sh
 curl http://localhost:3001/api/health        # {"status":"ok"}
@@ -104,7 +166,7 @@ curl http://localhost:3001/api/health/ready  # {"status":"ok","db":"up"}
 - `/api/health/ready` (readiness): **además** la base responde. Es el que confirma
   que está todo bien.
 
-## 6. Comandos frecuentes
+## 8. Comandos frecuentes
 
 Desde `backend/`:
 
@@ -127,8 +189,9 @@ Base de datos, desde `infra/`:
 | `docker compose logs -f db` | logs de la base |
 | `docker compose down` | detiene el contenedor (conserva los datos) |
 | `docker compose down -v` | además borra los datos: base de cero |
+| `docker compose exec db psql -U rodando -d rodando` | abre `psql` en la base (§6) |
 
-## 7. Problemas comunes
+## 9. Problemas comunes
 
 | Síntoma | Causa y solución |
 | --- | --- |
@@ -137,11 +200,11 @@ Base de datos, desde `infra/`:
 | `/api/health/ready` devuelve `503 {"db":"down"}` | la base no responde. Revisar `docker compose ps` (¿`healthy`?) y que las credenciales del `.env` coincidan con las del compose |
 | `pnpm migrate` imprime la ayuda del CLI y sale con error | falta la acción `up`; usar el script `pnpm migrate`, que ya la incluye |
 | El puerto 5432 o 3001 está ocupado | hay otro servicio usándolo. Detener lo que lo usa o cambiar el puerto en el compose / `.env` |
-| Se quiere empezar con la base de cero | `docker compose down -v` y volver a levantarla con `docker compose up -d` |
+| Se quiere empezar con la base de cero | `docker compose down -v`, `up -d` y después `pnpm migrate` (ver §5) |
 | La app falla porque falta la extensión `postgis` o `pgrouting` | el volumen se creó antes de agregar `infra/initdb/`. Recrearla con `docker compose down -v` y `docker compose up -d` |
 | En Fedora/RHEL el contenedor de la base no arranca y el log dice `Permission denied` sobre `/docker-entrypoint-initdb.d` | SELinux bloquea el bind mount. El montaje debe llevar el flag `z` (`:ro,z`, ya está en el compose); no quitarlo |
 
-## 8. Documentos relacionados
+## 10. Documentos relacionados
 
 - [00-reglas-documentacion.md](00-reglas-documentacion.md): reglas de la
 documentación.
