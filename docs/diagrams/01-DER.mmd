@@ -125,12 +125,12 @@ erDiagram
         datetime updated_at
     }
 
+    %% Tutoriales guardados por un usuario. Sin updated_at: sus columnas son inmutables %%
     USER_TUTORIALS {
         int id PK
         int user_id FK
         int tutorial_id FK
         datetime created_at
-        datetime updated_at
     }
 
     USERS ||--o{ USER_PLACES: "Tiene lugares favoritos"
