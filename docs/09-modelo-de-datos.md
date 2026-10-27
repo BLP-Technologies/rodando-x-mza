@@ -18,6 +18,8 @@ Este documento responde:
 - **Qué** forma tiene cada campo cerrado del modelo, y por qué (§4).
 - **Cómo** se administra un enum: orden, agregar, renombrar y quitar valores (§5).
 - **Qué** forma tiene un catálogo y cómo se da de baja una fila (§6).
+- **Cómo** se escribe una migración: formato, nombres, marcas de tiempo y
+  `updated_at` (§7).
 
 No contiene el DER —eso es [01-diagramas.md](01-diagramas.md) §3 y su fuente en
 `docs/diagrams/01-DER.mmd`— ni las reglas de negocio que usan estos valores: las
@@ -201,7 +203,42 @@ historial.
 API; el nombre de un tipo de barrera es contenido que el moderador edita, no un texto
 de error que cada cliente traduce.
 
-## 7. Lo que este documento no decide
+## 7. Convenciones de migración
+
+Las migraciones son **SQL puro** ([02](02-stack-y-estructura.md) §7), viven en
+`infra/migrations/` y las aplica `node-pg-migrate`. Un archivo es una unidad
+temática —las tablas que resuelve un mismo issue— y contiene el up y el down con los
+marcadores de la herramienta:
+
+```sql
+-- Up Migration
+...
+-- Down Migration
+...
+```
+
+| Convención | Regla |
+| --- | --- |
+| Nombre del archivo | `<timestamp>_<nombre>.sql`, generado con `pnpm exec node-pg-migrate create <nombre> --migration-file-language sql`. El nombre va en kebab-case, en inglés |
+| Marcas de tiempo | `timestamptz`, con `DEFAULT now()`. Nunca `timestamp` sin zona |
+| Clave primaria | `integer GENERATED ALWAYS AS IDENTITY`. No `serial`, que deja la secuencia sin dueño visible |
+| `updated_at` | Lo mantiene el trigger `set_updated_at()`, no el cliente |
+| Nombres de constraints | Explícitos (`fk_<tabla>_<referencia>`, `<tabla>_<columna>_key`), para poder soltarlos en una migración futura |
+| FK de una tabla de unión | `ON DELETE CASCADE` |
+| FK hacia un catálogo | `ON DELETE RESTRICT`: el catálogo se da de baja con `is_active`, no borrando filas |
+| Reversión | El down deja la base como estaba, en orden inverso y con `IF EXISTS` |
+
+**`updated_at` va con trigger, no en el código.** La función `set_updated_at()` se crea
+en la primera migración y la reutilizan todas las tablas mutables: con dos sistemas
+escribiendo (backend y portal), "acordarse de tocar `updated_at`" es una regla que se
+rompe sola. La consecuencia a saber: el trigger es invisible para quien lee una query,
+así que un `UPDATE` mueve `updated_at` aunque no se lo mencione.
+
+**Una tabla cuyas columnas son todas inmutables no lleva `updated_at`.** `user_tutorials`
+es el caso: solo tiene las dos FK y `created_at`, así que no habría nada que
+actualizar y la columna sería peso muerto.
+
+## 8. Lo que este documento no decide
 
 - **Transiciones de estado.** Qué valores existen lo garantiza la base; qué
 transiciones son válidas lo garantiza la máquina de estados en el servicio, con los
@@ -217,7 +254,7 @@ recibir esas columnas cuando se decida.
   `reports`: o el reporte guarda esos datos como preclasificación para el moderador, o
   el diagrama describe solo una ayuda de la interfaz.
 
-## 8. Documentos relacionados
+## 9. Documentos relacionados
 
 - [01-diagramas.md](01-diagramas.md): el DER y los diagramas de estados.
 - [02-stack-y-estructura.md](02-stack-y-estructura.md): stack, acceso a datos y
