@@ -88,6 +88,27 @@ mermaid 12.
   `01-DER.mmd` → `imgs/01-DER.png`.
 - Las imágenes **se versionan en git** junto con los `.mmd` (no se ignoran).
 
+### Esquemas ilustrativos (excepción)
+
+Los diagramas del sistema son mermaid, sin excepción. Pero hay un tipo de imagen que
+mermaid no puede producir: el **esquema ilustrativo**, que dibuja la realidad —una
+calle, una esquina— para explicar qué representa el modelo. Se dibujan en Excalidraw y
+son la única excepción a la regla:
+
+- Viven también en `docs/diagrams/imgs/`, con un nombre que no lleva prefijo numérico
+  porque no derivan de un `.mmd`: `interseccion-ilustracion.png`, `cruce-grafo.png`.
+- No pasan por `scripts/render-diagrams.sh`; el PNG **es** el archivo que se muestra.
+- La fuente editable se versiona en `docs/diagrams/excalidraw/`, en el formato del
+  plugin de Excalidraw para Obsidian: el dibujo va comprimido dentro de un bloque
+  `compressed-json`, así que el archivo no se lee ni se revisa en un diff, pero se
+  abre y se edita. Pesa menos que el JSON crudo y que exportar el SVG con la fuente
+  embebida.
+- Para regenerar una imagen: abrir el archivo en Obsidian con el plugin, y exportar
+  cada panel como PNG a `docs/diagrams/imgs/` con el nombre que ya tiene. No hay
+  comando de línea que lo haga.
+- Igual que el resto, se referencian desde el documento que explica el tema —en este
+  caso [09-modelo-de-datos.md](09-modelo-de-datos.md) §4.4—, no desde acá.
+
 | Diagrama | Tipo | Descripción |
 | --- | --- | --- |
 | `01-DER.mmd` | Entidad-relación | Modelo de la base de datos |
@@ -102,6 +123,17 @@ mermaid 12.
 | `05-est-obstaculo.mmd` | Estados | Ciclo de vida del obstáculo |
 | `05-est-reporte.mmd` | Estados | Ciclo de vida del reporte de obstáculo |
 | `06-comp-arquitectura.mmd` | Componentes | Arquitectura de componentes del sistema |
+
+Y los esquemas ilustrativos (§"Esquemas ilustrativos"):
+
+| Imagen | Qué muestra |
+| --- | --- |
+| `interseccion-ilustracion.png` | Una intersección de dos calles: veredas, cruces y las rampas de cada esquina |
+| `interseccion-grafo.png` | El mismo lugar como grafo: nodos, aristas de vereda y de cruce |
+| `cruce-ilustracion.png` | Un cruce peatonal a mitad de cuadra, con sus dos nodos |
+| `cruce-grafo.png` | El grafo de ese cruce: la vereda partida en dos aristas |
+
+Las cuatro salen del mismo dibujo: `docs/diagrams/excalidraw/esquema-grafo.md`.
 
 ## 4. Generación de las imágenes
 

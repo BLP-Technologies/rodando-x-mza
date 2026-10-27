@@ -202,6 +202,7 @@ Base de datos, desde `infra/`:
 | El puerto 5432 o 3001 está ocupado | hay otro servicio usándolo. Detener lo que lo usa o cambiar el puerto en el compose / `.env` |
 | Se quiere empezar con la base de cero | `docker compose down -v`, `up -d` y después `pnpm migrate` (ver §5) |
 | La app falla porque falta la extensión `postgis` o `pgrouting` | el volumen se creó antes de agregar `infra/initdb/`. Recrearla con `docker compose down -v` y `docker compose up -d` |
+| `pnpm migrate` falla con `type "geometry" does not exist` | la base no tiene PostGIS habilitado. Pasa en una base creada a mano con `createdb`, porque las extensiones las pone `infra/initdb/` al inicializar el volumen. Recrear la base (§5) o correr `CREATE EXTENSION postgis; CREATE EXTENSION pgrouting;` en ella |
 | En Fedora/RHEL el contenedor de la base no arranca y el log dice `Permission denied` sobre `/docker-entrypoint-initdb.d` | SELinux bloquea el bind mount. El montaje debe llevar el flag `z` (`:ro,z`, ya está en el compose); no quitarlo |
 
 ## 10. Documentos relacionados

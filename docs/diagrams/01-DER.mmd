@@ -35,12 +35,14 @@ erDiagram
         datetime updated_at
     }
 
-    %% Nodos de conexión / Esquinas %%
+    %% Nodos de conexión: los vértices del grafo %%
     KERB_NODES {
         int id PK
-        geometry(Point) geom
+        geometry(Point,4326) geom
         accessibility_level? accessibility_level "FULL, PARTIAL, NONE; NULL = no determinado"
         boolean is_verified "Un moderador confirmó el valor"
+        datetime created_at
+        datetime updated_at
     }
 
     %% Vereda, de cordón a cordón %%
@@ -48,12 +50,13 @@ erDiagram
         int id PK
         int start_node_id FK
         int end_node_id FK
-        bigint osm_way_id "FK externo"
+        bigint? osm_way_id "Lo llena el import; no es único"
         varchar(100)? street_name
         accessibility_level? accessibility_level "FULL, PARTIAL, NONE; NULL = no determinado"
-        geometry(LineString) geom
+        geometry(LineString,4326) geom
         boolean is_verified "Un moderador confirmó el valor"
-        float? width "Ancho de vereda"
+        datetime created_at
+        datetime updated_at
     }
 
     %% Cruce peatonal sobre calzada %%
@@ -61,10 +64,12 @@ erDiagram
         int id PK
         int start_node_id FK
         int end_node_id FK
-        geometry(LineString) geom
+        geometry(LineString,4326) geom
         boolean has_traffic_light
         accessibility_level? accessibility_level "FULL, PARTIAL, NONE; NULL = no determinado"
         boolean is_verified "Un moderador confirmó el valor"
+        datetime created_at
+        datetime updated_at
     }
 
     %% Obstáculos o barreras físicas puntuales %%
