@@ -88,6 +88,21 @@ mermaid 12.
   `01-DER.mmd` → `imgs/01-DER.png`.
 - Las imágenes **se versionan en git** junto con los `.mmd` (no se ignoran).
 
+### Esquemas ilustrativos (excepción)
+
+Los diagramas del sistema son mermaid, sin excepción. Pero hay un tipo de imagen que
+mermaid no puede producir: el **esquema ilustrativo**, que dibuja la realidad —una
+calle, una esquina— para explicar qué representa el modelo. Se dibujan en Excalidraw y
+son la única excepción a la regla:
+
+- Viven también en `docs/diagrams/imgs/`, con un nombre que no lleva prefijo numérico
+  porque no derivan de un `.mmd`: `interseccion-ilustracion.png`, `cruce-grafo.png`.
+- No pasan por `scripts/render-diagrams.sh`; el PNG **es** el archivo que se muestra.
+- La fuente editable es el dibujo de Excalidraw. Si se pierde, el PNG queda como
+  artefacto: se puede volver a dibujar, no regenerar.
+- Igual que el resto, se referencian desde el documento que explica el tema —en este
+  caso [09-modelo-de-datos.md](09-modelo-de-datos.md) §4.4—, no desde acá.
+
 | Diagrama | Tipo | Descripción |
 | --- | --- | --- |
 | `01-DER.mmd` | Entidad-relación | Modelo de la base de datos |
@@ -102,6 +117,15 @@ mermaid 12.
 | `05-est-obstaculo.mmd` | Estados | Ciclo de vida del obstáculo |
 | `05-est-reporte.mmd` | Estados | Ciclo de vida del reporte de obstáculo |
 | `06-comp-arquitectura.mmd` | Componentes | Arquitectura de componentes del sistema |
+
+Y los esquemas ilustrativos (§"Esquemas ilustrativos"):
+
+| Imagen | Qué muestra |
+| --- | --- |
+| `interseccion-ilustracion.png` | Una intersección de dos calles: veredas, cruces y las rampas de cada esquina |
+| `interseccion-grafo.png` | El mismo lugar como grafo: nodos, aristas de vereda y de cruce |
+| `cruce-ilustracion.png` | Un cruce peatonal a mitad de cuadra, con sus dos nodos |
+| `cruce-grafo.png` | El grafo de ese cruce: la vereda partida en dos aristas |
 
 ## 4. Generación de las imágenes
 

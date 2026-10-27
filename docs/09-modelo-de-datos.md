@@ -115,18 +115,18 @@ ni lo uno ni lo otro, y como enum no admite atributos, la tabla de referencia es
 categoría la crean, editan y desactivan los moderadores. Un enum obligaría a una
 migración cada vez que alguien agrega una categoría de video.
 
-### 4.3 El campo que se elimina
+### 4.3 Los campos que se eliminan
 
-**`sidewalks.side` se elimina del modelo.** Se documenta acá porque eliminarlo es una
+Dos campos del DER original se eliminaron, y se documenta acá porque quitarlos es una
 decisión de esquema, no un detalle.
 
-El "lado" de una vereda no es un atributo de la vereda: es una **relación entre tres
-cosas** —la vereda, la calzada y quien mira—. Una columna guarda atributos, no
-relaciones, y por eso el valor almacenado solo puede ser correcto para uno de los dos
-sentidos de circulación. Los casos que lo rompen no son excepciones: en una calle de
-doble sentido no hay un lado único, una vereda entre carriles no es ni izquierda ni
-derecha, y para un peatón que camina contra el sentido de la calle la izquierda queda
-a su derecha.
+**`sidewalks.side`.** El "lado" de una vereda no es un atributo de la vereda: es una
+**relación entre tres cosas** —la vereda, la calzada y quien mira—. Una columna guarda
+atributos, no relaciones, y por eso el valor almacenado solo puede ser correcto para
+uno de los dos sentidos de circulación. Los casos que lo rompen no son excepciones: en
+una calle de doble sentido no hay un lado único, una vereda entre carriles no es ni
+izquierda ni derecha, y para un peatón que camina contra el sentido de la calle la
+izquierda queda a su derecha.
 
 Lo único que sobrevive del concepto es la convención de OpenStreetMap
 (`sidewalk:left` / `sidewalk:right`), que es relativa a la dirección en que el way
@@ -141,6 +141,61 @@ columna.
 
 También se descartó distinguir por numeración par o impar: la numeración es de la
 calle, no de la vereda, y una esquina pertenece a las dos.
+
+**`sidewalks.width`.** Un ancho por tramo es un promedio, y la vereda real se angosta
+y se ensancha dentro de la misma cuadra: en el microcentro el promedio es razonable, en
+un barrio no. El problema no se arregla con otro tipo de dato.
+
+Pero el argumento que decide es otro: para que el ancho aporte algo tiene que
+**alimentar el costo del ruteo**, y eso exige que alguien haya medido la vereda.
+OpenStreetMap casi nunca trae el ancho, y relevar anchos a mano no está en el alcance
+de ninguna fase. El resultado previsible era una columna que existe, que nadie llena,
+y que en seis meses alguien iba a encontrar en el DER preguntando si estaba rota.
+
+La accesibilidad ya expresa el resultado: una vereda demasiado angosta para una silla
+de ruedas es `PARTIAL` o `NONE`. El ancho solo hace falta si se quiere *calcular* el
+nivel en vez de relevarlo. Agregar la columna después es aditivo y barato; y si el
+ruteo llegara a necesitar el dato, probablemente no sea una columna sino muestras a lo
+largo de la arista.
+
+### 4.4 El modelo en la calle
+
+El DER dice qué tablas hay; estos esquemas dicen **qué representa cada una**. Lo
+primero es la calle como la ve una persona; el mapeo al grafo viene después.
+
+**Una intersección de dos calles.** Cuatro cordones (uno por esquina), cuatro cruces y
+las veredas que llegan a cada uno. Las rampas están en amarillo y los nodos en verde:
+lo que ilustra es que **varias rampas de una misma esquina son un solo `kerb_node`**,
+con un solo nivel de accesibilidad.
+
+![Intersección de dos calles: veredas, cruces y rampas por esquina](diagrams/imgs/interseccion-ilustracion.png)
+
+El mismo lugar como grafo: los nodos son los vértices, los cruces las aristas que
+forman el cuadrado del cruce, y las veredas las que salen hacia afuera.
+
+![El grafo de la intersección: cuatro nodos y las aristas de vereda y de cruce](diagrams/imgs/interseccion-grafo.png)
+
+**Un cruce a mitad de cuadra.** Acá se ve el caso que más cuesta: dos nodos que **no
+son esquinas**. Un cordón existe donde se conecta algo, no donde hay una manzana.
+
+![Cruce peatonal a mitad de cuadra, con sus dos nodos](diagrams/imgs/cruce-ilustracion.png)
+
+Y su grafo: el cruce es la arista vertical, y la vereda queda **partida en dos aristas**
+porque el nodo corta el tramo.
+
+![El grafo del cruce a mitad de cuadra](diagrams/imgs/cruce-grafo.png)
+
+Dos consecuencias que se desprenden de esos dibujos y que conviene tener presentes:
+
+- **Un solo nivel por nodo, aunque tenga dos rampas.** Si la rampa hacia un cruce está
+  bien y la del otro no, un único `accessibility_level` miente en una de las dos
+  direcciones. Es la simplificación que se acepta para el MVP; para que falle del lado
+  seguro, el nivel del nodo se registra por el **peor caso** de sus rampas: ante la
+  duda, el ruteo evita el paso. Revisar cuando el relevamiento muestre esquinas con
+  rampas muy distintas entre sí.
+- **Una vereda se corta en cada nodo.** El importador no puede mapear "una way de OSM =
+  una vereda": tiene que cortar la way en cada nodo, incluidos los que crea un cruce a
+  mitad de cuadra. Si no, la topología queda desconectada en esos puntos.
 
 ## 5. Administrar un enum
 
@@ -221,12 +276,14 @@ marcadores de la herramienta:
 | --- | --- |
 | Nombre del archivo | `<timestamp>_<nombre>.sql`, generado con `pnpm exec node-pg-migrate create <nombre> --migration-file-language sql`. El nombre va en kebab-case, en inglés |
 | Marcas de tiempo | `timestamptz`, con `DEFAULT now()`. Nunca `timestamp` sin zona |
-| Clave primaria | `integer GENERATED ALWAYS AS IDENTITY`. No `serial`, que deja la secuencia sin dueño visible |
+| Identidad | `integer GENERATED ALWAYS AS IDENTITY`, no `serial`, que deja la secuencia sin dueño visible |
+| Geometrías | `geometry(<tipo>, 4326)` en la columna. El SRID no se repite en un `CHECK`: el tipo ya rechaza otro SRID. Ojo con el silencio: si la geometría no declara SRID, PostGIS le asigna 4326, así que un import con coordenadas proyectadas y sin SRID entra sin error |
 | `updated_at` | Lo mantiene el trigger `set_updated_at()`, no el cliente |
 | Nombres de constraints | Explícitos (`fk_<tabla>_<referencia>`, `<tabla>_<columna>_key`), para poder soltarlos en una migración futura |
 | FK de una tabla de unión | `ON DELETE CASCADE` |
 | FK hacia un catálogo | `ON DELETE RESTRICT`: el catálogo se da de baja con `is_active`, no borrando filas |
 | Reversión | El down deja la base como estaba, en orden inverso y con `IF EXISTS` |
+| Extensiones | `postgis` y `pgrouting` **no** las crean las migraciones: las habilita `infra/initdb/` al inicializar el volumen en desarrollo, y un administrador una sola vez en el servidor ([03](03-despliegue-y-operacion.md) §8). Una base creada a mano con `createdb` no las tiene, y la migración falla con `type "geometry" does not exist` |
 
 **`updated_at` va con trigger, no en el código.** La función `set_updated_at()` se crea
 en la primera migración y la reutilizan todas las tablas mutables: con dos sistemas
@@ -253,6 +310,11 @@ recibir esas columnas cuando se decida.
   inconsistencia previa a este documento y se resuelve al definir la migración de
   `reports`: o el reporte guarda esos datos como preclasificación para el moderador, o
   el diagrama describe solo una ayuda de la interfaz.
+- **La identidad de los cruces para reimportar.** `sidewalks` guarda su `osm_way_id`,
+  pero `crossings` no tiene ningún identificador externo: si el importador se vuelve a
+  correr, no puede reconocer un cruce que ya existe salvo comparando geometría. Se
+  resuelve en el importador, no en el esquema, pero conviene tenerlo anotado antes de
+  escribir el importador de OpenStreetMap.
 
 ## 9. Documentos relacionados
 
