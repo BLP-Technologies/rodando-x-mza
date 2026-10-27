@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Place } from '@/navigation/types';
+import { Place } from '@/types/places';
 import initialPlacesData from '@/data/mockPlaces.json';
 
 const STORAGE_KEY = '@rodando_mza_places_v1';

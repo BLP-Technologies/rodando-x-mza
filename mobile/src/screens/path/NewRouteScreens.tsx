@@ -11,7 +11,7 @@ import { SwapButton } from '@/components/path/SwapButton';
 import { AddressSearchModal } from '@/components/path/AddressSearchModal';
 import { PlaceSuggestion } from '@/services/geocoding';
 import { placesService } from '@/services/placesService';
-import { Place } from '@/navigation/types';
+import { Place } from '@/types/places';
 import { StatusModal, StatusType } from '@/components/common/StatusModal';
 
 

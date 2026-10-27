@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteStackParamList } from '@/navigation/types';
 import { useStyles, Theme } from '@/theme';
@@ -10,48 +10,46 @@ import { PrimaryButton } from '@/components/common/PrimaryButton';
 import { RouteCard } from '@/components/path/RouteCard';
 import { ScreenHeader } from '@/components/common/ScreenHeader';
 import { StatusModal } from '@/components/common/StatusModal';
-
-interface SavedRoute {
-  id: string;
-  label: string;
-  origin: string;
-  destination: string;
-  lastConsulted: string;
-}
-
-const INITIAL_ROUTES: SavedRoute[] = [
-  {
-    id: '1',
-    label: 'Camino a la Escuela',
-    origin: 'Casa',
-    destination: 'Escuela',
-    lastConsulted: 'Hoy',
-  },
-  {
-    id: '2',
-    label: 'Recorrido Frecuente',
-    origin: 'Casa',
-    destination: 'Plaza',
-    lastConsulted: 'Ayer',
-  },
-  {
-    id: '3',
-    label: 'Visita Médica',
-    origin: 'Casa',
-    destination: 'Hospital Notti',
-    lastConsulted: 'Hace 3 días',
-  },
-];
+import { routesService } from '@/services/routesService';
+import { Route } from '@/types/routes';
 
 type MyRoutesNavProp = NativeStackNavigationProp<RouteStackParamList, 'MyRoutes'>;
+
+const formatLastConsulted = (dateStr?: string): string => {
+  if (!dateStr) return 'Reciente';
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffDays = Math.floor(
+    (now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24)
+  );
+
+  if (diffDays <= 0) return 'Hoy';
+  if (diffDays === 1) return 'Ayer';
+  return `Hace ${diffDays} días`;
+};
 
 export const MyRoutesScreen = () => {
   const { styles } = useStyles(getStyles);
   const navigation = useNavigation<MyRoutesNavProp>();
-  const [routes, setRoutes] = useState<SavedRoute[]>(INITIAL_ROUTES);
 
-  // 1. Estado para almacenar el id del recorrido a eliminar
+  // Estado con el tipo de dominio oficial Route[]
+  const [routes, setRoutes] = useState<Route[]>([]);
   const [routeToDelete, setRouteToDelete] = useState<string | null>(null);
+
+  // Recarga automática al enfocar la pantalla
+  useFocusEffect(
+    useCallback(() => {
+      let isActive = true;
+      routesService.getAll().then((data) => {
+        if (isActive) {
+          setRoutes(data);
+        }
+      });
+      return () => {
+        isActive = false;
+      };
+    }, [])
+  );
 
   const handleLogout = () => console.log('Cerrar sesión');
 
@@ -59,20 +57,33 @@ export const MyRoutesScreen = () => {
     navigation.navigate('NewRoute');
   };
 
-  const handleSearchRoute = (route: SavedRoute) => {
-    console.log(`Buscando ruta accesible: ${route.origin} a ${route.destination}`);
+  // Navega al mapa interactivo pasando las coordenadas inmutables
+  const handleSearchRoute = (routeItem: Route) => {
+    navigation.navigate('RouteResult', {
+      origin: {
+        label: routeItem.origin.name,
+        latitude: routeItem.origin.latitude,
+        longitude: routeItem.origin.longitude,
+      },
+      destination: {
+        label: routeItem.destination.name,
+        latitude: routeItem.destination.latitude,
+        longitude: routeItem.destination.longitude,
+      },
+    });
   };
 
-  // 2. Al presionar el tacho, activamos el modal guardando el ID
   const handleDeleteRoute = (id: string) => {
     setRouteToDelete(id);
   };
 
-  // 3. Confirmación: borra el elemento y cierra el modal
-  const handleConfirmDelete = () => {
+  // Borrado con persistencia en el servicio
+  const handleConfirmDelete = async () => {
     if (routeToDelete) {
-      setRoutes((prev) => prev.filter((r) => r.id !== routeToDelete));
+      const id = routeToDelete;
       setRouteToDelete(null);
+      await routesService.delete(id);
+      setRoutes((prev) => prev.filter((r) => r.id !== id));
     }
   };
 
@@ -103,21 +114,21 @@ export const MyRoutesScreen = () => {
         bounces={true}
       >
         <View style={styles.routesList}>
-          {routes.map((route) => (
+          {routes.map((routeItem) => (
             <RouteCard
-              key={route.id}
-              label={route.label}
-              origin={route.origin}
-              destination={route.destination}
-              lastConsulted={route.lastConsulted}
-              onSearchRoute={() => handleSearchRoute(route)}
-              onDelete={() => handleDeleteRoute(route.id)}
+              key={routeItem.id}
+              label={routeItem.name}
+              origin={routeItem.origin.name}
+              destination={routeItem.destination.name}
+              lastConsulted={formatLastConsulted(routeItem.updatedAt || routeItem.createdAt)}
+              onSearchRoute={() => handleSearchRoute(routeItem)}
+              onDelete={() => handleDeleteRoute(routeItem.id)}
             />
           ))}
         </View>
       </ScrollView>
 
-      {/* Modal con layout horizontal y botones Cancelar/Confirmar alineados */}
+      {/* Modal de confirmación para eliminar */}
       <StatusModal
         visible={routeToDelete !== null}
         type="warning"

@@ -5,7 +5,7 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { useStyles, Theme } from '@/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { RouteStackParamList } from '@/navigation/types';
-import { PlaceCategory, PlaceSchema } from '@/navigation/types';
+import { PlaceCategory, PlaceSchema } from '@/types/places';
 import { placesService } from '@/services/placesService';
 import { searchAddressSuggestions, PlaceSuggestion } from '@/services/geocoding';
 import { AppHeader } from '@/components/common/AppHeader';

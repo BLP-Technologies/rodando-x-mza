@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -15,6 +15,9 @@ import { FormInput } from '@/components/common/FormInput';
 import { OSMRouteMap } from '@/components/path/OSMRouteMap';
 import { ActionButton } from '@/components/common/ActionButton';
 import { StatusModal, StatusType } from '@/components/common/StatusModal';
+import { routesService } from '@/services/routesService';
+import { CreateRouteInput } from '@/types/routes';
+
 
 type RouteResultProp = RouteProp<RouteStackParamList, 'RouteResult'>;
 
@@ -22,13 +25,36 @@ export const RouteResultScreen = () => {
   const { styles, theme } = useStyles(getStyles);
   const navigation = useNavigation<any>();
   const route = useRoute<RouteResultProp>();
- 
+  const [isSaved, setIsSaved] = useState(false);
+
 
   // Parámetros recibidos de NewRouteScreen (con fallback por si se abre directo)
   const { origin, destination } = route.params || {
     origin: { label: 'Casa', latitude: -32.8895, longitude: -68.8458 },
     destination: { label: 'Escuela', latitude: -32.8791, longitude: -68.8412 },
   };
+
+    // Verificar al entrar si la ruta actual ya está en la lista de guardados
+  useEffect(() => {
+    let isActive = true;
+    routesService.getAll().then((existingRoutes) => {
+      if (!isActive) return;
+      const alreadyExists = existingRoutes.some(
+        (r) =>
+          r.origin.latitude === origin.latitude &&
+          r.origin.longitude === origin.longitude &&
+          r.destination.latitude === destination.latitude &&
+          r.destination.longitude === destination.longitude
+      );
+      if (alreadyExists) {
+        setIsSaved(true);
+      }
+    });
+    return () => {
+      isActive = false;
+    };
+  }, [origin.latitude, origin.longitude, destination.latitude, destination.longitude]);
+
 
   const [customName, setCustomName] = useState('');
   
@@ -43,7 +69,7 @@ export const RouteResultScreen = () => {
     type: 'success',
     title: '',
   });
-  // const [isModalVisible, setIsModalVisible] = useState(false);
+  
   
 
   // Simulación de cálculo de ruta (Mock para conectar luego al backend)
@@ -63,19 +89,55 @@ export const RouteResultScreen = () => {
   };
 
   const handleSaveRoute = async () => {
+    if (isSaved) return;
+
     try {
-      // Simulación de guardado (ToDo: reemplazar con llamada real a API)
+      const trimmedCustom = customName.trim();
+      const finalName =
+        trimmedCustom.length >= 3
+          ? trimmedCustom
+          : `${origin.label} a ${destination.label}`;
+
+      const newRoutePayload: CreateRouteInput = {
+        name: finalName,
+        origin: {
+          name: origin.label,
+          latitude: origin.latitude,
+          longitude: origin.longitude,
+          placeId: null,
+        },
+        destination: {
+          name: destination.label,
+          latitude: destination.latitude,
+          longitude: destination.longitude,
+          placeId: null,
+        },
+        distanceMeters: 340,
+        durationMinutes: 16,
+        accessibilityScore: 85,
+        coordinates: [
+          [origin.latitude, origin.longitude],
+          [destination.latitude, destination.longitude],
+        ],
+      };
+
+      await routesService.create(newRoutePayload);
+
+      // Marcamos como guardado
+      setIsSaved(true);
+
       setModalConfig({
         visible: true,
         type: 'success',
         title: 'Recorrido guardado\nexitosamente',
       });
     } catch (err: any) {
+      console.error('Error al guardar recorrido:', err);
       setModalConfig({
         visible: true,
         type: 'error',
         title: 'No se pudo guardar\nel recorrido',
-        message: err?.message || 'Revisá la conexión e intentalo de nuevo.',
+        message: err?.message || 'Revisá los datos ingresados e intentalo de nuevo.',
       });
     }
   };
@@ -159,10 +221,14 @@ export const RouteResultScreen = () => {
               style={styles.flexButton}
             />
             <ActionButton
-              title="GUARDAR RECORRIDO"
+              title={isSaved ? "RECORRIDO GUARDADO" : "GUARDAR RECORRIDO"}
               variant="primary"
               onPress={handleSaveRoute}
-              style={styles.flexButton}
+              disabled={isSaved}
+              style={{
+                ...styles.flexButton,
+                ...(isSaved ? styles.disabledButton : {}),
+              }}
             />
           </View>
 
@@ -288,6 +354,9 @@ const getStyles = (theme: Theme) => ({
     flexDirection: 'row' as const,
     gap: theme.spacing.md,
     marginBottom: theme.spacing.xl,
+  },
+  disabledButton: {
+    opacity: 0.55,
   },
   flexButton: {
     flex: 1,

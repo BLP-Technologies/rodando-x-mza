@@ -1,0 +1,58 @@
+[
+  {
+    "id": "route_casa_escuela",
+    "name": "Casa a Escuela",
+    "origin": {
+      "name": "Casa",
+      "address": "Brasil 1550",
+      "latitude": -32.8942,
+      "longitude": -68.8475,
+      "placeId": "place_casa"
+    },
+    "destination": {
+      "name": "Escuela",
+      "address": "Av. San Martín 1200",
+      "latitude": -32.8895,
+      "longitude": -68.8458,
+      "placeId": "place_escuela"
+    },
+    "distanceMeters": 1350,
+    "durationMinutes": 18,
+    "accessibilityScore": 92,
+    "coordinates": [
+      [-32.8942, -68.8475],
+      [-32.892, -68.847],
+      [-32.8895, -68.8458]
+    ],
+    "createdAt": "2026-03-01T10:00:00.000Z",
+    "updatedAt": "2026-03-01T10:00:00.000Z"
+  },
+  {
+    "id": "route_casa_plaza",
+    "name": "Paseo a Plaza Independencia",
+    "origin": {
+      "name": "Casa",
+      "address": "Brasil 1550",
+      "latitude": -32.8942,
+      "longitude": -68.8475,
+      "placeId": "place_casa"
+    },
+    "destination": {
+      "name": "Plaza Independencia",
+      "address": "Chile y Sarmiento",
+      "latitude": -32.8897,
+      "longitude": -68.8447,
+      "placeId": null
+    },
+    "distanceMeters": 1600,
+    "durationMinutes": 22,
+    "accessibilityScore": 88,
+    "coordinates": [
+      [-32.8942, -68.8475],
+      [-32.891, -68.846],
+      [-32.8897, -68.8447]
+    ],
+    "createdAt": "2026-03-02T15:30:00.000Z",
+    "updatedAt": "2026-03-02T15:30:00.000Z"
+  }
+]
