@@ -219,7 +219,11 @@ en [05-desarrollo.md](05-desarrollo.md). Reglas que sí son de este documento:
 - **Migraciones**: en `infra/`, versionadas en git, aplicadas con `node-pg-migrate`.
   Un cambio de schema no está terminado hasta que su migración está en el commit.
 - **Variables de entorno**: sin secretos versionados; se documentan en el
-  `.env.example` y cada desarrollador provee el valor real.
+  `.env.example` y cada desarrollador provee el valor real. La única excepción son
+  las **credenciales fijas de desarrollo** de `infra/docker-compose.yml`
+  (`rodando`/`rodando`): existen para que levantar la base no exija configurar nada
+  y no protegen ningún dato real. Los secretos de verdad viven fuera del
+  repositorio ([03](03-despliegue-y-operacion.md) §7).
 
 ## 9. Verificación
 

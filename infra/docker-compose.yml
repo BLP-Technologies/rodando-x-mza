@@ -7,12 +7,20 @@ services:
     # mirrors alternativos que no tienen la imagen.
     image: docker.io/pgrouting/pgrouting:16-3.5-4.0
     restart: unless-stopped
+    # Credenciales fijas de desarrollo local: existen para que `git clone` y
+    # `docker compose up` funcionen sin configurar nada, y no protegen ningun dato
+    # real. No reutilizar este archivo fuera de una maquina de desarrollo; en el
+    # servidor los valores reales viven en un .env fuera del repositorio
+    # (docs/03 §7).
     environment:
       POSTGRES_USER: rodando
       POSTGRES_PASSWORD: rodando
       POSTGRES_DB: rodando
     ports:
-      - "5432:5432"
+      # Solo localhost: en una red compartida, 0.0.0.0 expone la base con
+      # contrasena conocida. Para consultar desde otro contenedor, usar
+      # `docker compose exec db psql`.
+      - "127.0.0.1:5432:5432"
     volumes:
       - db-data:/var/lib/postgresql/data
       # Aprovisionamiento: se corre una sola vez, al inicializar el volumen.
