@@ -274,3 +274,5 @@ referir a este documento y quedarse con los pasos concretos.
   componentes, que muestra los puertos y adaptadores de los que dependen §5 y §6.
 - [02-stack-y-estructura.md](02-stack-y-estructura.md): tecnologías, versiones,
   estructura de carpetas y entorno de desarrollo.
+- [09-modelo-de-datos.md](09-modelo-de-datos.md): convenciones del esquema y de las
+  migraciones que se aplican en el procedimiento de §8.

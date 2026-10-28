@@ -36,9 +36,9 @@ subgraph S["Servidor de Archivos"]
 end
 
 subgraph D["Base de Datos"]
-  insertar["INSERT INTO obstacles (report_id, ubicación, tipo, severidad)"]
+  insertar["INSERT INTO obstacles (sidewalk_id, ubicación, tipo, severidad)"]
   penalizar["UPDATE sidewalks SET weight = weight + penalización"]
-  marcarAprobado["UPDATE reports SET status = APPROVED"]
+  marcarAprobado["UPDATE reports SET status = APPROVED, obstacle_id = nuevoId"]
   commit["COMMIT: confirma los tres cambios juntos"]
 end
 
