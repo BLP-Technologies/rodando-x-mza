@@ -45,9 +45,9 @@ sequenceDiagram
     Note over B,DB: Inicia transacción BD:<br/>1. Registra el obstáculo formal<br/>2. Actualiza el costo/peso de la vereda en pgRouting<br/>3. Cambia estado del reporte a 'APPROVED'
 
     B ->> DB: BEGIN TRANSACTION
-    B ->> DB: INSERT INTO obstacles (report_id, location, type, severity)
+    B ->> DB: INSERT INTO obstacles (sidewalk_id, ubicación, tipo, severidad)
     B ->> DB: UPDATE sidewalks SET weight = weight + penalty WHERE id = sidewalk_id
-    B ->> DB: UPDATE reports SET status = 'APPROVED' WHERE id = reportId
+    B ->> DB: UPDATE reports SET status = 'APPROVED', obstacle_id = nuevoId WHERE id = reportId
     B ->> DB: COMMIT
 
     activate DB

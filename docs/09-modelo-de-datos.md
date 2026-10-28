@@ -102,8 +102,31 @@ del ciclo de vida, y está bien: el ciclo de vida incluye la baja, pero el enum 
 
 | Tabla | Reemplaza | Filas iniciales |
 | --- | --- | --- |
-| `obstacle_types` | `obstacles.type` (`varchar`) | `POTHOLE`, `TREE`, `STEP`, `STEEP_SLOPE`, `NARROWING` |
+| `obstacle_types` | `obstacles.type` (`varchar`) | Las once de abajo |
 | `tutorial_categories` | `tutorials.category` (`varchar(30)`) | Ninguna: se siembran al definir la carga de tutoriales |
+
+Los tipos de obstáculo, en el orden del seed (el portal ordena por `name_es`):
+
+| `code` | `name_es` |
+| --- | --- |
+| `POTHOLE` | Pozo |
+| `BROKEN_PAVEMENT` | Rotura de vereda |
+| `MISSING_SIDEWALK` | Falta tramo de vereda |
+| `CONSTRUCTION` | Obra en la vía |
+| `TREE` | Árbol o raíces |
+| `STEP` | Escalón |
+| `STEEP_SLOPE` | Pendiente excesiva |
+| `NARROWING` | Estrechamiento |
+| `MISSING_RAMP` | Falta rampa |
+| `BLOCKED_PASSAGE` | Paso obstruido |
+| `OTHER` | Otros |
+
+**`OTHER` tiene un uso acotado, a propósito.** Es la salida del ciudadano cuando nada
+encaja, no la del moderador: al crear el obstáculo, el moderador clasifica con el tipo
+que corresponde, así que el dato que alimenta el ruteo y las estadísticas no arrastra
+"otros". Si `OTHER` empieza a aparecer seguido con el mismo motivo en la descripción,
+esa es la señal de que falta un tipo en el catálogo — y agregarlo es un `INSERT`, no
+una migración, porque el catálogo es datos.
 
 **`obstacles.type` va a catálogo** porque el tipo no es solo una etiqueta: va a llevar
 atributos (nombre para mostrar, y más adelante su efecto en el ruteo) y va a crecer
@@ -196,6 +219,73 @@ Dos consecuencias que se desprenden de esos dibujos y que conviene tener present
 - **Una vereda se corta en cada nodo.** El importador no puede mapear "una way de OSM =
   una vereda": tiene que cortar la way en cada nodo, incluidos los que crea un cruce a
   mitad de cuadra. Si no, la topología queda desconectada en esos puntos.
+
+### 4.5 Reporte y obstáculo
+
+Son dos tablas distintas porque son dos cosas distintas, y comparten dos columnas con
+el mismo nombre, lo que conviene explicar de entrada:
+
+| | `reports.type_id` / `reports.severity` | `obstacles.type_id` / `obstacles.severity` |
+| --- | --- | --- |
+| Qué representan | La **percepción** del ciudadano que reportó | La **decisión** del moderador al publicar |
+| Para qué sirven | Que el moderador sepa qué le pareció ver, y estadística de lo que la gente reporta | Alimentan el mapa, el ruteo y las estadísticas del sistema |
+| Pueden ser `OTHER` | Sí | No: el moderador clasifica con el tipo que corresponde |
+
+Sin esa distinción, las columnas parecen duplicadas. No lo están: el reporte guarda el
+insumo, el obstáculo guarda el resultado, y compararlos es lo que permite ver dónde la
+percepción ciudadana y la clasificación oficial no coinciden.
+
+**Cardinalidad.** Un reporte nace sin obstáculo y puede no tenerlo nunca. Un obstáculo,
+en cambio, puede tener **varios** reportes apuntándolo: varias personas reportan el
+mismo pozo. Entonces la columna vive en el lado que se repite —`reports.obstacle_id`,
+nullable y sin `UNIQUE`— y no al revés. Un único `obstacles.report_id` no podría
+representar dos reportes del mismo obstáculo sin duplicar el obstáculo.
+
+**El flujo de aprobación** (C012) crea el obstáculo y, en la misma transacción, marca
+el reporte: `status = 'APPROVED'` y `obstacle_id` con el id nuevo. Aprobar significa
+crear el obstáculo; no hay estado aprobado sin obstáculo.
+
+**Los duplicados** no necesitan diseño propio en el MVP: el moderador aprueba uno y
+los demás se marcan `REJECTED`, que ya es el estado previsto para "duplicado". Si más
+adelante quieren agruparlos, la columna permite que varios reportes apunten al mismo
+obstáculo; se agrega en el portal, no en el esquema.
+
+**Dónde cuelga un obstáculo.** De a lo sumo uno de los tres elementos primitivos:
+`sidewalk_id`, `kerb_node_id` o `crossing_id`, con
+`CHECK (num_nonnulls(...) <= 1)`. Tres columnas y un `CHECK`, en lugar de un par
+polimórfico `element_type` + `element_id`, que se ve más prolijo pero pierde la
+integridad referencial: nada impediría apuntar a un id que no existe.
+
+No es un detalle teórico: **`MISSING_RAMP` vive en el cordón**, no en la vereda. La
+rampa es la pieza que une vereda y calzada, y en el modelo es el `kerb_node`. Un
+esquema que solo permitiera colgar obstáculos de veredas dejaría sin lugar el tipo más
+específico de una aplicación de accesibilidad.
+
+Colar de **cero** elementos es válido: el `geom` del obstáculo es la fuente de verdad
+de dónde está. El vínculo con el elemento es un enriquecimiento que el portal resuelve
+con el punto, y existe para que el ruteo pueda penalizar el elemento correcto.
+
+**Obstáculo y nivel de accesibilidad no se reemplazan.** Un obstáculo es un **evento**
+—tiene fecha, autor, severidad y un ciclo de vida que termina al resolverse—; el nivel
+es el **estado actual** del elemento. Si una rampa rota se resolviera solo bajando el
+nivel del cordón a `NONE`, se perdería cuándo se rompió, cuántas rampas rotas hubo en
+el año, y alguien tendría que acordarse de subir el nivel cuando se arregle. Lo que
+corresponde es crear el obstáculo y, si la barrera vuelve el paso intransitable, bajar
+el nivel también: son dos datos complementarios.
+
+### 4.6 Rutas guardadas
+
+`saved_routes` guarda **solo los extremos**, y eso es deliberado: **no se agrega una
+columna con la geometría del recorrido.**
+
+La razón es la promesa del producto. Si alguien guarda "casa → escuela" y el sistema
+almacena el camino calculado, ese camino puede volverse intransitable a la mitad —un
+obstáculo nuevo, una vereda rota— y la aplicación estaría mandando a la persona por un
+recorrido que ya no existe. Guardar el punto de partida y el de llegada obliga a
+recalcular cada vez, con los obstáculos y los pesos del momento.
+
+La consecuencia aceptada: el mismo par de extremos puede dar caminos distintos en
+momentos distintos. Eso no es un defecto, es el comportamiento correcto.
 
 ## 5. Administrar un enum
 
@@ -304,12 +394,10 @@ impide escribir `PENDING → RESOLVED`; eso no es trabajo del esquema.
 - **Pesos de ruteo.** Cuánto penaliza un nivel de accesibilidad, si un tipo de
 obstáculo bloquea o penaliza, y cómo se combinan. Los catálogos están listos para
 recibir esas columnas cuando se decida.
-- **Qué guarda un reporte.** El diagrama de actividades de C010
-  ([04-act-C010.mmd](diagrams/04-act-C010.mmd)) hace que el usuario complete "tipo" y
-  "lado de vereda", y `reports` no tiene columnas para ninguno de los dos. Es una
-  inconsistencia previa a este documento y se resuelve al definir la migración de
-  `reports`: o el reporte guarda esos datos como preclasificación para el moderador, o
-  el diagrama describe solo una ayuda de la interfaz.
+- **Pesos de ruteo.** Cuánto penaliza un nivel de accesibilidad, si un tipo de
+  obstáculo bloquea o penaliza, y cómo se combinan. Los catálogos están listos para
+  recibir esas columnas cuando se decida. Mientras tanto, el diagrama de C012 asume un
+  `sidewalks.weight` que todavía no existe.
 - **La identidad de los cruces para reimportar.** `sidewalks` guarda su `osm_way_id`,
   pero `crossings` no tiene ningún identificador externo: si el importador se vuelve a
   correr, no puede reconocer un cruce que ya existe salvo comparando geometría. Se
