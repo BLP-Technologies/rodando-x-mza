@@ -15,7 +15,8 @@ Este documento responde:
   baja lógica (§2).
 - **Cómo** se representa un conjunto cerrado de valores, y con qué criterio se elige
   entre las tres formas posibles (§3).
-- **Qué** forma tiene cada campo cerrado del modelo, y por qué (§4).
+- **Qué** forma tiene cada campo cerrado del modelo, y qué relación hay entre
+  reportes y obstáculos (§4).
 - **Cómo** se administra un enum: orden, agregar, renombrar y quitar valores (§5).
 - **Qué** forma tiene un catálogo y cómo se da de baja una fila (§6).
 - **Cómo** se escribe una migración: formato, nombres, marcas de tiempo y
@@ -69,7 +70,7 @@ Un solo tipo por vocabulario, compartido por todas las tablas que lo usan:
 | Tipo | Valores, en orden de declaración | Se usa en |
 | --- | --- | --- |
 | `accessibility_level` | `FULL`, `PARTIAL`, `NONE` | `kerb_nodes`, `sidewalks`, `crossings` |
-| `obstacle_severity` | `MINOR`, `MODERATE`, `CRITICAL` | `obstacles` |
+| `obstacle_severity` | `MINOR`, `MODERATE`, `CRITICAL` | `obstacles` y `reports` |
 | `report_status` | `PENDING`, `APPROVED`, `UNDER_REPAIR`, `RESOLVED`, `REJECTED` | `reports` |
 
 Los tres son **nullable**, y el `NULL` significa "no determinado": nadie relevó ese
@@ -318,8 +319,8 @@ valor se agrega en una migración y se usa a partir de la siguiente.
 **Renombrar** un valor: `ALTER TYPE ... RENAME VALUE 'VIEJO' TO 'NUEVO'`.
 **Quitar** un valor no se puede hacer en el lugar: hay que crear un tipo nuevo,
 migrar la columna y borrar el viejo. Por eso conviene que los valores estén bien
-pensados antes de la primera migración, y por eso este documento existe antes que
-las migraciones.
+pensados antes de la primera migración que los usa, y por eso la decisión se escribe
+antes de la migración.
 
 ## 6. Forma de un catálogo
 

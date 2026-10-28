@@ -172,3 +172,7 @@ alcance de la fase en §3—, así que no hace falta recuperar ninguna conversac
 - [03-despliegue-y-operacion.md](03-despliegue-y-operacion.md): despliegue y
   operación.
 - [05-desarrollo.md](05-desarrollo.md): puesta en marcha.
+- [08-integracion-continua.md](08-integracion-continua.md): la verificación automática
+  que hace cumplir el primer punto de §4.
+- [09-modelo-de-datos.md](09-modelo-de-datos.md): convenciones del esquema y
+  representación de los valores cerrados.

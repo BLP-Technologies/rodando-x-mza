@@ -208,8 +208,12 @@ Base de datos, desde `infra/`:
 ## 10. Documentos relacionados
 
 - [00-reglas-documentacion.md](00-reglas-documentacion.md): reglas de la
-documentación.
+  documentación.
 - [02-stack-y-estructura.md](02-stack-y-estructura.md): stack, estructura y
-convenciones.
+  convenciones.
 - [04-errores-y-mensajes.md](04-errores-y-mensajes.md): contrato de errores.
 - [06-windows-wsl.md](06-windows-wsl.md): trabajar desde Windows con WSL2.
+- [08-integracion-continua.md](08-integracion-continua.md): la verificación que corre
+  en cada pull request, con los mismos comandos de §8.
+- [09-modelo-de-datos.md](09-modelo-de-datos.md): convenciones del esquema y de las
+  migraciones que aplica §4.
