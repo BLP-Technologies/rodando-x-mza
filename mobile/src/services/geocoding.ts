@@ -73,8 +73,12 @@ export const reverseGeocode = async (
     const props = data.features[0].properties;
 
     // Construcción consistente con searchAddressSuggestions
+    // 1. Extrae calle
     const street = props.street || props.name || '';
-    const streetNumber = props.housenumber ? ` ${props.housenumber}` : '';
+    //2. Extraer número buscando en diferentes propiedades posibles de OSM/Photon
+    const rawNumber = props.housenumber || props.street_number || props.house_number || '';
+    const streetNumber = rawNumber ? ` ${rawNumber}` : '';
+    //3. Localidad/departamento
     const city = props.city || props.district || props.locality || 'Mendoza';
     const state = props.state || '';
 

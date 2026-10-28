@@ -5,7 +5,7 @@ import { useNavigation } from '@react-navigation/native';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as Location from 'expo-location';
-
+import { MapLocationPickerModal } from '@/components/report/MapLocationPickerModal';
 import { ReportStackParamList, BottomTabParamList } from '@/navigation/types';
 import { useStyles, Theme } from '@/theme';
 import { AppHeader } from '@/components/common/AppHeader';
@@ -51,6 +51,9 @@ export const ReportsScreen = () => {
 
   const [validationModalVisible, setValidationModalVisible] = useState(false);
   const [cancelModalVisible, setCancelModalVisible] = useState(false);
+
+  //Estado para abrir o cerrar mapa
+  const [isMapModalVisible, setIsMapModalVisible] = useState(false);
 
   const handleLogout = () => console.log('Cerrar sesión');
 
@@ -100,10 +103,21 @@ export const ReportsScreen = () => {
     if (mode === 'current') {
       fetchCurrentLocation();
     } else if (mode === 'map') {
-      // Todo: Abrir selector interactivo de mapa
-      console.log('Modo marcar en mapa seleccionado');
+      //Abrir selector interactivo de mapa
+      setIsMapModalVisible(true);
     }
   };
+
+  //Función para recibir punto confirmado del modal Mapa
+  const handleMapLocationConfirmed = (data: {
+    latitude: number;
+    longitude: number;
+    address: string;
+  }) => {
+    setCoordinates({ latitude: data.latitude, longitude: data.longitude });
+    setAddress(data.address);
+  };
+
 
   const handleResetForm = () => {
     setPhotoUri(null);
@@ -245,6 +259,15 @@ export const ReportsScreen = () => {
         cancelText="VOLVER"
         onConfirm={handleConfirmCancel}
         onClose={() => setCancelModalVisible(false)}
+      />
+
+      {/* Modal interactivo para marcar en el mapa */}
+      <MapLocationPickerModal
+        visible={isMapModalVisible}
+        initialLatitude={coordinates?.latitude || -32.8895}
+        initialLongitude={coordinates?.longitude || -68.8458}
+        onConfirm={handleMapLocationConfirmed}
+        onClose={() => setIsMapModalVisible(false)}
       />
     </SafeAreaView>
   );
