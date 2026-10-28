@@ -56,3 +56,34 @@ export const searchAddressSuggestions = async (
     return [];
   }
 };
+
+
+export const reverseGeocode = async (
+  latitude: number,
+  longitude: number
+): Promise<string> => {
+  try {
+    const url = `https://photon.komoot.io/reverse?lat=${latitude}&lon=${longitude}`;
+    const response = await fetch(url);
+    if (!response.ok) return '';
+
+    const data = await response.json();
+    if (!data.features || data.features.length === 0) return '';
+
+    const props = data.features[0].properties;
+
+    // Construcción consistente con searchAddressSuggestions
+    const street = props.street || props.name || '';
+    const streetNumber = props.housenumber ? ` ${props.housenumber}` : '';
+    const city = props.city || props.district || props.locality || 'Mendoza';
+    const state = props.state || '';
+
+    const title = `${street}${streetNumber}`.trim();
+    const subtitle = [city, state].filter(Boolean).join(', ');
+
+    return subtitle ? `${title}, ${subtitle}` : title;
+  } catch (error) {
+    console.error('Error en geocodificación inversa con Photon:', error);
+    return '';
+  }
+};

@@ -1,4 +1,3 @@
-// src/components/report/LocationModeSelector.tsx
 import React from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
 import { useStyles, Theme } from '@/theme';
@@ -8,11 +7,13 @@ export type LocationMode = 'current' | 'map';
 interface LocationModeSelectorProps {
   value: LocationMode;
   onChange: (mode: LocationMode) => void;
+  isLoading?: boolean;
 }
 
 export const LocationModeSelector = ({
   value,
   onChange,
+  isLoading = false,
 }: LocationModeSelectorProps) => {
   const { styles } = useStyles(getStyles);
 
@@ -21,18 +22,20 @@ export const LocationModeSelector = ({
       <TouchableOpacity
         style={[styles.button, value === 'current' && styles.buttonActive]}
         onPress={() => onChange('current')}
+        disabled={isLoading}
         accessibilityRole="tab"
         accessibilityState={{ selected: value === 'current' }}
         accessibilityLabel="Seleccionar ubicación actual"
       >
         <Text style={[styles.text, value === 'current' && styles.textActive]}>
-          Ubicación actual
+          {isLoading && value === 'current' ? 'Buscando GPS...' : 'Ubicación actual'}
         </Text>
       </TouchableOpacity>
 
       <TouchableOpacity
         style={[styles.button, value === 'map' && styles.buttonActive]}
         onPress={() => onChange('map')}
+        disabled={isLoading}
         accessibilityRole="tab"
         accessibilityState={{ selected: value === 'map' }}
         accessibilityLabel="Seleccionar ubicación en el mapa"

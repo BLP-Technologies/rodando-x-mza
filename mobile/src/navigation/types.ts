@@ -104,6 +104,9 @@ export interface ReportDataParams {
   barrierLabel: string;
   photoUri: string | null;
   description: string;
+  address?: string;    
+  latitude?: number;   
+  longitude?: number;
 }
 
 //______________________________________________________________________
