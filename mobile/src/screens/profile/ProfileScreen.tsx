@@ -17,6 +17,7 @@ import {
 import { AppHeader } from '@/components/common/AppHeader';
 import { PrimaryButton } from '@/components/common/PrimaryButton';
 import { ScreenHeader } from '@/components/common/ScreenHeader';
+import { useVoiceReader } from '@/hooks/useVoiceReader';
 
 interface UserProfile {
   name: string;
@@ -34,6 +35,24 @@ export const ProfileScreen = () => {
     setReadingGuide,
     setScreenReaderEnabled,
   } = useAccessibility();
+
+  //Instancia lector de voz
+  const { speak } = useVoiceReader();
+
+  const handleToggleVoiceReading = (enabled: boolean) => {
+    setScreenReaderEnabled(enabled);
+    if (enabled) {
+      // Habla inmediatamente al activarse
+      setTimeout(() => {
+        speak('Lectura en voz alta activada.');
+      }, 100);
+    }
+  };
+
+  const handleToggleHighContrast = (enabled: boolean) => {
+    setHighContrast(enabled);
+    speak(enabled ? 'Modo alto contraste activado.' : 'Modo alto contraste desactivado.');
+  };
 
   const [isHelpOpen, setIsHelpOpen] = useState(false);
 
@@ -56,7 +75,9 @@ export const ProfileScreen = () => {
     const scales: FontScaleOption[] = ['normal', 'large', 'extraLarge'];
     const currentIndex = scales.indexOf(preferences.fontScale);
     const nextIndex = (currentIndex + 1) % scales.length;
-    setFontScale(scales[nextIndex]);
+    const newScale = scales[nextIndex];
+    setFontScale(newScale);
+    speak(`Tamaño de texto: ${fontScaleLabels[newScale]}.`);
   };
 
   return (
@@ -184,7 +205,7 @@ export const ProfileScreen = () => {
             </View>
             <Switch
               value={preferences.screenReaderEnabled}
-              onValueChange={setScreenReaderEnabled}
+              onValueChange={handleToggleVoiceReading}
               trackColor={{ false: '#D1D5DB', true: theme.colors.brand.teal }}
               thumbColor="#FFFFFF"
             />
