@@ -11,10 +11,11 @@ import { AppHeader } from '@/components/common/AppHeader';
 import { ScreenHeader } from '@/components/common/ScreenHeader';
 import { PrimaryButton } from '@/components/common/PrimaryButton';
 import { StatusModal, StatusType } from '@/components/common/StatusModal';
+import { reportsService } from '@/services/reportsService';
+import { ObstacleType } from '@/types/reports';
 
 type ConfirmScreenRouteProp = RouteProp<ReportStackParamList, 'ConfirmReport'>;
 
-// Permite navegar tanto en el stack de reportes como saltar al tab Inicio
 type ConfirmScreenNavProp = CompositeNavigationProp<
   NativeStackNavigationProp<ReportStackParamList, 'ConfirmReport'>,
   BottomTabNavigationProp<BottomTabParamList>
@@ -25,7 +26,17 @@ export const ConfirmReportScreen = () => {
   const navigation = useNavigation<ConfirmScreenNavProp>();
   const route = useRoute<ConfirmScreenRouteProp>();
 
-  const { locationMode, barrierLabel, photoUri, description } = route.params;
+  // Extraemos todos los parámetros que viajaron desde ReportsScreen
+  const {
+    locationMode,
+    barrierId,
+    barrierLabel,
+    photoUri,
+    description,
+    address,
+    latitude,
+    longitude,
+  } = route.params;
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
@@ -36,7 +47,7 @@ export const ConfirmReportScreen = () => {
   }>({
     type: 'success',
     title: '¡Gracias por colaborar!',
-    message: 'Tu reporte fue registrado',
+    message: 'Tu reporte fue registrado exitosamente.',
   });
 
   const handleLogout = () => console.log('Cerrar sesión');
@@ -49,56 +60,59 @@ export const ConfirmReportScreen = () => {
     setIsSubmitting(true);
 
     try {
-      // Simulación de envío: podés cambiar esta condición para probar éxito o error
-      const mockSuccess = true;
+      // Coordenadas con fallback a Mendoza Centro si viniera vacío
+      const finalLat = latitude ?? -32.8895;
+      const finalLon = longitude ?? -68.8458;
 
-      setTimeout(() => {
-        setIsSubmitting(false);
+      // Persistencia real en AsyncStorage con el formato de la tabla OBSTACLES
+      await reportsService.create({
+        type: (barrierId as ObstacleType) || 'OTRO',
+        latitude: finalLat,
+        longitude: finalLon,
+        address: address || 'Ubicación seleccionada en Mendoza',
+        description: description?.trim() || undefined,
+        photoUri: photoUri || null,
+      });
 
-        if (mockSuccess) {
-          setModalConfig({
-            type: 'success',
-            title: '¡Gracias por colaborar!',
-            message: 'Tu reporte fue registrado',
-          });
-        } else {
-          setModalConfig({
-            type: 'error',
-            title: 'No se pudo enviar',
-            message: 'Ocurrió un problema de conexión. Revisá tus datos e intentalo de nuevo.',
-          });
-        }
-        setModalVisible(true);
-      }, 700);
-    } catch {
-      setIsSubmitting(false);
+      //Temporal, para verificar persistencia  
+      const allStored = await reportsService.getAll();
+      console.log('📦 Reportes persistidos en AsyncStorage:', JSON.stringify(allStored, null, 2));
+
       setModalConfig({
-        type: 'error',
-        title: 'Error inesperado',
-        message: 'No pudimos registrar tu reporte. Por favor volvé a intentar.',
+        type: 'success',
+        title: '¡Gracias por colaborar!',
+        message: 'Tu reporte fue registrado exitosamente.',
       });
       setModalVisible(true);
+    } catch (error) {
+      console.error('Error al guardar reporte de obstáculo:', error);
+      setModalConfig({
+        type: 'error',
+        title: 'No se pudo enviar',
+        message: 'Ocurrió un problema al guardar tu reporte. Por favor, volvé a intentar.',
+      });
+      setModalVisible(true);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const handleCloseModal = () => {
     setModalVisible(false);
     if (modalConfig.type === 'success') {
-      // Si fue exitoso,  resetea stack y vuelve a la pantalla inicial de la app
       navigation.dispatch(
-      CommonActions.reset({
-        index: 0,
-        routes: [{ name: 'ReportForm' }],
-      })
-    );
+        CommonActions.reset({
+          index: 0,
+          routes: [{ name: 'ReportForm' }],
+        })
+      );
       navigation.navigate('Inicio');
     }
-    // Si fue error, no navega: se queda en Confirmar Reporte para editar o reintentar
   };
 
-  const locationText =
+  const modeBadgeText =
     locationMode === 'current'
-      ? 'Ubicación Actual'
+      ? 'Ubicación actual (GPS)'
       : 'Punto marcado en el mapa';
 
   return (
@@ -117,16 +131,24 @@ export const ConfirmReportScreen = () => {
 
         {/* Tarjeta de Resumen */}
         <View style={styles.card}>
+          {/* Ubicación y dirección */}
           <View style={styles.itemGroup}>
             <Text style={styles.label}>Ubicación</Text>
-            <Text style={styles.value}>{locationText}</Text>
+            <Text style={styles.value}>
+              {address && address.trim().length > 0
+                ? address
+                : 'Ubicación seleccionada'}
+            </Text>
+            <Text style={styles.subtextMode}>{modeBadgeText}</Text>
           </View>
 
+          {/* Tipo de barrera */}
           <View style={styles.itemGroup}>
             <Text style={styles.label}>Tipo</Text>
             <Text style={styles.value}>{barrierLabel}</Text>
           </View>
 
+          {/* Foto adjunta */}
           <View style={styles.itemGroup}>
             <Text style={styles.label}>Foto / Imagen</Text>
             {photoUri ? (
@@ -138,14 +160,15 @@ export const ConfirmReportScreen = () => {
                 />
               </View>
             ) : (
-              <Text style={styles.value}>Sin foto / imagen</Text>
+              <Text style={styles.valueMuted}>Sin foto adjunta</Text>
             )}
           </View>
 
+          {/* Descripción */}
           <View style={[styles.itemGroup, styles.noBorder]}>
             <Text style={styles.label}>Descripción</Text>
-            <Text style={description ? styles.value : styles.valueMuted}>
-              {description.trim() ? description.trim() : 'Sin descripción'}
+            <Text style={description?.trim() ? styles.value : styles.valueMuted}>
+              {description?.trim() ? description.trim() : 'Sin descripción'}
             </Text>
           </View>
         </View>
@@ -170,7 +193,7 @@ export const ConfirmReportScreen = () => {
         </View>
       </ScrollView>
 
-      {/* Modal de Estado (Éxito / Error) */}
+      {/* Modal de Estado */}
       <StatusModal
         visible={modalVisible}
         type={modalConfig.type}
@@ -219,8 +242,14 @@ const getStyles = (theme: Theme) => ({
   },
   valueMuted: {
     fontSize: theme.metrics.font.body.size,
-    fontWeight: '700' as const,
-    color: theme.colors.brand.navy,
+    fontWeight: '600' as const,
+    color: theme.colors.text.muted,
+  },
+  subtextMode: {
+    fontSize: 12,
+    color: theme.colors.brand.teal,
+    fontWeight: '600' as const,
+    marginTop: 4,
   },
   imagePreviewContainer: {
     marginTop: theme.spacing.xs,
