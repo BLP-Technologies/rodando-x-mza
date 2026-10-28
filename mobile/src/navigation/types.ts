@@ -62,6 +62,7 @@ export type RouteStackParamList = {
   RouteDetail: RouteDetailParams;
   CreatePlace: undefined;
   EditPlace: {placeId: string};
+  Perfil: undefined;
 };
 
 // 2. Reportar
@@ -90,6 +91,7 @@ export type BottomTabParamList = {
 // Stack raíz para pantallas modales o completas (sin Bottom Tab)
 export type RootStackParamList = {
   MainTabs: NavigatorScreenParams<BottomTabParamList> | undefined;
+  Perfil: undefined;
   ReportDetail: { reportId: string };
   NewReport: { latitude: number; longitude: number };
 };

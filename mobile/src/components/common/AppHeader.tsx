@@ -1,45 +1,74 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
+import { View, Text, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useStyles, useTheme, Theme } from '@/theme';
+import { useNavigation } from '@react-navigation/native';
+import { useStyles, Theme } from '@/theme';
 
 interface AppHeaderProps {
   userInitial?: string;
-  onLogout: () => void;
+  onLogout?: () => void;
+  onPressProfile?: () => void;
 }
 
-export const AppHeader = ({ userInitial = 'C', onLogout }: AppHeaderProps) => {
-  
+export const AppHeader = ({
+  userInitial = 'C',
+  onLogout,
+  onPressProfile,
+}: AppHeaderProps) => {
   const { styles, theme } = useStyles(getStyles);
+  const navigation = useNavigation<any>();
 
+  const handleProfilePress = () => {
+    if (onPressProfile) {
+      onPressProfile();
+    } else {
+      // Navegación predeterminada a la pestaña o pantalla Perfil
+      navigation.navigate('Perfil');
+    }
+  };
 
-  
-  const colorNavy = theme.colors.brand?.navy || '#002B49';
-  const colorTeal = theme.colors.brand?.teal || '#17A2B8';
+  const handleLogoutPress = (e: any) => {
+    e.stopPropagation?.(); // Evita disparar el click del contenedor si estuviera anidado
+    if (onLogout) {
+      onLogout();
+    } else {
+      console.log('Cerrar sesión');
+    }
+  };
 
   return (
     <View style={styles.headerContainer}>
-      {/* Reemplazar con asset real de logo: require('@/assets/images/logo.png') */}
+      {/* Logotipo */}
       <View style={styles.logoPlaceholder}>
         <Text style={styles.logoText}>
-          RODANDO<Text style={{ color: theme.colors.brand.teal }}>XMZA</Text>
+          RODANDO<Text style={{ color: theme.colors.state.warning }}>X</Text>
+          <Text style={{ color: theme.colors.brand.teal }}>MZA</Text>
         </Text>
       </View>
 
-      <TouchableOpacity
-        style={styles.profileBadge}
-        onPress={onLogout}
-        accessibilityRole="button"
-        accessibilityLabel="Cerrar sesión"
-      >
-        <View style={styles.avatarCircle}>
+      {/* Contenedor del Perfil + Botón Salir */}
+      <View style={styles.profileBadge}>
+        {/* Tocar el avatar navega a la pantalla de Perfil */}
+        <TouchableOpacity
+          onPress={handleProfilePress}
+          style={styles.avatarCircle}
+          accessibilityRole="button"
+          accessibilityLabel="Ir al perfil y preferencias de accesibilidad"
+        >
           <Text style={styles.avatarText}>{userInitial}</Text>
-        </View>
-        <View style={styles.logoutButton}>
+        </TouchableOpacity>
+
+        {/* Tocar Salir dispara el logout */}
+        <TouchableOpacity
+          onPress={handleLogoutPress}
+          style={styles.logoutButton}
+          accessibilityRole="button"
+          accessibilityLabel="Cerrar sesión"
+        >
           <Ionicons name="exit-outline" size={18} color={theme.colors.brand.navy} />
           <Text style={styles.logoutText}>Salir</Text>
-        </View>
-      </TouchableOpacity>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 };
@@ -49,11 +78,11 @@ const getStyles = (theme: Theme) => ({
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     justifyContent: 'space-between' as const,
-    paddingHorizontal: theme.spacing.xl||20,
-    paddingTop: theme.spacing.sm||8,
-    paddingBottom: theme.spacing.md||12,
+    paddingHorizontal: theme.spacing.xl,
+    paddingTop: theme.spacing.sm,
+    paddingBottom: theme.spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: theme.colors.surface.subtle, 
+    borderBottomColor: theme.colors.surface.subtle,
   },
   logoPlaceholder: {
     justifyContent: 'center' as const,
@@ -71,8 +100,8 @@ const getStyles = (theme: Theme) => ({
     borderRadius: theme.metrics.radius.card,
     borderWidth: 1,
     borderColor: theme.colors.border.focus,
-    paddingVertical: theme.spacing.xs,
-    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 4,
+    paddingHorizontal: theme.spacing.xs + 2,
     gap: theme.spacing.sm,
     minHeight: theme.metrics.btnHeight.sm,
   },
@@ -93,8 +122,9 @@ const getStyles = (theme: Theme) => ({
   logoutButton: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: theme.spacing.xs,
+    gap: 4,
     paddingRight: theme.spacing.xs,
+    paddingVertical: 4,
   },
   logoutText: {
     fontSize: theme.metrics.font.caption.size,

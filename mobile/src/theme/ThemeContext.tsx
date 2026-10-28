@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useState, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import { useColorScheme } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   lightColors,
   darkColors,
@@ -14,7 +15,7 @@ import {
 
 export type ThemeMode = 'system' | 'light' | 'dark';
 
-interface AccessibilityPreferences {
+export interface AccessibilityPreferences {
   themeMode: ThemeMode;
   highContrast: boolean;
   fontScale: FontScaleOption;
@@ -31,9 +32,19 @@ interface ThemeContextType {
   setFontScale: (scale: FontScaleOption) => void;
   setReduceMotion: (enabled: boolean) => void;
   setReadingGuide: (enabled: boolean) => void;
+  setScreenReaderEnabled: (enabled: boolean) => void;
 }
 
+const STORAGE_KEY = '@rodando_mza:accessibility_preferences';
 
+const defaultPreferences: AccessibilityPreferences = {
+  themeMode: 'system',
+  highContrast: false,
+  fontScale: 'normal',
+  reduceMotion: false,
+  screenReaderEnabled: false,
+  readingGuide: false,
+};
 
 const defaultTheme: Theme = {
   isDark: false,
@@ -49,75 +60,84 @@ const defaultTheme: Theme = {
 
 const ThemeContext = createContext<ThemeContextType>({
   theme: defaultTheme,
-  preferences: {
-    themeMode: 'system',
-    highContrast: false,
-    fontScale: 'normal',
-    reduceMotion: false,
-    screenReaderEnabled: false,
-    readingGuide: false,
-  },
+  preferences: defaultPreferences,
   setThemeMode: () => {},
   setHighContrast: () => {},
   setFontScale: () => {},
   setReduceMotion: () => {},
   setReadingGuide: () => {},
+  setScreenReaderEnabled: () => {},
 });
-
-
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const systemScheme = useColorScheme();
 
-  // Estados de configuración de accesibilidad
-  const [themeMode, setThemeMode] = useState<ThemeMode>('system');
-  const [highContrast, setHighContrast] = useState<boolean>(false);
-  const [fontScale, setFontScale] = useState<FontScaleOption>('normal');
-  const [reduceMotion, setReduceMotion] = useState<boolean>(false);
-  const [screenReaderEnabled] = useState<boolean>(false);
-  const [readingGuide, setReadingGuide] = useState<boolean>(false);
+  const [preferences, setPreferences] = useState<AccessibilityPreferences>(defaultPreferences);
+
+  // 1. Cargar preferencias guardadas al iniciar
+  useEffect(() => {
+    (async () => {
+      try {
+        const stored = await AsyncStorage.getItem(STORAGE_KEY);
+        if (stored) {
+          setPreferences((prev) => ({
+            ...prev,
+            ...JSON.parse(stored),
+          }));
+        }
+      } catch (error) {
+        console.error('Error al cargar preferencias de accesibilidad:', error);
+      }
+    })();
+  }, []);
+
+  // Función genérica para actualizar el estado y persistir
+  const updatePreference = <K extends keyof AccessibilityPreferences>(
+    key: K,
+    value: AccessibilityPreferences[K]
+  ) => {
+    setPreferences((prev) => {
+      const updated = { ...prev, [key]: value };
+      AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updated)).catch((err) =>
+        console.error('Error guardando preferencia de accesibilidad:', err)
+      );
+      return updated;
+    });
+  };
 
   const isDark = useMemo(() => {
-    if (themeMode === 'system') return systemScheme === 'dark';
-    return themeMode === 'dark';
-  }, [themeMode, systemScheme]);
+    if (preferences.themeMode === 'system') return systemScheme === 'dark';
+    return preferences.themeMode === 'dark';
+  }, [preferences.themeMode, systemScheme]);
 
   const activeColors = useMemo(() => {
-    if (highContrast) return highContrastColors;
+    if (preferences.highContrast) return highContrastColors;
     return isDark ? darkColors : lightColors;
-  }, [highContrast, isDark]);
+  }, [preferences.highContrast, isDark]);
 
   const theme = useMemo<Theme>(() => ({
     isDark,
-    isHighContrast: highContrast,
-    fontScale,
+    isHighContrast: preferences.highContrast,
+    fontScale: preferences.fontScale,
     colors: activeColors,
     spacing,
     metrics: {
       ...baseMetrics,
-      font: getScaledFonts(FONT_SCALES[fontScale]),
+      font: getScaledFonts(FONT_SCALES[preferences.fontScale] || 1),
     },
-  }), [isDark, highContrast, fontScale, activeColors]);
-
-  const preferences: AccessibilityPreferences = {
-    themeMode,
-    highContrast,
-    fontScale,
-    reduceMotion,
-    screenReaderEnabled,
-    readingGuide,
-  };
+  }), [isDark, preferences.highContrast, preferences.fontScale, activeColors]);
 
   return (
     <ThemeContext.Provider
       value={{
         theme,
         preferences,
-        setThemeMode,
-        setHighContrast,
-        setFontScale,
-        setReduceMotion,
-        setReadingGuide,
+        setThemeMode: (mode) => updatePreference('themeMode', mode),
+        setHighContrast: (val) => updatePreference('highContrast', val),
+        setFontScale: (scale) => updatePreference('fontScale', scale),
+        setReduceMotion: (val) => updatePreference('reduceMotion', val),
+        setReadingGuide: (val) => updatePreference('readingGuide', val),
+        setScreenReaderEnabled: (val) => updatePreference('screenReaderEnabled', val),
       }}
     >
       {children}

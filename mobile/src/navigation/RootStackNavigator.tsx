@@ -8,7 +8,7 @@ import { NewRouteScreen } from '@/screens/path/NewRouteScreens';
 import { RouteResultScreen } from '@/screens/path/RouteResultScreen';
 import { RouteDetailScreen } from '@/screens/path/RouteDetailScreen';
 import { PlaceFormScreen } from '@/screens/path/PlaceFormScreen';
-
+import { ProfileScreen } from '@/screens/profile/ProfileScreen';
 
 const Stack = createNativeStackNavigator<RouteStackParamList>();
 
@@ -29,6 +29,8 @@ export const RouteStackNavigator = () => {
       <Stack.Screen name="RouteDetail" component={RouteDetailScreen} />
       <Stack.Screen name="CreatePlace" component={PlaceFormScreen} options={{ headerShown: false }}/>
       <Stack.Screen name="EditPlace" component={PlaceFormScreen} options={{ headerShown: false }}/>
+      <Stack.Screen name="Perfil" component={ProfileScreen} options={{ headerShown: false }} 
+/>
     </Stack.Navigator>
   );
 };
