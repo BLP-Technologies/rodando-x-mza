@@ -14,7 +14,7 @@ export function Bienvenida({
 }: PantallaBienvenida) {
   return (
     <SafeAreaView style={styles.container}>
-      {/*CONTENIDO CENTAL*/}
+      {/*CONTENIDO CENTRAL*/}
       <View style={styles.content}>
         {/*LOGO*/}
         <View style={styles.logoPlaceHolder}>
@@ -24,8 +24,8 @@ export function Bienvenida({
           </Text>
         </View>
 
-        <Text style={styles.title}>
-          Movete por Mendoza de manera mas accesible
+        <Text style={styles.title} accessibilityRole="header">
+          Movete por Mendoza de manera más accesible
         </Text>
 
         <Text style={styles.description}>
@@ -89,12 +89,6 @@ const styles = StyleSheet.create({
     color: "#0F2942",
     letterSpacing: 1,
   },
-  logoSubtitle: {
-    fontSize: 28,
-    fontWeight: "800",
-    color: "#169C98",
-    letterSpacing: 4,
-  },
   logoTagline: {
     fontSize: 10,
     fontWeight: "700",
@@ -149,7 +143,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   btnTert: {
-    minHeight: 44,
+    minHeight: 48,
     justifyContent: "center",
     alignItems: "center",
     marginTop: 4,
