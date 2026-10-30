@@ -191,9 +191,9 @@ cuál falló.
 | Edición por la web de un archivo | Sí, igual que cualquier push | GitHub lo trata como un commit más |
 | Cambio en `docs/` | Sí | El workflow no filtra por rutas: se acepta el costo (unos 20 s) a cambio de no tener que mantener una lista de rutas |
 
-Una corrida dura del orden de **un minuto**: la base de servicio y el paso de
-migraciones suman lo suyo sobre la preparación del entorno. La medición de referencia
-está en §4.
+Una corrida dura del orden de **30 a 40 segundos**. La base de servicio y el paso de
+migraciones suman unos 13 s sobre la preparación del entorno: la medición de
+referencia es 34 s en el job completo (run `41136603246`).
 
 ## 6. Las reglas que protegen `main`
 
