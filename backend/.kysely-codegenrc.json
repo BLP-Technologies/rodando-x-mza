@@ -1,0 +1,9 @@
+{
+  "dialect": "postgres",
+  "envFile": ".env",
+  "outFile": "src/db/types.ts",
+  "excludePattern": "public.+(pgmigrations|spatial_ref_sys|geometry_columns|geography_columns)",
+  "camelCase": false,
+  "singularize": false,
+  "runtimeEnums": false
+}

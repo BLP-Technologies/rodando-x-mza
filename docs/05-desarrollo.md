@@ -179,6 +179,31 @@ Desde `backend/`:
 | `pnpm build` | compila a `dist/` |
 | `pnpm migrate` | aplica las migraciones pendientes |
 | `pnpm migrate:down` | revierte la última migración |
+| `pnpm db:types` | regenera `src/db/types.ts` desde la base (requiere la base levantada) |
+| `pnpm db:types:verify` | falla si los tipos generados no coinciden con el esquema |
+
+### Regenerar los tipos de la base
+
+`src/db/types.ts` no se escribe a mano: lo genera `kysely-codegen` introspeccionando la
+base real, y se versiona para que `pnpm typecheck` funcione con la base apagada. Por
+eso, después de escribir o aplicar una migración:
+
+```sh
+cd infra && docker compose up -d     # la generación necesita la base
+cd ../backend
+pnpm migrate                          # aplica la migración
+pnpm db:types                         # regenera src/db/types.ts
+```
+
+Y el archivo regenerado se commitea junto con la migración. Si se olvida, el CI lo
+detecta: el workflow corre `pnpm db:types:verify` contra una base recién migrada y
+falla si el archivo quedó viejo.
+
+Los nombres de tabla y columna se respetan tal cual (`kerb_nodes`, `accessibility_level`),
+sin camelCase ni singularización. La geometría de PostGIS queda tipada como `string`
+porque es lo que devuelve el driver: el WKB en hexadecimal. Para leer un punto como
+GeoJSON hay que pedirlo en la consulta (`ST_AsGeoJSON(geom)`), no confiar en la
+columna cruda.
 
 Base de datos, desde `infra/`:
 
