@@ -16,6 +16,25 @@ jobs:
   verificar:
     name: Lint, tipos y tests
     runs-on: ubuntu-latest
+    # Base efímera para comprobar que los tipos generados siguen al esquema.
+    # La imagen es la misma del compose de desarrollo; las extensiones las crea
+    # un paso más abajo, como hace infra/initdb/ al inicializar el volumen.
+    services:
+      db:
+        image: docker.io/pgrouting/pgrouting:16-3.5-4.0
+        env:
+          POSTGRES_USER: rodando
+          POSTGRES_PASSWORD: rodando
+          POSTGRES_DB: rodando
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U rodando -d rodando"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgres://rodando:rodando@localhost:5432/rodando
     defaults:
       run:
         working-directory: backend
@@ -34,6 +53,20 @@ jobs:
           cache-dependency-path: backend/pnpm-lock.yaml
 
       - run: pnpm install --frozen-lockfile
+
+      # kysely-codegen lee DATABASE_URL de .env; node-pg-migrate también.
+      - name: Preparar la base
+        run: |
+          printf 'DATABASE_URL=%s\n' "$DATABASE_URL" > .env
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c 'CREATE EXTENSION IF NOT EXISTS postgis'
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c 'CREATE EXTENSION IF NOT EXISTS pgrouting'
+
+      # Falla si alguien cambió el esquema y no regeneró src/db/types.ts.
+      - name: Esquema y tipos al día
+        run: |
+          pnpm migrate
+          pnpm db:types:verify
+
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test

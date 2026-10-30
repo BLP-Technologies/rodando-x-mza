@@ -98,6 +98,25 @@ jobs:
   verificar:
     name: Lint, tipos y tests
     runs-on: ubuntu-latest
+    # Base efímera para comprobar que los tipos generados siguen al esquema.
+    # La imagen es la misma del compose de desarrollo; las extensiones las crea
+    # un paso más abajo, como hace infra/initdb/ al inicializar el volumen.
+    services:
+      db:
+        image: docker.io/pgrouting/pgrouting:16-3.5-4.0
+        env:
+          POSTGRES_USER: rodando
+          POSTGRES_PASSWORD: rodando
+          POSTGRES_DB: rodando
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U rodando -d rodando"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgres://rodando:rodando@localhost:5432/rodando
     defaults:
       run:
         working-directory: backend
@@ -116,6 +135,20 @@ jobs:
           cache-dependency-path: backend/pnpm-lock.yaml
 
       - run: pnpm install --frozen-lockfile
+
+      # kysely-codegen lee DATABASE_URL de .env; node-pg-migrate también.
+      - name: Preparar la base
+        run: |
+          printf 'DATABASE_URL=%s\n' "$DATABASE_URL" > .env
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c 'CREATE EXTENSION IF NOT EXISTS postgis'
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c 'CREATE EXTENSION IF NOT EXISTS pgrouting'
+
+      # Falla si alguien cambió el esquema y no regeneró src/db/types.ts.
+      - name: Esquema y tipos al día
+        run: |
+          pnpm migrate
+          pnpm db:types:verify
+
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
@@ -134,6 +167,9 @@ Qué hace cada parte, y por qué está:
 | `pnpm/action-setup@v4` | Instala pnpm, en la versión del `packageManager` | Una sola fuente de verdad para la versión |
 | `actions/setup-node@v4` | Instala Node 22 y cachea el store de pnpm | Mismo runtime que `engines`; el cache ahorra la descarga |
 | `pnpm install --frozen-lockfile` | Instala las dependencias exactas del lockfile | Si el lockfile no coincide con `package.json`, falla. Ver §9 |
+| `services.db` | Levanta un Postgres efímero con la misma imagen del compose | Las migraciones necesitan PostGIS para crear las columnas `geometry` |
+| Preparar la base | Escribe el `.env` y habilita `postgis` y `pgrouting` | Es lo que `infra/initdb/` hace al inicializar el volumen; en un servicio no se puede montar |
+| `pnpm migrate` + `pnpm db:types:verify` | Aplica las migraciones y comprueba que `src/db/types.ts` coincide con el esquema | Falla si alguien cambió el esquema y no regeneró los tipos |
 | `pnpm lint` / `typecheck` / `test` | La verificación en sí | Son los comandos de [02](02-stack-y-estructura.md) §9 |
 
 `working-directory` aplica a los `run`; las acciones (`uses`) corren siempre desde la
@@ -155,8 +191,9 @@ cuál falló.
 | Edición por la web de un archivo | Sí, igual que cualquier push | GitHub lo trata como un commit más |
 | Cambio en `docs/` | Sí | El workflow no filtra por rutas: se acepta el costo (unos 20 s) a cambio de no tener que mantener una lista de rutas |
 
-Una corrida dura del orden de **20 a 30 segundos**, contando la preparación del
-entorno. La medición de referencia: 25 s en la primera corrida real (commit `888b3f5`).
+Una corrida dura del orden de **30 a 40 segundos**. La base de servicio y el paso de
+migraciones suman unos 13 s sobre la preparación del entorno: la medición de
+referencia es 34 s en el job completo (run `41136603246`).
 
 ## 6. Las reglas que protegen `main`
 
@@ -231,27 +268,13 @@ caminos:
 En los dos casos, **cada job nuevo se agrega a la lista de checks requeridos del
 ruleset**, o su resultado no bloquea nada.
 
-Hoy los tests no tocan la base y el workflow no necesita Postgres. Cuando hagan falta
-tests que sí la toquen, hay que sumar un servicio igual al de
-`infra/docker-compose.yml` (la misma imagen y las mismas credenciales, para no tener
-dos bases distintas):
+El workflow **ya tiene** un Postgres de servicio, porque `pnpm db:types:verify` compara
+los tipos generados contra el esquema real: sin base no hay contra qué comparar. La
+imagen es la del compose y las extensiones se habilitan en un paso, igual que en
+desarrollo.
 
-```yaml
-    services:
-      db:
-        image: docker.io/pgrouting/pgrouting:16-3.5-4.0
-        env:
-          POSTGRES_USER: rodando
-          POSTGRES_PASSWORD: rodando
-          POSTGRES_DB: rodando
-        ports: ['5432:5432']
-        options: >-
-          --health-cmd pg_isready --health-interval 5s
-          --health-timeout 5s --health-retries 10
-```
-
-Lo que falte de aprovisionamiento (las extensiones de `infra/initdb/`) se aplica como
-paso previo a los tests, o desde la propia suite.
+Si los tests empiezan a tocar la base, el servicio ya está: solo hay que apuntarles
+`DATABASE_URL`, que el job define para todos los pasos.
 
 ## 9. Detalles que muerden
 
