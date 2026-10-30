@@ -1,95 +1,36 @@
-import { useState } from 'react';
-import { StatusBar } from 'expo-status-bar';
+import React from 'react';
+import { NavigationContainer } from '@react-navigation/native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { Bienvenida } from './src/auth/bienvenida';
-import { Registro, type DatosRegistro } from './src/auth/registro';
-import { Login, type DatosLogin} from './src/auth/login' ;
-import { guardarCuenta, leerCuenta } from './src/auth/almacenamiento';
+import { StatusBar } from 'expo-status-bar';
+import { ThemeProvider, useTheme } from '@/theme';
+import { BottomTabNavigator } from '@/navigation/BottomTabNavigator';
+import { MyPlacesScreen } from '@/screens/path/MyPlacesScreens';
+import { ProfileScreen } from '@/screens/profile/ProfileScreen';
+import { RootStackParamList } from '@/navigation/types';
 
+const Stack = createNativeStackNavigator<RootStackParamList>();
 
-
-
-
-type PantallaActual = "bienvenida" | "registro" | "login" | "invitado";
-
-export default function App() {
-  const [pantallaActual, setPantallaActual] = useState<PantallaActual>(
-    "bienvenida"
-  );
-
-  const handleRegistro = async (datos: DatosRegistro) => {
-   try{
-      await guardarCuenta(datos);
-      setPantallaActual("login")
-    }catch{
-      console.log('error');
-      
-    }
-  };
-
-
-
-const handleLogin = async (datos: DatosLogin): Promise<string | null> => {
-  const MENSAJE_ERROR = "El email o la contraseña son incorrectos";
-  try {
-    const cuenta = await leerCuenta();
-    if (
-      cuenta === null ||
-      cuenta.email !== datos.email ||
-      cuenta.password !== datos.password
-    ) {
-      return MENSAJE_ERROR;
-    }
-    console.log("Inicio correcto");
-    return null;
-  } catch (error) {
-    console.log("Error al iniciar sesión", error);
-    return MENSAJE_ERROR;
-  }
-};
-
-  
-  const renderPantalla = () => {
-    switch (pantallaActual) {
-      case "bienvenida":
-        return (
-          <Bienvenida
-            onInvitado={() => console.log("Invitado")}
-            onRegistro={() => setPantallaActual("registro")}
-            onLogin={() => setPantallaActual("login")}
-          />
-        );
-      case "registro":
-        return (
-          <Registro
-            onVolver={() => setPantallaActual("bienvenida")}
-            onRegistro={handleRegistro}
-            onLogin={() => setPantallaActual("login")}
-          />
-        );
-      case "login":
-        return ( 
-        <Login
-          onVolver={() => setPantallaActual("bienvenida")}
-            onRegistro={() => setPantallaActual("registro")}
-            onLogin={handleLogin}
-            />
-        );
-      case "invitado":
-        // Más adelante acá  pantalla de invitado
-        return null;
-      default: {
-        // Si se agrega una pantalla nueva y no se maneja, TypeScript da error acá
-        const _exhaustivo: never = pantallaActual;
-        return _exhaustivo;
-      }
-    }
-  };
+const AppNavigator = () => {
+  const theme = useTheme();
 
   return (
+    <NavigationContainer>
+      <StatusBar style={theme.isDark ? 'light' : 'dark'} />
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="MainTabs" component={BottomTabNavigator} />
+        <Stack.Screen name="Perfil" component={ProfileScreen} />
+      </Stack.Navigator>
+    </NavigationContainer>
+  );
+};
+
+export default function App() {
+  return (
     <SafeAreaProvider>
-      {renderPantalla()}
-      <StatusBar style="dark" />
+      <ThemeProvider>
+        <AppNavigator />
+      </ThemeProvider>
     </SafeAreaProvider>
   );
 }

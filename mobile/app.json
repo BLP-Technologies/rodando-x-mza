@@ -25,5 +25,6 @@
       "expo-secure-store",
       "expo-status-bar"
     ]
+    }
   }
-}
+
