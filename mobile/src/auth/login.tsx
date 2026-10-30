@@ -18,7 +18,7 @@ export type DatosLogin = {
 
 interface PantallaLogin {
   onVolver: () => void;
-  onLogin: (datos: DatosLogin) => void;
+  onLogin: (datos: DatosLogin) => Promise<string | null>;
   onRegistro: () => void;
 }
 
@@ -40,12 +40,13 @@ export function Login({ onVolver, onLogin, onRegistro }: PantallaLogin) {
   const [error, setError] = useState<string | null>(null);
   const passwordRef = useRef<TextInput>(null);
 
-  const handleLogin = () => {
+  const  handleLogin = async () => {
     const emailLimpio = email.trim().toLowerCase();
     const mensaje = validar(emailLimpio, password);
     setError(mensaje);
     if (mensaje === null) {
-      onLogin({ email: emailLimpio, password });
+      const resultado = await onLogin({ email: emailLimpio, password });
+      setError(resultado)
     }
   };
 
