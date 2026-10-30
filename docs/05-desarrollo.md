@@ -182,6 +182,17 @@ Desde `backend/`:
 | `pnpm db:types` | regenera `src/db/types.ts` desde la base (requiere la base levantada) |
 | `pnpm db:types:verify` | falla si los tipos generados no coinciden con el esquema |
 
+Base de datos, desde `infra/`:
+
+| Comando | Qué hace |
+| --- | --- |
+| `docker compose up -d` | levanta la base |
+| `docker compose ps` | estado del contenedor |
+| `docker compose logs -f db` | logs de la base |
+| `docker compose down` | detiene el contenedor (conserva los datos) |
+| `docker compose down -v` | además borra los datos: base de cero |
+| `docker compose exec db psql -U rodando -d rodando` | abre `psql` en la base (§6) |
+
 ### Regenerar los tipos de la base
 
 `src/db/types.ts` no se escribe a mano: lo genera `kysely-codegen` introspeccionando la
@@ -199,22 +210,34 @@ Y el archivo regenerado se commitea junto con la migración. Si se olvida, el CI
 detecta: el workflow corre `pnpm db:types:verify` contra una base recién migrada y
 falla si el archivo quedó viejo.
 
-Los nombres de tabla y columna se respetan tal cual (`kerb_nodes`, `accessibility_level`),
-sin camelCase ni singularización. La geometría de PostGIS queda tipada como `string`
-porque es lo que devuelve el driver: el WKB en hexadecimal. Para leer un punto como
-GeoJSON hay que pedirlo en la consulta (`ST_AsGeoJSON(geom)`), no confiar en la
-columna cruda.
+Los nombres de tabla y columna se respetan tal cual (`kerb_nodes`,
+`accessibility_level`), sin camelCase ni singularización.
 
-Base de datos, desde `infra/`:
+### La geometría es un valor opaco para el backend
 
-| Comando | Qué hace |
-| --- | --- |
-| `docker compose up -d` | levanta la base |
-| `docker compose ps` | estado del contenedor |
-| `docker compose logs -f db` | logs de la base |
-| `docker compose down` | detiene el contenedor (conserva los datos) |
-| `docker compose down -v` | además borra los datos: base de cero |
-| `docker compose exec db psql -U rodando -d rodando` | abre `psql` en la base (§6) |
+La columna `geom` se tipa como `string`, y no es una limitación que haya que arreglar:
+es la forma en que el sistema está diseñado. El backend **nunca interpreta** una
+geometría; la geometría se lee y se escribe en SQL, y lo que cruza el borde entre
+TypeScript y Postgres es siempre texto o números.
+
+| Operación | Cómo se hace | Qué viaja desde TypeScript |
+| --- | --- | --- |
+| Escribir un punto (un reporte, un lugar favorito) | `ST_SetSRID(ST_MakePoint($lon, $lat), 4326)` | Dos números |
+| Leer para la API | `ST_AsGeoJSON(geom)` | Un `string` de GeoJSON |
+| Buscar o medir (vecino más cercano, distancia) | `ST_DWithin`, `ST_Distance`, `<->` | Números y parámetros |
+| Comparar en un test | `ST_Equals`, `ST_AsText` | Nada especial |
+
+**La regla corta: no se hace `select` de una columna `geom` cruda.** Si un `geom:
+string` aparece en el resultado de una consulta, es un error de la consulta, no del
+tipo: ese string es WKB en hexadecimal, el driver no lo decodifica, y nada útil se
+puede hacer con él en JavaScript.
+
+La razón de fondo es que la matemática geoespacial es lo que Postgres hace mejor, con
+los índices GiST que un cálculo en memoria no tendría.
+
+Esta decisión se revisa si alguna vez hace falta transformar geometría fuera del SQL
+—reimplementar `ST_Simplify` o `ST_Buffer` en TypeScript, por ejemplo— o si el ruteo
+se moviera al dispositivo. Ahí se evalúa un tipo con marca o un parser en el driver.
 
 ## 9. Problemas comunes
 

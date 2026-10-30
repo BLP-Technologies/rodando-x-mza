@@ -369,6 +369,7 @@ marcadores de la herramienta:
 | Marcas de tiempo | `timestamptz`, con `DEFAULT now()`. Nunca `timestamp` sin zona |
 | Identidad | `integer GENERATED ALWAYS AS IDENTITY`, no `serial`, que deja la secuencia sin dueño visible |
 | Geometrías | `geometry(<tipo>, 4326)` en la columna. El SRID no se repite en un `CHECK`: el tipo ya rechaza otro SRID. Ojo con el silencio: si la geometría no declara SRID, PostGIS le asigna 4326, así que un import con coordenadas proyectadas y sin SRID entra sin error |
+| Geometría en el código | El backend no la interpreta: se escribe con `ST_SetSRID(ST_MakePoint(lon, lat), 4326)` y se lee con `ST_AsGeoJSON(geom)`. No se selecciona una columna `geom` cruda, porque lo que llega es WKB en hexadecimal ([05](05-desarrollo.md) §8) |
 | `updated_at` | Lo mantiene el trigger `set_updated_at()`, no el cliente |
 | Nombres de constraints | Explícitos (`fk_<tabla>_<referencia>`, `<tabla>_<columna>_key`), para poder soltarlos en una migración futura |
 | FK de una tabla de unión | `ON DELETE CASCADE` |
