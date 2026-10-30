@@ -8,6 +8,8 @@ import { BottomTabNavigator } from '@/navigation/BottomTabNavigator';
 import { MyPlacesScreen } from '@/screens/path/MyPlacesScreens';
 import { ProfileScreen } from '@/screens/profile/ProfileScreen';
 import { RootStackParamList } from '@/navigation/types';
+import { AuthProvider, useAuth } from './src/auth/AuthContext';
+import { AuthFlow } from './src/auth/AuthFlow';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -25,11 +27,20 @@ const AppNavigator = () => {
   );
 };
 
+// Sin sesión se muestra el flujo de auth; con sesión (usuario o invitado), la navegación principal
+const Root = () => {
+  const { sesion } = useAuth();
+
+  return sesion === null ? <AuthFlow /> : <AppNavigator />;
+};
+
 export default function App() {
   return (
     <SafeAreaProvider>
       <ThemeProvider>
-        <AppNavigator />
+        <AuthProvider>
+          <Root />
+        </AuthProvider>
       </ThemeProvider>
     </SafeAreaProvider>
   );
