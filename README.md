@@ -23,3 +23,4 @@ Vive en [`docs/`](docs/):
 - [07 — Plan de trabajo](docs/07-plan-de-trabajo.md)
 - [08 — Integración continua](docs/08-integracion-continua.md)
 - [09 — Modelo de datos](docs/09-modelo-de-datos.md)
+- [10 — Datos y zona piloto](docs/10-datos-y-zona-piloto.md)
