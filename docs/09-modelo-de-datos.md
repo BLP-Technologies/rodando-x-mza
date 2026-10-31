@@ -167,8 +167,9 @@ izquierda queda a su derecha.
 Lo único que sobrevive del concepto es la convención de OpenStreetMap
 (`sidewalk:left` / `sidewalk:right`), que es relativa a la dirección en que el way
 fue digitalizado. Es determinista, pero es un **artefacto del import**: no sirve para
-la interfaz y cambia si alguien re-digitaliza el way. El importador lo sigue leyendo
-para ubicar las geometrías; después del import no lo usa nadie.
+la interfaz y cambia si alguien re-digitaliza el way. El importador tampoco lo lee:
+deriva siempre las dos veredas, una por lado, sin mirar qué declara la vía
+([11 §3.4](11-grafo-peatonal.md)).
 
 Lo que ve el peatón **se calcula y no se guarda**: la pierna de la ruta ya tiene una
 dirección (de A a B) y la vereda tiene geometría, así que el lado es un producto cruz
@@ -463,11 +464,12 @@ sorpresiva.
 - **Hacen falta índices parciales de obstáculos activos** por `sidewalk_id`, `kerb_node_id` y
   `crossing_id`. Los que existen filtran por `IS NOT NULL`, no por estado. Se agregan al
   implementar el ruteo, con la medición a la vista.
-- **La vista es donde se unen las dos tablas de aristas.** `pgr_dijkstra` necesita una sola
-  relación con `id`, `source`, `target` y `cost`, y los `id` de veredas y cruces se pisan,
-  así que ahí se resuelven los identificadores sintéticos; como el caminar es no dirigido,
-  alcanza con `cost` y `directed => false`, sin `reverse_cost`. La topología y el
-  identificador sintético son del importador.
+- **La vista es donde se unen las dos tablas de aristas.** `pgr_dijkstra` necesita una
+  sola relación con `id`, `source`, `target` y `cost`, y los `id` de veredas y cruces se
+  pisan, así que ahí se resuelven los identificadores sintéticos; como el caminar es no
+  dirigido, alcanza con `cost` y `directed => false`, sin `reverse_cost`. La forma de
+  esa relación y el identificador sintético están en
+  [11 §5](11-grafo-peatonal.md).
 - **El semáforo no entra.** `crossings.has_traffic_light` se elimina (§4.3): el costo de un
   cruce no depende por ahora de nada más que su accesibilidad y sus obstáculos.
 
@@ -580,13 +582,13 @@ actualizar y la columna sería peso muerto.
 - **El valor de los factores de costo.** §4.7 fija la regla —las penalizaciones suman,
   `NULL` se cobra como `PARTIAL`, `CRITICAL` bloquea— y un punto de partida para los
   números. Ajustarlos es calibrar, y se hace midiendo rutas reales cuando exista el ruteo.
-- **La identidad de los cruces para reimportar.** `sidewalks` guarda su `osm_way_id`,
-  pero `crossings` no tiene ningún identificador externo: si el importador se vuelve a
-  correr, no puede reconocer un cruce que ya existe salvo comparando geometría. Se
-  resuelve en el importador, no en el esquema, pero conviene tenerlo anotado antes de
-  escribir el importador de OpenStreetMap. De eso depende también partir una arista en
-  el punto de un obstáculo, que es la única forma de que una barrera no bloquee la
-  cuadra entera (§4.7).
+- **La identidad de los elementos derivados.** El esquema guarda las columnas que la
+  sostienen —la geometría de un nodo, los dos nodos de una arista—, pero la clave y su
+  restricción de unicidad se deciden en
+  [11 §4](11-grafo-peatonal.md) y en
+  [#30](https://github.com/BLP-Technologies/rodando-x-mza/issues/30). Lo que sigue sin
+  resolverse acá: partir una arista en el punto de un obstáculo (§4.7) choca todavía
+  con que el importador no puede respetar un nodo que no viene del extracto.
 
 ## 9. Documentos relacionados
 
@@ -599,3 +601,6 @@ actualizar y la columna sería peso muerto.
 - [10-datos-y-zona-piloto.md](10-datos-y-zona-piloto.md): la zona piloto, el extracto de
   OpenStreetMap, qué se deriva de él —incluidas las veredas, que no vienen mapeadas— y qué
   aporta el relevamiento de campo.
+- [11-grafo-peatonal.md](11-grafo-peatonal.md): cómo se convierte el extracto en el grafo
+  —nodos, tramos, veredas y cruces—, cómo se identifica cada elemento y qué casos de
+  OpenStreetMap no se pueden modelar.

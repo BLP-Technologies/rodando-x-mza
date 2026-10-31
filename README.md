@@ -24,3 +24,4 @@ Vive en [`docs/`](docs/):
 - [08 — Integración continua](docs/08-integracion-continua.md)
 - [09 — Modelo de datos](docs/09-modelo-de-datos.md)
 - [10 — Datos y zona piloto](docs/10-datos-y-zona-piloto.md)
+- [11 — El grafo peatonal](docs/11-grafo-peatonal.md)

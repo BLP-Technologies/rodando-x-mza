@@ -16,13 +16,15 @@ Este documento responde:
 - **De dónde y en qué formato** salen los datos crudos (§3).
 - **Qué se versiona** y qué no (§4).
 - **Qué contiene** el extracto, medido (§5).
-- **Qué se deriva** de él y qué se ignora (§6).
+- **Qué obliga a derivar** este extracto (§6).
 - **Qué aporta el relevamiento** de campo, con qué datos, y qué queda fuera del MVP (§7).
 
-No decide el modelo del grafo, la topología de pgRouting ni el importador: eso es #10,
-#12 y #13. Tampoco las convenciones del esquema, que están en
-[09](09-modelo-de-datos.md). Las reglas de §6 sí viven acá porque dependen de lo que el
-extracto contiene, y dejarían de ser ciertas si se cambiara la fuente.
+No decide el modelo del grafo ni las reglas de conversión —eso es
+[11-grafo-peatonal.md](11-grafo-peatonal.md)—, ni la topología de pgRouting ni el
+importador, que son #12 y #13. Tampoco las convenciones del esquema, que están en
+[09](09-modelo-de-datos.md). Este documento describe la zona, la fuente y el
+relevamiento; las reglas con las que el extracto se convierte en grafo viven en `11`,
+porque son el modelo del grafo y no una propiedad del recorte.
 
 ## 2. La zona
 
@@ -108,7 +110,7 @@ sí. Está en `.gitignore`.
 ## 5. Qué hay en la zona
 
 Inventario del extracto del **2026-10-31** (332 vías y 1.468 nodos, con el búfer), que es
-lo que #10 necesita para escribir sus reglas:
+lo que las reglas de conversión ([11](11-grafo-peatonal.md)) necesitan como insumo:
 
 | Qué | Cuánto |
 | --- | --- |
@@ -125,139 +127,34 @@ lo que #10 necesita para escribir sus reglas:
 Por clase de vía: `footway` 171, `residential` 49, `service` 34, `tertiary` 21, `secondary`
 19, `steps` 9, `primary` 8, `cycleway` 5, `path` 2, `pedestrian` 1, `living_street` 1.
 
-**La conclusión que importa: en la zona piloto no hay veredas ni cordones dibujados.** No
-alcanza con importar: hay que **derivar**. Lo único que OSM aporta del lado peatonal son 18
-cruces, que tampoco alcanzan para 49 intersecciones, y 4 cordones en el búfer.
+**La conclusión que importa: en la zona piloto no hay veredas ni cordones dibujados.** Lo
+único que OSM aporta del lado peatonal son 18 cruces, que no alcanzan para 49
+intersecciones, y 4 cordones en el búfer.
 
-## 6. Qué se deriva y qué se ignora
+## 6. Qué se deriva del extracto
 
-### 6.1 El esqueleto: vías de tránsito general
+Lo único que OpenStreetMap aporta del lado peatonal es el **esqueleto** (§5): qué
+calles existen, por dónde pasan, cómo se llaman y de qué clase son. Las veredas, las
+esquinas y los cruces los construye el importador sobre ese esqueleto, y no se pueden
+importar porque en el extracto no existen.
 
-El grafo peatonal se construye sobre las **vías de circulación general**: `primary`,
-`secondary`, `tertiary`, `residential`, `unclassified` y `living_street`. El resto queda
-fuera, y cada exclusión tiene su motivo:
+Las reglas de conversión —qué se lee y a qué columna va, cómo se derivan los nodos y
+los tramos, cómo se identifica cada elemento para que reimportar no duplique, y qué
+casos de OSM no se pueden modelar— están en
+[11-grafo-peatonal.md](11-grafo-peatonal.md). Viven ahí y no acá porque son el modelo
+del grafo, no una propiedad del recorte.
 
-| Se excluye | Por qué |
-| --- | --- |
-| `service` | Entradas de auto, pasillos de playa de estacionamiento, accesos a edificios. Derivarles veredas inventa veredas sobre una cochera |
-| `footway`, `path` | Senderos de plazas y pasajes internos: sin jerarquía, sin cordón y sin dato de accesibilidad (ver §6.6) |
-| `steps` | Escaleras: no son una calle. Quedan anotadas como barrera para marcarlas como obstáculo más adelante |
-| `cycleway` | No son peatonales |
+Lo que sí queda acá, porque depende del extracto:
 
-De OSM se toma el **esqueleto**: qué calles existen, su geometría central, su nombre (va al
-`street_name` de la vereda) y su clase (define el ancho, §6.2). Todo lo demás —veredas,
-cordones, cruces y topología— lo construye el importador.
-
-### 6.2 Las veredas: dos por calzada, una por lado
-
-**Cada `way` vehicular es una calzada y aporta dos veredas**, una por lado, a una distancia
-del eje que depende del ancho. La geometría no se inventa de cero: se corre la línea central
-hacia cada lado.
-
-| Clase | Offset desde el eje (media calzada + media vereda) |
-| --- | --- |
-| `primary` | 10 m |
-| `secondary` | 8,5 m |
-| `tertiary` | 7,5 m |
-| `residential`, `unclassified`, `living_street` | 6,5 m |
-
-Cuando la vía trae `lanes`, gana sobre la clase: `offset = lanes × 3 m / 2 + 1,5 m`. Los
-números son un **punto de partida** y se revisan a ojo una vez sobre el mapa: la clase no
-siempre coincide con lo que se ve —`9 de Julio` está como `residential` y no es angosta—,
-así que la tabla admite excepciones por calle.
-
-Lo que no se hace es medir el ancho desde los edificios: en las plazas no hay edificios
-justo donde el borde es la vereda, y el dato sería desparejo en el lugar más visible.
-
-**El corte es por intersección, no por `way`.** Una `way` de OSM puede estar partida por
-motivos ajenos a una esquina y dos tramos consecutivos pueden no compartir nodo. Una
-"cuadra" es el tramo entre dos intersecciones consecutivas, y se corta ahí.
-
-### 6.3 Nodos y cruces
-
-- **Un `kerb_node` por esquina**, en la intersección de las dos líneas de vereda. Con eso,
-  cada esquina tiene cuatro aristas: las dos veredas de cada calle y los dos cruces.
-- **Un cruce por brazo de intersección**: cuatro en las interiores, tres en las de borde,
-  dos en las de vértice. Son ~168 en toda la zona.
-- **Los 18 cruces de OSM y sus 128 nodos no se leen.** Si se mezclaran, la mitad de las
-  intersecciones quedaría sin cruce y el grafo no cerraría.
-
-### 6.4 El boulevard: dos calzadas y una mediana
-
-Cuando dos calzadas de la misma vía corren paralelas a menos de 25 m, en sentidos opuestos
-y con el mismo nombre, se tratan como **un boulevard**: dos veredas exteriores y **una
-franja caminable en la mediana**, con dos cruces por brazo (uno por calzada).
-
-Modelar la mediana como una sola arista y no como dos veredas pegadas es lo que la hace
-funcionar: caminar a lo largo del boulevard cuenta una vez, y cruzar cuesta dos cruces más
-la mediana, que es lo real. La mediana es una vereda más: arranca con `accessibility_level`
-en `NULL` como todo lo demás.
-
-En la zona, el caso es **Bartolomé Mitre**: OSM la tiene como dos `way` de sentido único
-separadas 13-16 m (consistente en 14 cortes a lo largo de toda la avenida). Justo afuera
-hay otra: **Manuel Belgrano**, a 21-24 m. No es un caso único de la ciudad, es un caso
-único de este recorte.
-
-### 6.5 La calle peatonal: una sola arista
-
-`highway=pedestrian` **sin `area=yes`** es una calle peatonal y entra como **una sola
-arista** sobre su línea central: no hay calzada en el medio, así que derivar dos lados
-crearía dos aristas paralelas sobre un lugar donde se camina en todo el ancho, y un cruce
-falso entre ellas. Con `area=yes` es una plaza, y queda fuera (§6.6).
-
-En la zona, **Sarmiento** entre Patricias Mendocinas y 9 de Julio es peatonal, y la corta
-**España**, que sí tiene tránsito. Por eso no es una arista de dos cuadras sino dos, unidas
-por un cruce sobre España: peatonal (9 de Julio → España) → nodo → cruce → nodo → peatonal
-(España → Patricias Mendocinas). El peatón tiene prioridad, pero el cruce existe porque los
-vehículos pasan.
-
-### 6.6 Lo que se deja afuera, y por qué
-
-- **Los senderos de las plazas** (153 `footway` sin subtipo). No son paralelos a ninguna
-  calle, no tienen cordón, no tienen rampa y no traen ningún dato de accesibilidad: entrarían
-  como aristas de nivel `NULL` que además hay que enganchar a mano con la vereda del borde.
-  El modelo, además, no tiene "área caminable": solo conoce aristas entre cordones. El ruteo
-  termina en el nodo del borde más cercano al destino, que es lo mismo que hace falta para
-  pegar un origen a mitad de cuadra. **Se revisa cuando el relevamiento cubra los senderos.**
-- **Las `service`** (§6.1): veredas sobre cocheras no son veredas.
-- **Los cruces de OSM** (§6.3): no alcanzan y mezclarlos rompe la uniformidad.
-
-Los senderos y las `service` siguen en el extracto; lo que se decide acá es que el
-importador **no los lee**.
-
-### 6.7 La identidad de los elementos derivados
-
-Los elementos derivados no tienen identificador externo: una vereda no viene de ninguna
-`way`, así que `osm_way_id` queda `NULL`. Además, **no se inventa una numeración**: los
-códigos por manzana, plaza o eje sirven para hablar y para las fichas de campo, y no se
-guardan como clave. Un identificador tiene que poder **derivarse del extracto**, y OSM no
-tiene manzanas: `M001` no se puede generar, solo tipear. Y si el recorte se corre una cuadra,
-`M001` pasa a ser otra manzana aunque ninguna vereda se haya movido.
-
-**La identidad es geométrica: (calle, intersección de inicio, intersección de fin, lado).**
-Una vereda es una línea entre dos esquinas, sobre un lado de una calle, así que eso la
-distingue sin ambigüedad y sin depender de una enumeración. Dos consecuencias:
-
-- **La etiqueta humana se genera, no se guarda.** "Necochea, entre Perú y 25 de Mayo, lado
-  sur" se calcula desde el grafo, y es el mismo lenguaje que puede usar una ficha de campo.
-- **Es estable entre reimportaciones.** Las esquinas no se mueven, así que reconocerlas por
-  coordenadas devuelve **la misma** vereda, y con ella los obstáculos que cuelgan de su id.
-
-El nombre de la columna y la forma del valor derivado (un hash de las dos coordenadas, por
-ejemplo) se deciden en #10/#12. Lo que no se deja para después es la propiedad que tiene que
-cumplir y las tres protecciones:
-
-1. **Upsert, no borrar y recrear.** La clave sale de datos que OSM no cambia seguido: las
-   coordenadas de las esquinas.
-2. **Reanclaje por geometría** cuando la clave no aparece (vereda más cercana al `geom` del
-   obstáculo, a menos de ~5 m) y, si no hay ninguna, el obstáculo queda **sin vínculo**.
-3. **Reporte de la corrida**: cuántos elementos se crearon, se actualizaron, se reanclaron y
-   cuántos quedaron sin vínculo.
-
-Perder el vínculo no es perder el dato: en `09` §4.5, colgar un obstáculo de cero elementos
-es válido y su `geom` es la fuente de verdad. Por eso la falla es degradable, y por eso el
-requisito se puede verificar con un test barato: importar dos veces y comprobar que los ids
-no cambiaron y que los obstáculos conservan sus vínculos.
+- **La zona obliga a derivar.** Si mañana llegara un extracto con `footway=sidewalk` y
+  `kerb` dibujados, la decisión de seguir derivando en lugar de importar se revisaría
+  en este documento.
+- **La fuente manda la precisión.** Las coordenadas del extracto son las de OSM, y de
+  ahí sale la tolerancia con la que se reconocen los nodos entre corridas
+  ([11 §4](11-grafo-peatonal.md)).
+- **Los casos especiales del recorte** —el boulevard de Bartolomé Mitre, la calle
+  peatonal Sarmiento, los senderos de las plazas— son los de esta zona. El modelo
+  explica cómo los trata; este documento dice dónde están.
 
 ## 7. El relevamiento: qué entra a la base
 
@@ -268,7 +165,7 @@ trae ni veredas ni cordones (§5).
 
 ### 7.1 Qué tiene que producir cada ficha
 
-Por **vereda**, identificada con la terna de §6.7:
+Por **vereda**, identificada por su geometría ([11 §4](11-grafo-peatonal.md)):
 
 | Dato | Cómo se registra |
 | --- | --- |
@@ -282,7 +179,8 @@ según una imagen y seguir sin verificar. Un registro "visto en una foto" no es 
 verificación, y esa distinción es la que evita que el ruteo mienta.
 
 **La geometría no hace falta que la produzca el relevamiento**: la deriva el importador
-(§6.2). Pedirla otra vez duplicaría el dato y garantizaría que las dos versiones discrepen.
+([11 §3.4](11-grafo-peatonal.md)). Pedirla otra vez duplicaría el dato y garantizaría que
+las dos versiones discrepen.
 
 ### 7.2 Cómo se cruza con el grafo, sin bloqueo mutuo
 
@@ -304,7 +202,7 @@ forma canónica por calle, y conviene que sea la de OSM, que es de donde sale la
 | --- | --- | --- |
 | Alturas domiciliarias | No hay dónde guardarlas: el esquema no tiene numeración de puerta | Registrarlas **vinculadas a la vereda**, en la misma hoja. Importarlas después es un join, no un segundo relevamiento |
 | Lugares de interés | El MVP no tiene tabla de lugares ni los usa en la ruta | Igual: vinculados a la vereda que los enfrenta |
-| Senderos de plaza y la conexión a través de Plaza Independencia | El modelo solo conoce aristas entre cordones: no existe la "área caminable" (§6.6) | Relevar la continuidad peatonal es útil, pero la app no va a rutear por adentro de la plaza. Es la primera extensión a evaluar cuando el MVP esté cerrado |
+| Senderos de plaza y la conexión a través de Plaza Independencia | El modelo solo conoce aristas entre cordones: no existe la "área caminable" ([11 §6](11-grafo-peatonal.md)) | Relevar la continuidad peatonal es útil, pero la app no va a rutear por adentro de la plaza. Es la primera extensión a evaluar cuando el MVP esté cerrado |
 
 Ninguna de las tres se descarta: se **saca del alcance del MVP** y se deja el dato en la
 misma hoja, para que el trabajo de campo no se repita. Lo que no se hace es prometer en la
@@ -312,18 +210,19 @@ app lo que el modelo no puede mostrar.
 
 ## 8. Lo que este documento no decide
 
-- **El modelo del grafo y la topología.** Cómo se numeran los nodos, cómo se arma la tabla
-  de aristas para `pgr_dijkstra` y cómo se valida: #10 y #13.
-- **El importador.** El código que aplica §6: #12.
-- **El nombre de la columna de la clave** de §6.7 y la forma del valor derivado: #10/#12.
-- **El ancho exacto de cada calle.** §6.2 es una aproximación por clase, con `lanes` cuando
-  existe. Se revisa con el mapa delante.
+- **El modelo del grafo y las reglas de conversión.** Viven en
+  [11-grafo-peatonal.md](11-grafo-peatonal.md).
+- **El importador.** El código que las aplica: #12.
+- **La topología de pgRouting.** Construirla y validarla con una consulta: #13.
+- **El ancho exacto de cada calle.** [11 §3.4](11-grafo-peatonal.md) es una aproximación
+  por clase, con `lanes` cuando existe. Se revisa con el mapa delante.
 - **Modelar áreas caminables.** Hoy no existe en el esquema; es lo que haría falta para
-  incluir las plazas como destino interior (§6.6 y §7.3).
+  incluir las plazas como destino interior (§7.3 y [11 §6](11-grafo-peatonal.md)).
 
 ## 9. Documentos relacionados
 
 - [09-modelo-de-datos.md](09-modelo-de-datos.md): el esquema que estos datos van a poblar.
+- [11-grafo-peatonal.md](11-grafo-peatonal.md): cómo se convierte este extracto en el grafo.
 - [02-stack-y-estructura.md](02-stack-y-estructura.md): acceso a datos y convenciones.
 - [03-despliegue-y-operacion.md](03-despliegue-y-operacion.md): atribución y operación.
 - [07-plan-de-trabajo.md](07-plan-de-trabajo.md): fases y definición de terminado.
