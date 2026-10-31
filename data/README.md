@@ -7,10 +7,16 @@ Datos crudos de la Fase 1. La decisión que los explica está en
 | --- | --- | --- |
 | `pilot-zone.geojson` | Sí | El polígono que delimita la zona piloto |
 | `pilot-zone.osm` | **No** | El extracto de OpenStreetMap, generado por el script |
+| `relevamiento/` | Plantilla sí, datos no | La plantilla de campo del relevamiento de accesibilidad |
 
 El extracto no se versiona porque es **un artefacto derivado y mutable**: OSM cambia todos
 los meses, así que el archivo que se guarda hoy dice otra cosa el mes que viene. Lo que se
 versiona es el polígono, el script que descarga y la procedencia que el script imprime.
+
+El relevamiento de accesibilidad es el otro conjunto de datos de la zona, y tiene su
+propio régimen: se versiona la **plantilla**, no lo relevado
+([`relevamiento/`](relevamiento/README.md),
+[docs/12](../docs/12-relevamiento-de-accesibilidad.md)).
 
 ## Generar el extracto
 

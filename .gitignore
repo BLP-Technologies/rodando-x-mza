@@ -12,3 +12,8 @@ Thumbs.db
 # (ver data/README.md). Lo que se versiona es el recorte, no el extracto.
 data/*.osm
 data/*.pbf
+
+# El relevamiento completo vive en el Drive del equipo (ver
+# data/relevamiento/README.md). Acá sólo se versiona la plantilla.
+data/relevamiento/relevamiento-*.csv
+

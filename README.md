@@ -25,3 +25,4 @@ Vive en [`docs/`](docs/):
 - [09 — Modelo de datos](docs/09-modelo-de-datos.md)
 - [10 — Datos y zona piloto](docs/10-datos-y-zona-piloto.md)
 - [11 — El grafo peatonal](docs/11-grafo-peatonal.md)
+- [12 — El relevamiento de accesibilidad](docs/12-relevamiento-de-accesibilidad.md)
