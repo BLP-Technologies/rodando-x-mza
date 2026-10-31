@@ -26,7 +26,7 @@ subgraph B["Backend"]
   responde{"¿Responden los servicios?"}
   degradar["Informa la degradación y mantiene el mapa operativo"]
   consultar["Consulta los obstáculos activos de la zona"]
-  ruteo["Calcula el trayecto con los pesos de accesibilidad"]
+  ruteo["Calcula el trayecto con el costo de cada arista"]
   hayRuta{"¿Hay ruta libre de barreras?"}
   trazar["Traza la ruta accesible"]
   alternativa["Entrega la mejor ruta disponible y marca los tramos comprometidos"]
@@ -35,7 +35,7 @@ end
 
 subgraph D["Base de Datos (PostGIS)"]
   grafo["Recorre el grafo de veredas, cruces y nodos de cordón"]
-  penalizar["Penaliza las veredas con obstáculos activos"]
+  costear["Deriva el costo de cada arista: metros por accesibilidad más las penalizaciones"]
   geom["Devuelve la geometría de la ruta"]
 end
 
@@ -50,8 +50,8 @@ responde -->|Sí| consultar
 responde -->|No| degradar
 degradar --> fin
 consultar --> grafo
-grafo --> penalizar
-penalizar --> geom
+grafo --> costear
+costear --> geom
 geom --> ruteo
 ruteo --> hayRuta
 hayRuta -->|Sí| trazar

@@ -1,6 +1,6 @@
 swimlane-beta LR
 accTitle: C012 Crear obstáculo - diagrama de actividades
-accDescr: Flujo de trabajo del moderador que, a partir de un reporte pendiente, crea el obstáculo formal en el mapa, penaliza la vereda afectada en el grafo de ruteo y aprueba el reporte dentro de una misma transacción.
+accDescr: Flujo de trabajo del moderador que, a partir de un reporte pendiente, crea el obstáculo formal en el mapa y aprueba el reporte dentro de una misma transacción. El costo del tramo no se recalcula: se deriva en cada consulta de ruteo.
 
 subgraph M["Moderador"]
   inicio(["Inicio"])
@@ -28,7 +28,7 @@ subgraph B["Backend"]
   abrirTx["Abre la transacción de base de datos"]
   confirmarTx{"¿La transacción se confirmó?"}
   revertir["Revierte los cambios: el reporte queda en su estado previo"]
-  responder["Responde 201 Created: obstáculo registrado y ruta actualizada"]
+  responder["Responde 201 Created: obstáculo registrado y publicado en el mapa"]
 end
 
 subgraph S["Servidor de Archivos"]
@@ -37,9 +37,8 @@ end
 
 subgraph D["Base de Datos"]
   insertar["INSERT INTO obstacles (sidewalk_id, ubicación, tipo, severidad)"]
-  penalizar["UPDATE sidewalks SET weight = weight + penalización"]
   marcarAprobado["UPDATE reports SET status = APPROVED, obstacle_id = nuevoId"]
-  commit["COMMIT: confirma los tres cambios juntos"]
+  commit["COMMIT: confirma los dos cambios juntos"]
 end
 
 inicio --> abrirLista
@@ -58,8 +57,7 @@ devolverImagen --> enviar
 enviar --> recibir
 recibir --> abrirTx
 abrirTx --> insertar
-insertar --> penalizar
-penalizar --> marcarAprobado
+insertar --> marcarAprobado
 marcarAprobado --> commit
 commit --> confirmarTx
 confirmarTx -->|Sí| responder

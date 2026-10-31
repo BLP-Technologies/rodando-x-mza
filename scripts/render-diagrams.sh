@@ -17,6 +17,7 @@ doc_file="docs/01-diagramas.md"
 default_scale=3
 forced_scale=""
 declare -A scale_overrides=(
+  [01-DER]=6
   [04-act-C003]=8
   [04-act-C010]=8
   [04-act-C012]=8
