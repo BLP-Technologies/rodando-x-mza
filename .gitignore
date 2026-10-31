@@ -7,3 +7,8 @@ Thumbs.db
 # Registros y temporales
 *.log
 *.tmp
+
+# Datos crudos de OpenStreetMap: se regeneran con scripts/fetch-pilot-zone-osm.mjs
+# (ver data/README.md). Lo que se versiona es el recorte, no el extracto.
+data/*.osm
+data/*.pbf
