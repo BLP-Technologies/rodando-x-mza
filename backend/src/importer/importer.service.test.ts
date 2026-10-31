@@ -7,6 +7,7 @@ import {
   type Tramo,
 } from './importer.service.js';
 import { readOsm, type OsmExtract } from './osm.reader.js';
+import { detectBoulevards } from './way-rules.js';
 
 const FIXTURE = fileURLToPath(new URL('./fixtures/two-blocks.osm', import.meta.url));
 
@@ -17,7 +18,9 @@ const describeTramo = (tramo: Tramo): string =>
 /** Los tramos de la grilla: sin el boulevard, que el importador excluye antes. */
 const gridTramos = (extract: OsmExtract): Tramo[] => {
   const { ways } = selectGridWays(extract);
-  return buildTramos(ways.filter((way) => way.id !== 108 && way.id !== 109)).tramos;
+  const { excludedWayIds } = detectBoulevards(ways, extract.nodes);
+
+  return buildTramos(ways.filter((way) => !excludedWayIds.has(way.id))).tramos;
 };
 
 let extract: OsmExtract;
@@ -46,9 +49,10 @@ describe('selectGridWays', () => {
 
 describe('buildTramos', () => {
   it('parte las calles en tramos entre intersecciones', () => {
-    const { warnings } = buildTramos(
-      selectGridWays(extract).ways.filter((way) => way.id !== 108 && way.id !== 109),
-    );
+    const { ways } = selectGridWays(extract);
+    const { excludedWayIds } = detectBoulevards(ways, extract.nodes);
+
+    const { warnings } = buildTramos(ways.filter((way) => !excludedWayIds.has(way.id)));
 
     expect(warnings).toEqual([]);
     expect(gridTramos(extract).map(describeTramo).sort()).toEqual(
@@ -94,9 +98,7 @@ describe('buildTramos', () => {
     const doble = tramos.filter((tramo) => tramo.streetName === 'Avenida Doble');
     expect(doble.map(describeTramo).sort()).toEqual([
       '108 14-15 boundary|boundary',
-      // La 109 se trazó en sentido contrario: el tramo conserva ese orden, y como el
-      // lado no se guarda, la dirección de la `way` no llega a ningún lado.
-      '109 17-16 boundary|boundary',
+      '109 16-17 boundary|boundary',
     ]);
   });
 });

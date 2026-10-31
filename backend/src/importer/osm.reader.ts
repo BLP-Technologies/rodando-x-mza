@@ -47,16 +47,22 @@ function numeric(attributes: Map<string, string>, key: string, line: string): nu
  * (`out body; >; out skel qt;`), un elemento por línea, y así se lee. La forma se
  * verifica contra el archivo: si la cantidad de `<node>` no coincide con la de nodos
  * leídos, se falla en vez de devolver un grafo incompleto y silencioso.
+ *
+ * Un nodo puede aparecer dos veces en el archivo: Overpass lo emite con sus tags en el
+ * primer `out` y otra vez sin tags en el `skel`, y las coordenadas son las mismas. Por
+ * eso se cuentan los elementos leídos y no los ids distintos.
  */
 export function parseOsm(xml: string): OsmExtract {
   const nodes = new Map<number, OsmNode>();
   const ways: OsmWay[] = [];
+  let nodeElements = 0;
   let current: { id: number; nodeIds: number[]; tags: Map<string, string> } | undefined;
 
   for (const line of xml.split('\n')) {
     const text = line.trim();
 
     if (text.startsWith('<node')) {
+      nodeElements += 1;
       const attributes = parseAttributes(text);
       const id = numeric(attributes, 'id', text);
       nodes.set(id, {
@@ -97,9 +103,9 @@ export function parseOsm(xml: string): OsmExtract {
   }
 
   const declared = xml.match(/<node\b/g)?.length ?? 0;
-  if (declared !== nodes.size) {
+  if (declared !== nodeElements) {
     throw new Error(
-      `OSM parse mismatch: ${declared} <node> in the file, ${nodes.size} parsed. The extract format probably changed.`,
+      `OSM parse mismatch: ${declared} <node> in the file, ${nodeElements} parsed. The extract format probably changed.`,
     );
   }
 

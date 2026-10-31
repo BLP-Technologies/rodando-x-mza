@@ -23,16 +23,36 @@ describe('parseOsm', () => {
     expect(way?.tags.get('name')).toBe('Avenida Ancha');
   });
 
-  it('falla si el archivo tiene menos nodos de los que declara', () => {
+  it('tolera el nodo que Overpass repite sin tags en el segundo pase', () => {
     const xml = [
       '<osm>',
+      '  <node id="1" lat="-32.8" lon="-68.8">',
+      '    <tag k="highway" v="crossing"/>',
+      '  </node>',
+      '  <node id="2" lat="-32.9" lon="-68.9"/>',
       '  <node id="1" lat="-32.8" lon="-68.8"/>',
-      '  <node id="1" lat="-32.8" lon="-68.8"/>',
-      '  <way id="10"><nd ref="1"/><nd ref="1"/></way>',
+      '  <way id="10">',
+      '    <nd ref="1"/>',
+      '    <nd ref="2"/>',
+      '  </way>',
       '</osm>',
     ].join('\n');
 
-    // Dos `<node`, un solo nodo distinto: el archivo no tiene la forma esperada.
+    const extract = parseOsm(xml);
+
+    expect(extract.nodes.size).toBe(2);
+    expect(extract.ways[0]?.nodeIds).toEqual([1, 2]);
+  });
+
+  it('falla si el archivo no trae un elemento por línea', () => {
+    const xml = [
+      '<osm>',
+      '  <node id="1" lat="-32.8" lon="-68.8"/><node id="2" lat="-32.9" lon="-68.9"/>',
+      '  <way id="10"><nd ref="1"/><nd ref="2"/></way>',
+      '</osm>',
+    ].join('\n');
+
+    // Dos `<node` en una línea: uno solo se lee, la forma no es la esperada.
     expect(() => parseOsm(xml)).toThrow(/parse mismatch/);
   });
 

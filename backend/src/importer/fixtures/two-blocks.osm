@@ -13,7 +13,8 @@
     - una calle sin `name` (la de lat -32.8890),
     - un `service` y un `footway` sueltos, que no entran,
     - dos peatonales, una con `area=yes` (plaza) y otra sin,
-    - dos calzadas opuestas a 15 m con el mismo nombre, que son un boulevard.
+    - dos calzadas opuestas a 15 m con el mismo nombre, que son un boulevard: van
+dibujadas en el mismo sentido y `oneway=-1` invierte una, que es como OSM lo escribe.
 
   Las coordenadas son de Mendoza pero el damero es inventado y las distancias están
   redondeadas: 0,0001 de longitud ~9,35 m y 0,0001 de latitud ~11,13 m.
@@ -129,8 +130,8 @@
     <tag k="oneway" v="yes"/>
   </way>
   <way id="109">
-    <nd ref="17"/>
     <nd ref="16"/>
+    <nd ref="17"/>
     <tag k="highway" v="residential"/>
     <tag k="name" v="Avenida Doble"/>
     <tag k="oneway" v="-1"/>
