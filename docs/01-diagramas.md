@@ -88,6 +88,15 @@ mermaid 12.
   `01-DER.mmd` → `imgs/01-DER.png`.
 - Las imágenes **se versionan en git** junto con los `.mmd` (no se ignoran).
 
+### Lo que el DER no puede mostrar
+
+El diagrama entidad-relación dibuja tablas, columnas, tipos y claves foráneas. Mermaid no
+tiene forma de expresar constraints, índices, defaults ni la acción de un `ON DELETE`, así
+que esas reglas viven en las migraciones y en [09-modelo-de-datos.md](09-modelo-de-datos.md),
+y en `01-DER.mmd` quedan resumidas en un bloque de comentarios al comienzo del archivo.
+Un diagrama sin ellas no es el esquema completo: ante la duda de qué hace una columna, la
+migración es la fuente.
+
 ### Esquemas ilustrativos (excepción)
 
 Los diagramas del sistema son mermaid, sin excepción. Pero hay un tipo de imagen que

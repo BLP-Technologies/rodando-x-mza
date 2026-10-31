@@ -74,8 +74,13 @@ Un solo tipo por vocabulario, compartido por todas las tablas que lo usan:
 | `obstacle_severity` | `MINOR`, `MODERATE`, `CRITICAL` | `obstacles` y `reports` |
 | `report_status` | `PENDING`, `APPROVED`, `UNDER_REPAIR`, `RESOLVED`, `REJECTED` | `reports` |
 
-Los tres son **nullable**, y el `NULL` significa "no determinado": nadie relevó ese
-nodo, esa vereda o ese cruce. No se usa un valor del enum para decirlo.
+De los tres, **solo `accessibility_level` es nullable**, y ahí `NULL` significa "no
+determinado": nadie relevó ese nodo, esa vereda o ese cruce. Los otros dos no lo son por
+una razón del mismo principio: un dato *permite* decir "no sé", una decisión no.
+`obstacles.severity` y `reports.severity` son `NOT NULL` porque alguien clasificó la
+barrera o la percibió, y `reports.status` es `NOT NULL DEFAULT 'PENDING'` porque todo
+reporte nace pendiente. Tampoco se usa un valor del enum para reemplazar el `NULL` del
+nivel.
 
 **`accessibility_level` en las tres tablas.** Antes, `kerb_nodes` tenía un ternario y
 `sidewalks` y `crossings` un booleano `is_accessible`. El booleano no es una versión
