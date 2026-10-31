@@ -1,12 +1,13 @@
 # Datos y zona piloto
 
 > Documento temático. Define qué área entra en el piloto de la Fase 1, de dónde salen
-> los datos crudos, en qué formato se obtienen, qué queda versionado, qué se deriva del
-> extracto y qué aporta el relevamiento de campo. Es el estado vivo de esas decisiones: se
-> edita en su lugar cuando cambian. Se complementa con
-> [09-modelo-de-datos.md](09-modelo-de-datos.md), que define el esquema,
-> y con [02-stack-y-estructura.md](02-stack-y-estructura.md), que define el acceso a
-> datos.
+> los datos crudos, en qué formato se obtienen, qué queda versionado y qué se deriva del
+> extracto. Es el estado vivo de esas decisiones: se edita en su lugar cuando cambian.
+> El relevamiento de campo tiene documento propio
+> ([12](12-relevamiento-de-accesibilidad.md)); acá queda la zona, que es su unidad de
+> trabajo. Se complementa con [09-modelo-de-datos.md](09-modelo-de-datos.md), que define
+> el esquema, y con [02-stack-y-estructura.md](02-stack-y-estructura.md), que define el
+> acceso a datos.
 
 ## 1. Alcance
 
@@ -17,14 +18,14 @@ Este documento responde:
 - **Qué se versiona** y qué no (§4).
 - **Qué contiene** el extracto, medido (§5).
 - **Qué obliga a derivar** este extracto (§6).
-- **Qué aporta el relevamiento** de campo, con qué datos, y qué queda fuera del MVP (§7).
+- **Cuál es la unidad de trabajo** del relevamiento de campo (§7).
 
 No decide el modelo del grafo ni las reglas de conversión —eso es
 [11-grafo-peatonal.md](11-grafo-peatonal.md)—, ni la topología de pgRouting ni el
 importador, que son #12 y #13. Tampoco las convenciones del esquema, que están en
-[09](09-modelo-de-datos.md). Este documento describe la zona, la fuente y el
-relevamiento; las reglas con las que el extracto se convierte en grafo viven en `11`,
-porque son el modelo del grafo y no una propiedad del recorte.
+[09](09-modelo-de-datos.md). Este documento describe la zona, la fuente y el relevamiento; las reglas con las que el
+extracto se convierte en grafo viven en `11`, porque son el modelo del grafo y no una
+propiedad del recorte.
 
 ## 2. La zona
 
@@ -156,57 +157,18 @@ Lo que sí queda acá, porque depende del extracto:
   peatonal Sarmiento, los senderos de las plazas— son los de esta zona. El modelo
   explica cómo los trata; este documento dice dónde están.
 
-## 7. El relevamiento: qué entra a la base
+## 7. El relevamiento de campo
 
-El importador aporta **dónde** está cada vereda; el relevamiento de campo aporta **cómo
-está**. Sin él, el grafo existe con todo en `NULL` y el ruteo no distingue una vereda rota de
-una nueva. Es la única fuente de accesibilidad de la que va a disponer el MVP, porque OSM no
-trae ni veredas ni cordones (§5).
+El importador aporta **dónde** está cada vereda; el relevamiento aporta **cómo está**.
+Es la única fuente de accesibilidad del MVP, porque OpenStreetMap no trae ni veredas ni
+cordones (§5): sin relevamiento, el grafo existe con todo en `NULL`.
 
-### 7.1 Qué tiene que producir cada ficha
-
-Por **vereda**, identificada por su geometría ([11 §4](11-grafo-peatonal.md)):
-
-| Dato | Cómo se registra |
-| --- | --- |
-| Nivel de accesibilidad | `FULL`, `PARTIAL`, `NONE` o **sin relevar**, que es un valor válido del sistema y no un casillero vacío |
-| Verificación | Si el dato salió de una imagen o de una visita, con **fecha de la imagen** y **fecha de la revisión** por separado (`is_verified` solo es verdadero con visita) |
-| Obstáculos | Tipo del catálogo de once (`docs/09` §4.2) y severidad (`MINOR`, `MODERATE`, `CRITICAL`); la descripción libre va aparte |
-| Rampas | **En la esquina**, no en el cruce: un cruce tiene dos esquinas, y cada una su nivel |
-
-`is_verified` es un eje distinto del nivel (`docs/09` §4.1): una vereda puede estar `PARTIAL`
-según una imagen y seguir sin verificar. Un registro "visto en una foto" no es una
-verificación, y esa distinción es la que evita que el ruteo mienta.
-
-**La geometría no hace falta que la produzca el relevamiento**: la deriva el importador
-([11 §3.4](11-grafo-peatonal.md)). Pedirla otra vez duplicaría el dato y garantizaría que
-las dos versiones discrepen.
-
-### 7.2 Cómo se cruza con el grafo, sin bloqueo mutuo
-
-El relevamiento no necesita esperar al importador. Su unidad —el tramo entre dos
-intersecciones con sus dos veredas enfrentadas— es la misma que la del grafo, así que puede
-empezar escribiendo la clave en palabras ("Necochea, Perú → 25 de Mayo, lado sur"). Cuando
-exista el grafo, ese texto se empareja una sola vez con las veredas generadas, y las que no
-matcheen marcan un error en alguno de los dos lados: es una verificación barata y útil, no un
-retrabajo.
-
-**Los nombres son un problema real.** El callejero tiene la misma calle con dos nombres
-según el tramo (`4 Norte / Sarmiento`) y abreviaturas que no coinciden con OSM (`Av. España`
-es `España`; `General Espejo` es `Gral. Gerónimo Espejo`). Para emparejar hace falta una
-forma canónica por calle, y conviene que sea la de OSM, que es de donde sale la geometría.
-
-### 7.3 Lo que queda fuera del MVP
-
-| Dato | Por qué no entra ahora | Qué hacer con él mientras tanto |
-| --- | --- | --- |
-| Alturas domiciliarias | No hay dónde guardarlas: el esquema no tiene numeración de puerta | Registrarlas **vinculadas a la vereda**, en la misma hoja. Importarlas después es un join, no un segundo relevamiento |
-| Lugares de interés | El MVP no tiene tabla de lugares ni los usa en la ruta | Igual: vinculados a la vereda que los enfrenta |
-| Senderos de plaza y la conexión a través de Plaza Independencia | El modelo solo conoce aristas entre cordones: no existe la "área caminable" ([11 §6](11-grafo-peatonal.md)) | Relevar la continuidad peatonal es útil, pero la app no va a rutear por adentro de la plaza. Es la primera extensión a evaluar cuando el MVP esté cerrado |
-
-Ninguna de las tres se descarta: se **saca del alcance del MVP** y se deja el dato en la
-misma hoja, para que el trabajo de campo no se repita. Lo que no se hace es prometer en la
-app lo que el modelo no puede mostrar.
+Qué se releva, con qué criterio se decide cada nivel, cómo se registra y qué queda
+fuera del MVP está en
+[12-relevamiento-de-accesibilidad.md](12-relevamiento-de-accesibilidad.md). Acá queda
+lo que depende de este documento: **la zona es la unidad de trabajo del relevamiento**.
+Son 36 manzanas, del orden de 180 veredas y 200 esquinas, y eso es lo que hace que una
+jornada de campo alcance y que el resultado se pueda verificar a ojo (§2).
 
 ## 8. Lo que este documento no decide
 
@@ -214,15 +176,19 @@ app lo que el modelo no puede mostrar.
   [11-grafo-peatonal.md](11-grafo-peatonal.md).
 - **El importador.** El código que las aplica: #12.
 - **La topología de pgRouting.** Construirla y validarla con una consulta: #13.
+- **El relevamiento de campo.** Qué se releva, el criterio de cada nivel y la
+  planilla de campo: [12-relevamiento-de-accesibilidad.md](12-relevamiento-de-accesibilidad.md).
 - **El ancho exacto de cada calle.** [11 §3.4](11-grafo-peatonal.md) es una aproximación
   por clase, con `lanes` cuando existe. Se revisa con el mapa delante.
 - **Modelar áreas caminables.** Hoy no existe en el esquema; es lo que haría falta para
-  incluir las plazas como destino interior (§7.3 y [11 §6](11-grafo-peatonal.md)).
+  incluir las plazas como destino interior ([11 §6](11-grafo-peatonal.md)).
 
 ## 9. Documentos relacionados
 
 - [09-modelo-de-datos.md](09-modelo-de-datos.md): el esquema que estos datos van a poblar.
 - [11-grafo-peatonal.md](11-grafo-peatonal.md): cómo se convierte este extracto en el grafo.
+- [12-relevamiento-de-accesibilidad.md](12-relevamiento-de-accesibilidad.md): qué aporta el
+  relevamiento, el criterio de cada nivel y la planilla de campo.
 - [02-stack-y-estructura.md](02-stack-y-estructura.md): acceso a datos y convenciones.
 - [03-despliegue-y-operacion.md](03-despliegue-y-operacion.md): atribución y operación.
 - [07-plan-de-trabajo.md](07-plan-de-trabajo.md): fases y definición de terminado.

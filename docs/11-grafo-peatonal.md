@@ -69,7 +69,7 @@ Y lo que OSM trae en la zona y **no se lee**, con el motivo:
 | `footway=sidewalk` | 0 | Sería la fuente de la geometría de la vereda, y no existe. Si apareciera, se ignora igual: el criterio del MVP es derivar, no depender de que OSM lo tenga dibujado |
 | `footway=crossing` | 18 vías | No alcanzan (hacen falta ~200) y mezclarlas rompe la uniformidad (§3.7) |
 | `highway=crossing` (nodo) | 128 | Ídem: marcan algunos cruces, no todos, y no tienen geometría |
-| `kerb`, `tactile_paving` | 4 nodos, todos en el búfer | Es dato de accesibilidad, y la accesibilidad la aporta el relevamiento ([10 §7](10-datos-y-zona-piloto.md#7-el-relevamiento-qué-entra-a-la-base)) |
+| `kerb`, `tactile_paving` | 4 nodos, todos en el búfer | Es dato de accesibilidad, y la accesibilidad la aporta el relevamiento ([12](12-relevamiento-de-accesibilidad.md)) |
 | `foot`, `access`, `sidewalk=no` | 0 | El MVP asume que en la zona piloto se camina por los dos lados de toda calle (§6) |
 | `bridge`, `tunnel`, `layer` | 0 | El modelo no tiene altura (§6) |
 
@@ -239,7 +239,7 @@ precede, que es lo que necesita la etiqueta humana (§4).
 `street_name` se copia del `name` de la `way`, **sin normalizar**: el callejero tiene
 la misma calle con dos nombres según el tramo (`4 Norte / Sarmiento`) y abreviaturas
 que no coinciden con OSM, y homologarlas es trabajo del emparejamiento con el
-relevamiento ([10 §7.2](10-datos-y-zona-piloto.md#72-cómo-se-cruza-con-el-grafo-sin-bloqueo-mutuo)).
+relevamiento ([12 §8](12-relevamiento-de-accesibilidad.md)).
 
 Si la `way` no tiene `name`, `street_name` queda en `NULL`: no se hereda del tramo
 vecino ni se inventa. Y si una cuadra está mapeada como dos `way` con **distinto
@@ -276,7 +276,7 @@ unir las mismas dos esquinas sin colisionar, porque cada tabla tiene su índice.
 sur" se calcula desde el grafo —la calle, las dos esquinas de los extremos y el lado—
 y es el mismo lenguaje que puede usar una ficha de campo, que es lo que permite
 empezar el relevamiento antes que el importador
-([10 §7.2](10-datos-y-zona-piloto.md#72-cómo-se-cruza-con-el-grafo-sin-bloqueo-mutuo)).
+([12 §8](12-relevamiento-de-accesibilidad.md)).
 El lado sale de la dirección de la marcha y de la geometría, no de una columna
 ([09 §4.3](09-modelo-de-datos.md#43-los-campos-que-se-eliminan)).
 
@@ -361,14 +361,15 @@ disparador para revisarla, y el disparador más frecuente es el relevamiento.
   partida, y se ajustan mirando el mapa de la zona piloto.
 - **La fórmula del costo.** Vive en [09 §4.7](09-modelo-de-datos.md#47-el-costo-de-las-aristas-se-calcula-no-se-guarda).
 - **La normalización de nombres** de calle: es del emparejamiento con el relevamiento
-  ([10 §7.2](10-datos-y-zona-piloto.md#72-cómo-se-cruza-con-el-grafo-sin-bloqueo-mutuo)).
+  ([12 §8](12-relevamiento-de-accesibilidad.md)).
 
 ## 8. Documentos relacionados
 
 - [09-modelo-de-datos.md](09-modelo-de-datos.md): el esquema que estos datos pueblan,
   y el costo de las aristas.
-- [10-datos-y-zona-piloto.md](10-datos-y-zona-piloto.md): la zona, el extracto y el
-  relevamiento.
+- [10-datos-y-zona-piloto.md](10-datos-y-zona-piloto.md): la zona y el extracto.
+- [12-relevamiento-de-accesibilidad.md](12-relevamiento-de-accesibilidad.md): de dónde
+  sale la accesibilidad de estas veredas y esquinas.
 - [01-diagramas.md](01-diagramas.md): el DER y los diagramas del modelo en la calle.
 - [07-plan-de-trabajo.md](07-plan-de-trabajo.md): fases y definición de terminado.
 - [`data/README.md`](../data/README.md): el polígono y la procedencia del extracto.

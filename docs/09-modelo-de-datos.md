@@ -100,6 +100,12 @@ importado de OSM sin que nadie lo haya verificado, y la inversa: el importador n
 debería inventar un nivel. Por eso `accessibility_level` y `is_verified` se guardan
 por separado y ninguna de las dos columnas se usa para significar lo de la otra.
 
+La columna es verdadera cuando una persona del equipo **miró el elemento**: en el
+lugar o en una imagen del lugar ([12 §5](12-relevamiento-de-accesibilidad.md)). La
+visita y la imagen no se distinguen en la base —`is_verified` responde "¿alguien
+comprobó esto?"—; cuál de las dos fue, y de cuándo es la imagen, vive en la planilla
+del relevamiento.
+
 **`report_status` no incluye la baja.** La baja de un reporte es `deleted_at`, no un
 estado: si `DELETED` fuera un valor del enum, habría dos fuentes de verdad para "este
 reporte está borrado". Los diagramas de estados sí muestran la baja como estado final
@@ -359,6 +365,18 @@ exist"). Con eso la arista queda fuera del grafo sin un `WHERE` que la filtre, y
 hay camino el caso de uso ya tiene respuesta: C003 devuelve la mejor ruta disponible y marca
 los tramos comprometidos.
 
+**En un cruce, el nivel puede venir de la esquina.** `crossings.accessibility_level`
+sólo tiene valor si alguien miró ese cruce puntual; el importador no lo escribe, porque
+dónde termina el asfalto no dice cómo se entra. Así que el valor que entra en
+`factor_nivel` es el del cruce si lo tiene, y si no, **el peor de sus dos esquinas**
+([12 §3](12-relevamiento-de-accesibilidad.md)).
+
+Eso cierra un hueco del modelo: un nodo no tiene costo, así que una esquina `NONE` no
+bloqueaba nada. Con el derivado, una esquina sin rampa deja en `NONE` los cruces que
+salen de ella —no se cruza por ahí— y deja caminable la vereda que la rodea, que es lo
+que pasa en la calle. No hace falta inventar un costo en el nodo, ni que C014 escriba
+en dos tablas.
+
 `NULL` se cobra como `PARTIAL`, y la regla se enuncia así: **sin dato no se evita y no se
 premia**. Las dos lecturas directas son peores. Cobrarlo como `FULL` hace que el import de
 OpenStreetMap —que no trae accesibilidad— deje toda la red gratis, y entonces el ruteo
@@ -582,6 +600,9 @@ actualizar y la columna sería peso muerto.
 - **El valor de los factores de costo.** §4.7 fija la regla —las penalizaciones suman,
   `NULL` se cobra como `PARTIAL`, `CRITICAL` bloquea— y un punto de partida para los
   números. Ajustarlos es calibrar, y se hace midiendo rutas reales cuando exista el ruteo.
+- **Qué significa cada nivel en la calle.** §4.1 define el vocabulario y §4.7 cómo se
+  cobra; con qué observación se decide `FULL`, `PARTIAL` o `NONE` en el relevamiento, y
+  hasta dónde llega un `NONE`, está en [12 §4](12-relevamiento-de-accesibilidad.md).
 - **La identidad de los elementos derivados.** El esquema guarda las columnas que la
   sostienen —la geometría de un nodo, los dos nodos de una arista—, pero la clave y su
   restricción de unicidad se deciden en
@@ -604,3 +625,5 @@ actualizar y la columna sería peso muerto.
 - [11-grafo-peatonal.md](11-grafo-peatonal.md): cómo se convierte el extracto en el grafo
   —nodos, tramos, veredas y cruces—, cómo se identifica cada elemento y qué casos de
   OpenStreetMap no se pueden modelar.
+- [12-relevamiento-de-accesibilidad.md](12-relevamiento-de-accesibilidad.md): de dónde sale
+  el dato de accesibilidad, qué significa cada nivel en la calle y cómo se registra.
