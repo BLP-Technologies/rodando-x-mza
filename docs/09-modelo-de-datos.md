@@ -597,4 +597,5 @@ actualizar y la columna sería peso muerto.
 - [07-plan-de-trabajo.md](07-plan-de-trabajo.md): cómo se derivan y se cierran las
   tareas de modelo.
 - [10-datos-y-zona-piloto.md](10-datos-y-zona-piloto.md): la zona piloto, el extracto de
-  OpenStreetMap y qué se deriva de él, incluidas las veredas, que no vienen mapeadas.
+  OpenStreetMap, qué se deriva de él —incluidas las veredas, que no vienen mapeadas— y qué
+  aporta el relevamiento de campo.

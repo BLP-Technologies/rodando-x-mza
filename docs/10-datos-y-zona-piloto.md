@@ -1,9 +1,10 @@
 # Datos y zona piloto
 
 > Documento temático. Define qué área entra en el piloto de la Fase 1, de dónde salen
-> los datos crudos, en qué formato se obtienen, qué queda versionado y qué se deriva del
-> extracto. Es el estado vivo de esas decisiones: se edita en su lugar cuando cambian. Se
-> complementa con [09-modelo-de-datos.md](09-modelo-de-datos.md), que define el esquema,
+> los datos crudos, en qué formato se obtienen, qué queda versionado, qué se deriva del
+> extracto y qué aporta el relevamiento de campo. Es el estado vivo de esas decisiones: se
+> edita en su lugar cuando cambian. Se complementa con
+> [09-modelo-de-datos.md](09-modelo-de-datos.md), que define el esquema,
 > y con [02-stack-y-estructura.md](02-stack-y-estructura.md), que define el acceso a
 > datos.
 
@@ -16,6 +17,7 @@ Este documento responde:
 - **Qué se versiona** y qué no (§4).
 - **Qué contiene** el extracto, medido (§5).
 - **Qué se deriva** de él y qué se ignora (§6).
+- **Qué aporta el relevamiento** de campo, con qué datos, y qué queda fuera del MVP (§7).
 
 No decide el modelo del grafo, la topología de pgRouting ni el importador: eso es #10,
 #12 y #13. Tampoco las convenciones del esquema, que están en
@@ -223,18 +225,30 @@ vehículos pasan.
 Los senderos y las `service` siguen en el extracto; lo que se decide acá es que el
 importador **no los lee**.
 
-### 6.7 La clave para reimportar, pendiente
+### 6.7 La identidad de los elementos derivados
 
 Los elementos derivados no tienen identificador externo: una vereda no viene de ninguna
-`way`, así que `osm_way_id` queda `NULL` y reimportar significa **reconstruir** el grafo. Eso
-choca con los obstáculos, que cuelgan de `sidewalk_id` con `ON DELETE RESTRICT`: reconstruir
-deja obstáculos huérfanos o los borra.
+`way`, así que `osm_way_id` queda `NULL`. Además, **no se inventa una numeración**: los
+códigos por manzana, plaza o eje sirven para hablar y para las fichas de campo, y no se
+guardan como clave. Un identificador tiene que poder **derivarse del extracto**, y OSM no
+tiene manzanas: `M001` no se puede generar, solo tipear. Y si el recorte se corre una cuadra,
+`M001` pasa a ser otra manzana aunque ninguna vereda se haya movido.
 
-La salida es una **clave determinista** —la `way` de origen, el lado y el tramo— y un *upsert*
-por esa clave. La columna concreta se decide en #10/#12; lo que no se deja para después es la
-propiedad que tiene que cumplir y las tres protecciones:
+**La identidad es geométrica: (calle, intersección de inicio, intersección de fin, lado).**
+Una vereda es una línea entre dos esquinas, sobre un lado de una calle, así que eso la
+distingue sin ambigüedad y sin depender de una enumeración. Dos consecuencias:
 
-1. **Upsert, no borrar y recrear.** La clave sale de datos que OSM no cambia seguido.
+- **La etiqueta humana se genera, no se guarda.** "Necochea, entre Perú y 25 de Mayo, lado
+  sur" se calcula desde el grafo, y es el mismo lenguaje que puede usar una ficha de campo.
+- **Es estable entre reimportaciones.** Las esquinas no se mueven, así que reconocerlas por
+  coordenadas devuelve **la misma** vereda, y con ella los obstáculos que cuelgan de su id.
+
+El nombre de la columna y la forma del valor derivado (un hash de las dos coordenadas, por
+ejemplo) se deciden en #10/#12. Lo que no se deja para después es la propiedad que tiene que
+cumplir y las tres protecciones:
+
+1. **Upsert, no borrar y recrear.** La clave sale de datos que OSM no cambia seguido: las
+   coordenadas de las esquinas.
 2. **Reanclaje por geometría** cuando la clave no aparece (vereda más cercana al `geom` del
    obstáculo, a menos de ~5 m) y, si no hay ninguna, el obstáculo queda **sin vínculo**.
 3. **Reporte de la corrida**: cuántos elementos se crearon, se actualizaron, se reanclaron y
@@ -245,17 +259,69 @@ es válido y su `geom` es la fuente de verdad. Por eso la falla es degradable, y
 requisito se puede verificar con un test barato: importar dos veces y comprobar que los ids
 no cambiaron y que los obstáculos conservan sus vínculos.
 
-## 7. Lo que este documento no decide
+## 7. El relevamiento: qué entra a la base
+
+El importador aporta **dónde** está cada vereda; el relevamiento de campo aporta **cómo
+está**. Sin él, el grafo existe con todo en `NULL` y el ruteo no distingue una vereda rota de
+una nueva. Es la única fuente de accesibilidad de la que va a disponer el MVP, porque OSM no
+trae ni veredas ni cordones (§5).
+
+### 7.1 Qué tiene que producir cada ficha
+
+Por **vereda**, identificada con la terna de §6.7:
+
+| Dato | Cómo se registra |
+| --- | --- |
+| Nivel de accesibilidad | `FULL`, `PARTIAL`, `NONE` o **sin relevar**, que es un valor válido del sistema y no un casillero vacío |
+| Verificación | Si el dato salió de una imagen o de una visita, con **fecha de la imagen** y **fecha de la revisión** por separado (`is_verified` solo es verdadero con visita) |
+| Obstáculos | Tipo del catálogo de once (`docs/09` §4.2) y severidad (`MINOR`, `MODERATE`, `CRITICAL`); la descripción libre va aparte |
+| Rampas | **En la esquina**, no en el cruce: un cruce tiene dos esquinas, y cada una su nivel |
+
+`is_verified` es un eje distinto del nivel (`docs/09` §4.1): una vereda puede estar `PARTIAL`
+según una imagen y seguir sin verificar. Un registro "visto en una foto" no es una
+verificación, y esa distinción es la que evita que el ruteo mienta.
+
+**La geometría no hace falta que la produzca el relevamiento**: la deriva el importador
+(§6.2). Pedirla otra vez duplicaría el dato y garantizaría que las dos versiones discrepen.
+
+### 7.2 Cómo se cruza con el grafo, sin bloqueo mutuo
+
+El relevamiento no necesita esperar al importador. Su unidad —el tramo entre dos
+intersecciones con sus dos veredas enfrentadas— es la misma que la del grafo, así que puede
+empezar escribiendo la clave en palabras ("Necochea, Perú → 25 de Mayo, lado sur"). Cuando
+exista el grafo, ese texto se empareja una sola vez con las veredas generadas, y las que no
+matcheen marcan un error en alguno de los dos lados: es una verificación barata y útil, no un
+retrabajo.
+
+**Los nombres son un problema real.** El callejero tiene la misma calle con dos nombres
+según el tramo (`4 Norte / Sarmiento`) y abreviaturas que no coinciden con OSM (`Av. España`
+es `España`; `General Espejo` es `Gral. Gerónimo Espejo`). Para emparejar hace falta una
+forma canónica por calle, y conviene que sea la de OSM, que es de donde sale la geometría.
+
+### 7.3 Lo que queda fuera del MVP
+
+| Dato | Por qué no entra ahora | Qué hacer con él mientras tanto |
+| --- | --- | --- |
+| Alturas domiciliarias | No hay dónde guardarlas: el esquema no tiene numeración de puerta | Registrarlas **vinculadas a la vereda**, en la misma hoja. Importarlas después es un join, no un segundo relevamiento |
+| Lugares de interés | El MVP no tiene tabla de lugares ni los usa en la ruta | Igual: vinculados a la vereda que los enfrenta |
+| Senderos de plaza y la conexión a través de Plaza Independencia | El modelo solo conoce aristas entre cordones: no existe la "área caminable" (§6.6) | Relevar la continuidad peatonal es útil, pero la app no va a rutear por adentro de la plaza. Es la primera extensión a evaluar cuando el MVP esté cerrado |
+
+Ninguna de las tres se descarta: se **saca del alcance del MVP** y se deja el dato en la
+misma hoja, para que el trabajo de campo no se repita. Lo que no se hace es prometer en la
+app lo que el modelo no puede mostrar.
+
+## 8. Lo que este documento no decide
 
 - **El modelo del grafo y la topología.** Cómo se numeran los nodos, cómo se arma la tabla
   de aristas para `pgr_dijkstra` y cómo se valida: #10 y #13.
 - **El importador.** El código que aplica §6: #12.
+- **El nombre de la columna de la clave** de §6.7 y la forma del valor derivado: #10/#12.
 - **El ancho exacto de cada calle.** §6.2 es una aproximación por clase, con `lanes` cuando
   existe. Se revisa con el mapa delante.
 - **Modelar áreas caminables.** Hoy no existe en el esquema; es lo que haría falta para
-  incluir las plazas como destino interior (§6.6).
+  incluir las plazas como destino interior (§6.6 y §7.3).
 
-## 8. Documentos relacionados
+## 9. Documentos relacionados
 
 - [09-modelo-de-datos.md](09-modelo-de-datos.md): el esquema que estos datos van a poblar.
 - [02-stack-y-estructura.md](02-stack-y-estructura.md): acceso a datos y convenciones.
