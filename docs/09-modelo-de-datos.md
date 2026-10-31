@@ -575,6 +575,7 @@ marcadores de la herramienta:
 | Geometría en el código | El backend no la interpreta: se escribe con `ST_SetSRID(ST_MakePoint(lon, lat), 4326)` y se lee con `ST_AsGeoJSON(geom)`. No se selecciona una columna `geom` cruda, porque lo que llega es WKB en hexadecimal ([05](05-desarrollo.md) §8) |
 | `updated_at` | Lo mantiene el trigger `set_updated_at()`, no el cliente |
 | Nombres de constraints | Explícitos (`fk_<tabla>_<referencia>`, `<tabla>_<columna>_key`), para poder soltarlos en una migración futura |
+| Clave que no es una columna | Se declara como índice único de expresión, con el mismo nombre `<tabla>_<columnas>_key`: un `UNIQUE` de tabla no admite expresiones. La identidad del grafo es el caso ([11 §4](11-grafo-peatonal.md)) |
 | FK de una tabla de unión | `ON DELETE CASCADE` |
 | FK hacia un catálogo | `ON DELETE RESTRICT`: el catálogo se da de baja con `is_active`, no borrando filas |
 | Reversión | El down deja la base como estaba, en orden inverso y con `IF EXISTS` |
@@ -606,8 +607,8 @@ actualizar y la columna sería peso muerto.
 - **La identidad de los elementos derivados.** El esquema guarda las columnas que la
   sostienen —la geometría de un nodo, los dos nodos de una arista—, pero la clave y su
   restricción de unicidad se deciden en
-  [11 §4](11-grafo-peatonal.md) y en
-  [#30](https://github.com/BLP-Technologies/rodando-x-mza/issues/30). Lo que sigue sin
+  [11 §4](11-grafo-peatonal.md) y las implementa la migración de índices únicos
+  ([#30](https://github.com/BLP-Technologies/rodando-x-mza/issues/30)). Lo que sigue sin
   resolverse acá: partir una arista en el punto de un obstáculo (§4.7) choca todavía
   con que el importador no puede respetar un nodo que no viene del extracto.
 
