@@ -2,9 +2,21 @@ erDiagram
     %% Valores cerrados: ver docs/09-modelo-de-datos.md %%
     %% Enums: accessibility_level (FULL, PARTIAL, NONE), obstacle_severity (MINOR,
     %% MODERATE, CRITICAL), report_status (PENDING, APPROVED, UNDER_REPAIR,
-    %% RESOLVED, REJECTED). Todos nullable: NULL = no determinado. %%
+    %% RESOLVED, REJECTED). Solo accessibility_level es nullable, y NULL = no
+    %% determinado; severity y status son NOT NULL (status con DEFAULT PENDING). %%
     %% El costo de ruteo no es columna de ninguna tabla: se calcula en una vista
     %% sobre veredas y cruces (docs/09 §4.7). %%
+    %% Lo que el diagrama no puede mostrar, y conviene tener a mano:
+    %%   - Unicos: obstacle_types.code y tutorial_categories.code; users.email,
+    %%     unico por lower(email) y solo entre los no borrados; user_tutorials
+    %%     (user_id, tutorial_id), para no guardar dos veces el mismo tutorial.
+    %%   - CHECK: en veredas y cruces start_node_id <> end_node_id (sin bucles);
+    %%     en obstaculos num_nonnulls(sidewalk_id, kerb_node_id, crossing_id) <= 1.
+    %%   - Defaults con significado: is_active de los catalogos en true; is_moderator,
+    %%     is_verified e is_resolved en false; reports.status en PENDING.
+    %%   - on delete: CASCADE en lo que cuelga del usuario como dato personal (lugares,
+    %%     rutas guardadas, tutoriales guardados); RESTRICT para reports.user_id, para
+    %%     los catalogos y para los elementos del grafo.
 
     USERS {
         int id PK
@@ -12,9 +24,9 @@ erDiagram
         varchar(200) email
         varchar(255) password_hash
         boolean is_moderator
-        datetime created_at
-        datetime updated_at
-        datetime? deleted_at
+        timestamptz created_at
+        timestamptz updated_at
+        timestamptz? deleted_at
     }
 
     USER_PLACES {
@@ -23,8 +35,8 @@ erDiagram
         varchar(100) name
         varchar(300)? description
         geometry(Point,4326) geom
-        datetime created_at
-        datetime updated_at
+        timestamptz created_at
+        timestamptz updated_at
     }
 
     SAVED_ROUTES {
@@ -33,8 +45,8 @@ erDiagram
         varchar(100) name "ej: Ir al trabajo"
         geometry(Point,4326) start_point "Punto A (Origen)"
         geometry(Point,4326) end_point "Punto B (Destino)"
-        datetime created_at
-        datetime updated_at
+        timestamptz created_at
+        timestamptz updated_at
     }
 
     %% Nodos de conexión: los vértices del grafo %%
@@ -43,8 +55,8 @@ erDiagram
         geometry(Point,4326) geom
         accessibility_level? accessibility_level "FULL, PARTIAL, NONE; NULL = no determinado"
         boolean is_verified "Un moderador confirmó el valor"
-        datetime created_at
-        datetime updated_at
+        timestamptz created_at
+        timestamptz updated_at
     }
 
     %% Vereda, de cordón a cordón %%
@@ -57,8 +69,8 @@ erDiagram
         accessibility_level? accessibility_level "FULL, PARTIAL, NONE; NULL = no determinado"
         geometry(LineString,4326) geom
         boolean is_verified "Un moderador confirmó el valor"
-        datetime created_at
-        datetime updated_at
+        timestamptz created_at
+        timestamptz updated_at
     }
 
     %% Cruce peatonal sobre calzada %%
@@ -69,8 +81,8 @@ erDiagram
         geometry(LineString,4326) geom
         accessibility_level? accessibility_level "FULL, PARTIAL, NONE; NULL = no determinado"
         boolean is_verified "Un moderador confirmó el valor"
-        datetime created_at
-        datetime updated_at
+        timestamptz created_at
+        timestamptz updated_at
     }
 
     %% Obstáculos o barreras físicas puntuales %%
@@ -83,9 +95,9 @@ erDiagram
         obstacle_severity severity "MINOR, MODERATE, CRITICAL"
         geometry(Point,4326) geom
         boolean is_resolved
-        datetime created_at
-        datetime updated_at
-        datetime? deleted_at
+        timestamptz created_at
+        timestamptz updated_at
+        timestamptz? deleted_at
     }
 
     %% Catálogo de tipos de obstáculo %%
@@ -94,8 +106,8 @@ erDiagram
         varchar(40) code "Inmutable en la API; ver docs/09 §4.2"
         varchar(80) name_es "Etiqueta para el portal"
         boolean is_active "Baja lógica del catálogo"
-        datetime created_at
-        datetime updated_at
+        timestamptz created_at
+        timestamptz updated_at
     }
 
     %% Reporte de obstáculos. No crea el obstáculo %%
@@ -109,9 +121,9 @@ erDiagram
         varchar(300)? image_url
         report_status status "PENDING, APPROVED, UNDER_REPAIR, RESOLVED, REJECTED"
         int? obstacle_id FK "Relación opcional con un obstáculo"
-        datetime created_at
-        datetime updated_at
-        datetime? deleted_at
+        timestamptz created_at
+        timestamptz updated_at
+        timestamptz? deleted_at
     }
 
     TUTORIALS {
@@ -120,9 +132,9 @@ erDiagram
         varchar(100) title
         varchar(300) description
         varchar(300) video_url
-        datetime created_at
-        datetime updated_at
-        datetime? deleted_at
+        timestamptz created_at
+        timestamptz updated_at
+        timestamptz? deleted_at
     }
 
     %% Catálogo de categorías de tutorial %%
@@ -131,8 +143,8 @@ erDiagram
         varchar(40) code "Inmutable en la API"
         varchar(80) name_es "Etiqueta para el portal"
         boolean is_active "Baja lógica del catálogo"
-        datetime created_at
-        datetime updated_at
+        timestamptz created_at
+        timestamptz updated_at
     }
 
     %% Tutoriales guardados por un usuario. Sin updated_at: sus columnas son inmutables %%
@@ -140,7 +152,7 @@ erDiagram
         int id PK
         int user_id FK
         int tutorial_id FK
-        datetime created_at
+        timestamptz created_at
     }
 
     USERS ||--o{ USER_PLACES: "Tiene lugares favoritos"
@@ -148,6 +160,8 @@ erDiagram
     KERB_NODES ||--o{ SIDEWALKS: "Nodo de inicio y fin"
     KERB_NODES ||--o{ CROSSINGS: "Nodo de inicio y fin"
     SIDEWALKS ||--o{ OBSTACLES: "Puede tener obstáculos"
+    KERB_NODES ||--o{ OBSTACLES: "Puede tener obstáculos"
+    CROSSINGS ||--o{ OBSTACLES: "Puede tener obstáculos"
     OBSTACLE_TYPES ||--o{ OBSTACLES: "Clasifica"
     OBSTACLE_TYPES ||--o{ REPORTS: "Clasifica la percepción"
     USERS ||--o{ REPORTS: "Puede reportar obstáculos"
