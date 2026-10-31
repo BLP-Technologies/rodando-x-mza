@@ -54,7 +54,7 @@ nodos** (§3).
 | Tag de OSM | Destino |
 | --- | --- |
 | `highway` | Qué entra (§2.1) y el offset de la vereda (§3.4) |
-| `id` de la `way` | `sidewalks.osm_way_id`, para trazabilidad. **No es único**: una `way` produce varias veredas |
+| `id` de la `way` | `sidewalks.osm_way_id`, para trazabilidad. **No es único**: una `way` produce varias veredas, y una vereda de un tramo hecho de varias `way` lleva el id de la que contiene su punto medio |
 | `name` | `sidewalks.street_name` |
 | `lanes` | Offset, cuando existe: gana sobre la clase (§3.4) |
 | `oneway` | Detección de boulevard: se buscan dos calzadas en sentidos opuestos (§3.6) |
@@ -67,7 +67,7 @@ Y lo que OSM trae en la zona y **no se lee**, con el motivo:
 | --- | --- | --- |
 | `sidewalk=both` / `sidewalk:both=separate` | 41 vías | Se derivan siempre las dos veredas (§3.4). El tag no dice dónde están ni cómo están |
 | `footway=sidewalk` | 0 | Sería la fuente de la geometría de la vereda, y no existe. Si apareciera, se ignora igual: el criterio del MVP es derivar, no depender de que OSM lo tenga dibujado |
-| `footway=crossing` | 18 vías | No alcanzan (hacen falta ~200) y mezclarlas rompe la uniformidad (§3.7) |
+| `footway=crossing` | 18 vías | No alcanzan (hacen falta 192) y mezclarlas rompe la uniformidad (§3.7) |
 | `highway=crossing` (nodo) | 128 | Ídem: marcan algunos cruces, no todos, y no tienen geometría |
 | `kerb`, `tactile_paving` | 4 nodos, todos en el búfer | Es dato de accesibilidad, y la accesibilidad la aporta el relevamiento ([12](12-relevamiento-de-accesibilidad.md)) |
 | `foot`, `access`, `sidewalk=no` | 0 | El MVP asume que en la zona piloto se camina por los dos lados de toda calle (§6) |
@@ -150,6 +150,44 @@ extracto no se deriva un cruce, porque la calle sigue y no sabemos qué hay del 
 lado. Es un artefacto conocido y aceptado, y es el motivo por el que el extracto se
 trae con búfer ([10 §3](10-datos-y-zona-piloto.md#3-fuente-y-formato)).
 
+**La T, y la vereda que sigue de largo.** En una T las dos calles que pasan son **la
+misma recta**, así que sus líneas de vereda son colineales: no se cruzan y no producen
+esquina. Pero la T igual tiene cuatro nodos, y los que faltan los pone la calle que
+termina:
+
+```
+            Calle Corta (el brazo que termina)
+                   |
+   ----------------┼----------------  calle que pasa
+      vereda   [nodo]  [nodo]   vereda
+                    ↑
+            vereda en frente de la boca
+```
+
+- **Del lado donde llega el brazo** hay dos esquinas normales, y entre ellas el cruce
+  sobre el brazo.
+- **Del lado opuesto** —el de la boca de la T— hay dos nodos que **no son
+  intersecciones de dos líneas de vereda**: son donde aterrizan los dos cruces sobre
+  la calle que pasa, y salen de prolongar las líneas del brazo que termina hasta la
+  vereda del lado opuesto.
+- Entre esos dos nodos va **una vereda más**, la que corre en frente de la boca. Es una
+  arista como cualquier otra y es lo que cierra el grafo: sin ella, la vereda del lado
+  opuesto queda partida en dos y sin conexión.
+
+**En la zona piloto hay cuatro T**, todas contra Plaza Independencia, que ocupa 2,2
+manzanas y corta las calles que la cruzarían:
+
+| T | El brazo que termina |
+| --- | --- |
+| Mitre × Gerónimo Espejo | Mitre, que es boulevard (#34) |
+| Mitre × Rivadavia | Mitre, que es boulevard (#34) |
+| Sarmiento oeste × Chile | Sarmiento, calle común: **la deriva el importador de la grilla** |
+| Sarmiento peatonal × Patricias Mendocinas | Sarmiento, peatonal al este de la plaza (#34) |
+
+Un brazo que termina y es un boulevard, o una peatonal, tiene más o menos líneas que
+dos: el lado opuesto recibe entonces más de dos nodos y más de una vereda de la boca.
+Eso se resuelve en #34, junto con esas vías.
+
 ### 3.3 El corte en tramos
 
 Cada línea caminable se corta **en cada nodo que cae sobre ella**. El resultado es el
@@ -223,8 +261,8 @@ calle, como los offsets.
 
 Un cruce es una arista que atraviesa una calzada y une **dos esquinas enfrentadas**.
 Se deriva **uno por brazo** de la intersección: cuatro en un cruce de cuatro brazos,
-tres en uno de tres. En la zona piloto salen del orden de **200**, contra los 18 que
-trae OSM.
+tres en una T. En la zona piloto son **192**: 45 intersecciones de cuatro brazos por
+cuatro cruces, más las 4 T por tres. Contra los 18 que trae OSM, es otra cosa.
 
 Su geometría es la **recta entre los dos nodos**, así que su largo sale de los del
 offset de la calle cruzada: no hay un ancho de calzada que inventar por separado, y

@@ -1,0 +1,162 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Extracto de prueba del importador: dos manzanas, escrito a mano.
+
+  No es un recorte del extracto real: es el caso controlado que usan los tests para
+  poder afirmar números exactos. Contiene, a propósito, los casos que el importador
+  tiene que distinguir (ver docs/11 y el issue #12):
+
+    - una calle partida en dos `way` con un nodo intermedio de grado 2 (Calle A),
+    - dos cruces de cuatro brazos en Calle A y dos en Avenida Ancha,
+    - una T de tres brazos (Calle Corta termina en Calle Uno),
+    - una calle con `lanes` (Avenida Ancha, primary con lanes=4),
+    - una calle sin `name` (la de lat -32.8890),
+    - un `service` y un `footway` sueltos, que no entran,
+    - dos peatonales, una con `area=yes` (plaza) y otra sin,
+    - dos calzadas opuestas a 15 m con el mismo nombre, que son un boulevard.
+
+  Las coordenadas son de Mendoza pero el damero es inventado y las distancias están
+  redondeadas: 0,0001 de longitud ~9,35 m y 0,0001 de latitud ~11,13 m.
+-->
+<osm version="0.6" generator="hand-written fixture">
+  <bounds minlat="-32.8897" minlon="-68.8483" maxlat="-32.8873" maxlon="-68.8443"/>
+
+  <!-- Calle A (norte-sur), con un nodo de grado 2 en -32.8885 -->
+  <node id="1" lat="-32.8875" lon="-68.8460"/>
+  <node id="2" lat="-32.8880" lon="-68.8460"/>
+  <node id="3" lat="-32.8885" lon="-68.8460"/>
+  <node id="4" lat="-32.8890" lon="-68.8460"/>
+  <node id="5" lat="-32.8895" lon="-68.8460"/>
+
+  <!-- Avenida Ancha (norte-sur) -->
+  <node id="6" lat="-32.8875" lon="-68.8450"/>
+  <node id="7" lat="-32.8880" lon="-68.8450"/>
+  <node id="8" lat="-32.8890" lon="-68.8450"/>
+  <node id="9" lat="-32.8895" lon="-68.8450"/>
+
+  <!-- Calles este-oeste -->
+  <node id="10" lat="-32.8880" lon="-68.8465"/>
+  <node id="11" lat="-32.8880" lon="-68.8445"/>
+  <node id="12" lat="-32.8890" lon="-68.8465"/>
+  <node id="13" lat="-32.8890" lon="-68.8445"/>
+
+  <!-- Calle Uno (este-oeste), cortada por Calle Corta en una T -->
+  <node id="26" lat="-32.8880" lon="-68.84625"/>
+  <node id="27" lat="-32.8875" lon="-68.84625"/>
+
+  <!-- Boulevard: dos calzadas separadas 15 m, en sentidos opuestos -->
+  <node id="14" lat="-32.8875" lon="-68.8480"/>
+  <node id="15" lat="-32.8885" lon="-68.8480"/>
+  <node id="16" lat="-32.8875" lon="-68.84784"/>
+  <node id="17" lat="-32.8885" lon="-68.84784"/>
+
+  <!-- Vías que no entran al grafo -->
+  <node id="18" lat="-32.8878" lon="-68.8470"/>
+  <node id="19" lat="-32.8878" lon="-68.8472"/>
+  <node id="20" lat="-32.8893" lon="-68.8470"/>
+  <node id="21" lat="-32.8893" lon="-68.8472"/>
+  <node id="22" lat="-32.8873" lon="-68.8447"/>
+  <node id="23" lat="-32.8881" lon="-68.8447"/>
+  <node id="24" lat="-32.8873" lon="-68.8443"/>
+  <node id="25" lat="-32.8881" lon="-68.8443"/>
+
+  <way id="101">
+    <nd ref="1"/>
+    <nd ref="2"/>
+    <tag k="highway" v="residential"/>
+    <tag k="name" v="Calle A"/>
+  </way>
+  <way id="102">
+    <nd ref="2"/>
+    <nd ref="3"/>
+    <tag k="highway" v="residential"/>
+    <tag k="name" v="Calle A"/>
+  </way>
+  <way id="103">
+    <nd ref="3"/>
+    <nd ref="4"/>
+    <tag k="highway" v="residential"/>
+    <tag k="name" v="Calle A"/>
+  </way>
+  <way id="104">
+    <nd ref="4"/>
+    <nd ref="5"/>
+    <tag k="highway" v="residential"/>
+    <tag k="name" v="Calle A"/>
+  </way>
+
+  <way id="105">
+    <nd ref="6"/>
+    <nd ref="7"/>
+    <nd ref="8"/>
+    <nd ref="9"/>
+    <tag k="highway" v="primary"/>
+    <tag k="name" v="Avenida Ancha"/>
+    <tag k="lanes" v="4"/>
+  </way>
+
+  <way id="106">
+    <nd ref="10"/>
+    <nd ref="26"/>
+    <nd ref="2"/>
+    <nd ref="7"/>
+    <nd ref="11"/>
+    <tag k="highway" v="residential"/>
+    <tag k="name" v="Calle Uno"/>
+  </way>
+
+  <!-- Termina en Calle Uno: una T de tres brazos, con nodo 26 compartido -->
+  <way id="114">
+    <nd ref="27"/>
+    <nd ref="26"/>
+    <tag k="highway" v="residential"/>
+    <tag k="name" v="Calle Corta"/>
+  </way>
+
+  <way id="107">
+    <nd ref="12"/>
+    <nd ref="4"/>
+    <nd ref="8"/>
+    <nd ref="13"/>
+    <tag k="highway" v="residential"/>
+  </way>
+
+  <way id="108">
+    <nd ref="14"/>
+    <nd ref="15"/>
+    <tag k="highway" v="residential"/>
+    <tag k="name" v="Avenida Doble"/>
+    <tag k="oneway" v="yes"/>
+  </way>
+  <way id="109">
+    <nd ref="17"/>
+    <nd ref="16"/>
+    <tag k="highway" v="residential"/>
+    <tag k="name" v="Avenida Doble"/>
+    <tag k="oneway" v="-1"/>
+  </way>
+
+  <way id="110">
+    <nd ref="18"/>
+    <nd ref="19"/>
+    <tag k="highway" v="service"/>
+  </way>
+  <way id="111">
+    <nd ref="20"/>
+    <nd ref="21"/>
+    <tag k="highway" v="footway"/>
+  </way>
+  <way id="112">
+    <nd ref="22"/>
+    <nd ref="23"/>
+    <tag k="highway" v="pedestrian"/>
+    <tag k="name" v="Peatonal Abierta"/>
+  </way>
+  <way id="113">
+    <nd ref="24"/>
+    <nd ref="25"/>
+    <tag k="highway" v="pedestrian"/>
+    <tag k="name" v="Plaza del Fixture"/>
+    <tag k="area" v="yes"/>
+  </way>
+</osm>

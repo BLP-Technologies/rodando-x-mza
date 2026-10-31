@@ -167,7 +167,7 @@ Qué se releva, con qué criterio se decide cada nivel, cómo se registra y qué
 fuera del MVP está en
 [12-relevamiento-de-accesibilidad.md](12-relevamiento-de-accesibilidad.md). Acá queda
 lo que depende de este documento: **la zona es la unidad de trabajo del relevamiento**.
-Son 36 manzanas, del orden de 180 veredas y 200 esquinas, y eso es lo que hace que una
+Son 36 manzanas, del orden de 180 veredas y 192 esquinas, y eso es lo que hace que una
 jornada de campo alcance y que el resultado se pueda verificar a ojo (§2).
 
 ## 8. Lo que este documento no decide
