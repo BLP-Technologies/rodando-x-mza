@@ -24,7 +24,6 @@ export interface Crossings {
   created_at: Generated<Timestamp>;
   end_node_id: number;
   geom: string;
-  has_traffic_light: Generated<boolean>;
   id: Generated<number>;
   is_verified: Generated<boolean>;
   start_node_id: number;
