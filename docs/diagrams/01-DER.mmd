@@ -3,6 +3,8 @@ erDiagram
     %% Enums: accessibility_level (FULL, PARTIAL, NONE), obstacle_severity (MINOR,
     %% MODERATE, CRITICAL), report_status (PENDING, APPROVED, UNDER_REPAIR,
     %% RESOLVED, REJECTED). Todos nullable: NULL = no determinado. %%
+    %% El costo de ruteo no es columna de ninguna tabla: se calcula en una vista
+    %% sobre veredas y cruces (docs/09 §4.7). %%
 
     USERS {
         int id PK
@@ -65,7 +67,6 @@ erDiagram
         int start_node_id FK
         int end_node_id FK
         geometry(LineString,4326) geom
-        boolean has_traffic_light
         accessibility_level? accessibility_level "FULL, PARTIAL, NONE; NULL = no determinado"
         boolean is_verified "Un moderador confirmó el valor"
         datetime created_at

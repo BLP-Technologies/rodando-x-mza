@@ -42,11 +42,10 @@ sequenceDiagram
 
     activate B
 
-    Note over B,DB: Inicia transacción BD:<br/>1. Registra el obstáculo formal<br/>2. Actualiza el costo/peso de la vereda en pgRouting<br/>3. Cambia estado del reporte a 'APPROVED'
+    Note over B,DB: Inicia transacción BD:<br/>1. Registra el obstáculo formal<br/>2. Cambia estado del reporte a 'APPROVED'<br/>Sin UPDATE de pesos: el costo se calcula en cada consulta (09 §4.7)
 
     B ->> DB: BEGIN TRANSACTION
     B ->> DB: INSERT INTO obstacles (sidewalk_id, ubicación, tipo, severidad)
-    B ->> DB: UPDATE sidewalks SET weight = weight + penalty WHERE id = sidewalk_id
     B ->> DB: UPDATE reports SET status = 'APPROVED', obstacle_id = nuevoId WHERE id = reportId
     B ->> DB: COMMIT
 
@@ -54,7 +53,7 @@ sequenceDiagram
     DB -->> B: Transacción exitosa
     deactivate DB
 
-    B -->> UI: 201 Created (Obstáculo registrado y ruta actualizada)
+    B -->> UI: 201 Created (Obstáculo registrado y publicado en el mapa)
     deactivate B
 
     UI -->> M: Muestra mensaje "Obstáculo creado y publicado en el mapa"

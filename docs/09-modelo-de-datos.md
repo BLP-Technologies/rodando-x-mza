@@ -17,6 +17,7 @@ Este documento responde:
   entre las tres formas posibles (§3).
 - **Qué** forma tiene cada campo cerrado del modelo, y qué relación hay entre
   reportes y obstáculos (§4).
+- **Dónde** vive el costo de ruteo de las aristas y con qué se combina (§4.7).
 - **Cómo** se administra un enum: orden, agregar, renombrar y quitar valores (§5).
 - **Qué** forma tiene un catálogo y cómo se da de baja una fila (§6).
 - **Cómo** se escribe una migración: formato, nombres, marcas de tiempo y
@@ -24,8 +25,8 @@ Este documento responde:
 
 No contiene el DER —eso es [01-diagramas.md](01-diagramas.md) §3 y su fuente en
 `docs/diagrams/01-DER.mmd`— ni las reglas de negocio que usan estos valores: las
-transiciones de estado están en los diagramas `05-est-*.mmd` y los pesos de ruteo se
-deciden en el issue correspondiente (§7).
+transiciones de estado están en los diagramas `05-est-*.mmd`. El costo de ruteo de las
+aristas sí se decide acá, pero solo en lo que toca al esquema: no es una columna (§4.7).
 
 ## 2. Convenciones del esquema
 
@@ -86,7 +87,7 @@ posible, porque el ruteo evita tramos que quizá están en buen estado.
 
 `PARTIAL` es el valor que justifica el ternario: una vereda angosta o con desnivel
 parcial no es intransitable, es transitable con penalización. Cuánto penaliza cada
-nivel se decide en el modelo de peso de las aristas (§7).
+nivel se decide en el costo de las aristas (§4.7).
 
 **`is_verified` es otro eje y no se reemplaza.** Dice procedencia —"un moderador
 comprobó este valor"— no accesibilidad. Un elemento puede tener nivel `PARTIAL`
@@ -129,11 +130,17 @@ que corresponde, así que el dato que alimenta el ruteo y las estadísticas no a
 esa es la señal de que falta un tipo en el catálogo — y agregarlo es un `INSERT`, no
 una migración, porque el catálogo es datos.
 
-**`obstacles.type` va a catálogo** porque el tipo no es solo una etiqueta: va a llevar
-atributos (nombre para mostrar, y más adelante su efecto en el ruteo) y va a crecer
-por datos —una barrera nueva no debería esperar un deploy—. Como `varchar` no admite
-ni lo uno ni lo otro, y como enum no admite atributos, la tabla de referencia es la
-única forma que cubre los dos casos.
+**`obstacles.type` va a catálogo** porque el tipo no es solo una etiqueta: lleva
+atributos propios (el nombre para mostrar) y va a crecer por datos —una barrera nueva no
+debería esperar un deploy—. Como `varchar` no admite un atributo, y como enum no admite
+atributos, la tabla de referencia es la única forma que cubre los dos casos.
+
+**El catálogo no lleva el efecto del tipo en el ruteo.** Si una barrera bloquea el paso o
+solo lo dificulta no es una propiedad del tipo —un pozo grande bloquea y uno chico no;
+una obra puede ocupar todo el ancho de la vereda o una parte— sino del obstáculo
+concreto, y ahí el dato ya existe: `obstacles.severity` (§4.7). Por eso no hay columna de
+peso ni de bloqueo en `obstacle_types`: agregarla daría dos fuentes para la misma
+pregunta y una contradicción posible (`MISSING_RAMP` marcado `MINOR` que igual bloquea).
 
 **`tutorials.category` va a catálogo** por la misma razón, con un argumento propio: la
 categoría la crean, editan y desactivan los moderadores. Un enum obligaría a una
@@ -141,7 +148,7 @@ migración cada vez que alguien agrega una categoría de video.
 
 ### 4.3 Los campos que se eliminan
 
-Dos campos del DER original se eliminaron, y se documenta acá porque quitarlos es una
+Tres campos del DER original se eliminaron, y se documenta acá porque quitarlos es una
 decisión de esquema, no un detalle.
 
 **`sidewalks.side`.** El "lado" de una vereda no es un atributo de la vereda: es una
@@ -181,6 +188,24 @@ de ruedas es `PARTIAL` o `NONE`. El ancho solo hace falta si se quiere *calcular
 nivel en vez de relevarlo. Agregar la columna después es aditivo y barato; y si el
 ruteo llegara a necesitar el dato, probablemente no sea una columna sino muestras a lo
 largo de la arista.
+
+**`crossings.has_traffic_light`.** Es el mismo caso que el ancho, con un problema más:
+un booleano **no dice lo que hay que saber**. Que un cruce tenga semáforo o no explica
+poco de su riesgo peatonal —cuenta el volumen y la velocidad del tráfico, si hay senda
+pintada, si la fase es protegida, el ancho de la calzada—, así que cualquier regla que lo
+usara estaría adivinando.
+
+Pero lo que lo vuelve inservible en el MVP es el valor por defecto. La columna es
+`NOT NULL DEFAULT false` y OpenStreetMap no trae el tag de forma confiable, así que **el
+import deja todo el grafo diciendo "sin semáforo"**. Una penalización por ese campo
+castigaría todos los cruces, incluidos los de una calle de barrio donde no hay semáforos
+porque no hacen falta: exactamente el error del booleano de accesibilidad (§4.1), un
+valor que significa "no sé" y termina afirmando algo falso.
+
+Se elimina del DER en esta decisión y la columna se borra con la migración
+correspondiente (#24). Si en alguna fase se quiere modelar el riesgo de un cruce, es un
+análisis propio —y casi seguro no con un booleano—; el tag de OSM se puede volver a
+importar cuando exista ese modelo.
 
 ### 4.4 El modelo en la calle
 
@@ -283,10 +308,163 @@ La razón es la promesa del producto. Si alguien guarda "casa → escuela" y el 
 almacena el camino calculado, ese camino puede volverse intransitable a la mitad —un
 obstáculo nuevo, una vereda rota— y la aplicación estaría mandando a la persona por un
 recorrido que ya no existe. Guardar el punto de partida y el de llegada obliga a
-recalcular cada vez, con los obstáculos y los pesos del momento.
+recalcular cada vez, con los obstáculos y la accesibilidad del momento.
 
 La consecuencia aceptada: el mismo par de extremos puede dar caminos distintos en
 momentos distintos. Eso no es un defecto, es el comportamiento correcto.
+
+### 4.7 El costo de las aristas se calcula, no se guarda
+
+Ni `sidewalks` ni `crossings` llevan una columna de costo. El costo de cada arista se
+**deriva en la consulta de ruteo** a partir de lo que ya está en el esquema: la longitud de
+su geometría, el `accessibility_level` del elemento y los obstáculos activos que lo afectan.
+
+Una vista, `walkable_edges`, reúne las dos tablas de aristas y escribe la fórmula una sola
+vez:
+
+```
+costo(e) = metros(e) × factor_nivel(e) + Σ penalización(obstáculos activos de e)
+```
+
+**Una vista no es una copia.** `CREATE VIEW` guarda solo el texto de la consulta: cada vez
+que se consulta, PostgreSQL lo expande y calcula el costo en ese momento. No ocupa espacio,
+no hay nada que mantener actualizado y no puede desincronizarse con las tablas. La que
+guarda datos es la vista *materializada*, y es justamente la que no se quiere.
+
+**`metros`** es `ST_Length(geom::geography)`, en metros reales y no en grados. No es un
+detalle: `pgr_dijkstra` minimiza la suma de los costos, así que las aristas tienen que estar
+en una unidad comparable; con grados, un tramo norte-sur cuesta más que uno este-oeste del
+mismo largo. Y sin ningún término de distancia el algoritmo minimiza la **cantidad de
+aristas** y no los metros: una ruta de quince cuadras cortas le gana a una de tres largas.
+
+**`factor_nivel`** multiplica, porque el nivel y el largo describen el mismo recorrido: 100 m
+de vereda `PARTIAL` cuestan como 200 m, y así se comparan con 200 m de vereda `FULL`.
+
+| `accessibility_level` | `factor_nivel` |
+| --- | --- |
+| `FULL` | 1 |
+| `PARTIAL` | 2 |
+| `NULL` | 2 |
+| `NONE` | `-1` |
+
+`NONE` no es un factor alto: **es `-1`, que es como pgRouting representa una arista que no
+se puede recorrer** ("a negative value on a cost column is interpreted as the edge does not
+exist"). Con eso la arista queda fuera del grafo sin un `WHERE` que la filtre, y cuando no
+hay camino el caso de uso ya tiene respuesta: C003 devuelve la mejor ruta disponible y marca
+los tramos comprometidos.
+
+`NULL` se cobra como `PARTIAL`, y la regla se enuncia así: **sin dato no se evita y no se
+premia**. Las dos lecturas directas son peores. Cobrarlo como `FULL` hace que el import de
+OpenStreetMap —que no trae accesibilidad— deje toda la red gratis, y entonces el ruteo
+prefiere una vereda sin relevar antes que una que un moderador revisó y marcó `PARTIAL`: el
+relevamiento castigaría al dato bueno. Cobrarlo como `NONE` deja la zona piloto sin ninguna
+ruta posible, que es el default que §4.1 ya descartó para el ternario.
+
+**Las penalizaciones suman, y por eso no multiplican.** Un obstáculo es un evento puntual:
+está en un lugar, y cuesta lo mismo en una cuadra de 50 m que en una de 100. Si su efecto
+multiplicara el largo, el mismo pozo costaría el doble por estar en una vereda más larga,
+que es falso; lo que escala con la distancia es caminar, y eso ya está en `metros`. Sumar
+deja además una sola unidad, los **metros equivalentes**: "este pozo cuesta como 15 m de
+vuelta".
+
+| Situación de la arista | Sumando |
+| --- | --- |
+| Sin obstáculos activos | 0 |
+| Un obstáculo `MINOR` | +15 m |
+| Un obstáculo `MODERATE` | +40 m |
+| Un obstáculo `CRITICAL` | la arista pasa a `-1` |
+
+Dos obstáculos en la misma cuadra suman. Que el mismo pozo reportado por cinco personas
+cuente una vez no depende de esta fórmula sino del modelo: los cinco reportes apuntan a
+**un** obstáculo, no a cinco (§4.5).
+
+**`CRITICAL` es la única severidad que no se pondera: bloquea.** Bloquear es una propiedad
+del obstáculo concreto y no de su tipo —un pozo grande bloquea y uno chico solo dificulta;
+una obra puede ocupar todo el ancho de la vereda o una parte—, así que el dato vive en
+`obstacles.severity` y no en el catálogo (§4.2). La consecuencia a tener presente: en el
+enum, `CRITICAL` pasa a significar "no se puede pasar" y ya no puede significar "muy malo,
+pero pasable". Si ese matiz hiciera falta, se agrega un nivel al enum (§5), no una columna.
+
+**Obstáculos activos** son los que tienen `is_resolved = false` y `deleted_at IS NULL`. El
+estado del reporte no entra en el costo: un reporte `UNDER_REPAIR` cuyo obstáculo sigue
+activo describe una barrera que sigue en la calle.
+
+**En un nodo, solo se honra el bloqueo.** Los metros son una cantidad de arista y un
+`kerb_node` no tiene: `pgr_dijkstra` no cobra por nodo, y como el caminar es no dirigido
+tampoco se puede cobrar "al salir" de uno sin volver el grafo dirigido. Entonces un
+obstáculo `CRITICAL` sobre un cordón deja intransitables todas sus aristas incidentes —la
+esquina no se puede usar, que es lo que significa una rampa faltante—, y un `MINOR` o
+`MODERATE` sobre un cordón **no mueve el costo**: queda en el mapa como información. Las
+alternativas descartadas repartían la penalización entre las aristas incidentes, con lo que
+la cuenta dependía del grado del nodo y una ruta que atravesaba la esquina pagaba dos veces.
+La puerta para modelar costo en el nodo existe —`pgr_trsp` con penalizaciones de giro— pero
+pide un grafo consciente de giros: es otra decisión.
+
+Los números de las tablas son el **punto de partida**, no el contrato: se ajustan midiendo
+rutas reales, y viven en la vista, no en los datos.
+
+#### Por qué no una columna `weight`
+
+El diagrama de C012 escribía `UPDATE sidewalks SET weight = weight + penalty` al crear un
+obstáculo, y ese `UPDATE` es el que no va a existir. Los motivos:
+
+1. **Una columna así es un caché sin invariante.** Tiene que ser verdadera después de cada
+   escritura, y los escritores son varios: crear el obstáculo (C012), resolverlo (C013),
+   cambiar el nivel de accesibilidad (C014), corregir la severidad en el portal, reimportar
+   OpenStreetMap. Cada uno de esos caminos tendría que acordarse de recalcular, y ninguno de
+   esos cálculos se puede auditar: no queda registro de qué se sumó.
+2. **`weight = weight + penalty` no se puede revertir.** Resolver el obstáculo tiene que
+   restar exactamente lo que se sumó: si la misma barrera tuvo dos reportes aprobados como
+   dos obstáculos se sumó dos veces, pero no hay columna que diga cuántas, y la reparación
+   resta una vez. Con el costo derivado, resolver el obstáculo alcanza para que deje de
+   contar.
+3. **El obstáculo ya es dueño de su efecto.** Guardar el efecto en la arista duplica una
+   verdad que tiene dueño propio, que es el obstáculo con su tipo, su severidad y su estado.
+   Es el mismo argumento de §4.6 para no guardar el recorrido de una ruta guardada, y el de
+   §4.1 para que `report_status` no lleve un valor `DELETED`.
+4. **El número es política, no dato de la calle.** Qué factor recibe cada nivel y cuántos
+   metros equivalentes suma cada severidad se ajusta probando, y guardarlos convertiría cada
+   ajuste en una migración de datos sobre todo el grafo. Así se cambia una vista.
+
+#### Limitaciones aceptadas
+
+**Bloquear bloquea la arista entera.** Una barrera en el metro 80 de una vereda de 100 m
+deja intransitable también el metro 60, que físicamente se puede caminar hasta ahí. Pasa
+porque la unidad de costo es la arista y el modelo no tiene barreras en el medio de una; las
+aristas ya se cortan en cada nodo, así que en el peor caso se pierde una cuadra.
+
+El arreglo correcto no es afinar el costo por metro: es **partir la arista en el punto del
+obstáculo** cuando el moderador lo vincula, con ese punto convertido en un `kerb_node` nuevo
+y las dos mitades heredando nivel y verificación. No entra en el MVP por una razón que no es
+de esquema: sería la primera vez que el portal modifica el grafo, y eso exige que el
+importador respete los cortes al reimportar, cosa que hoy no puede porque `crossings` no
+tiene identificador externo (§8). Se revisa cuando el importador sea idempotente. Mientras
+tanto, el portal puede avisar, al vincular un obstáculo a un tramo, que en el ruteo esa
+barrera bloquea la cuadra entera y no solo el punto: la limitación queda visible en lugar de
+sorpresiva.
+
+#### Consecuencias
+
+- **C012 no recalcula nada.** Crea el obstáculo y marca el reporte; el efecto en el ruteo
+  aparece en la próxima consulta, sin escribir en las tablas del grafo. Bajar además el nivel
+  del elemento, cuando la barrera cambia su estado actual, sigue siendo válido (§4.5), pero
+  el ruteo ya no depende de que se haga.
+- **C013 y C014 tampoco.** Resolver un obstáculo o cambiar un nivel escribe una sola tabla.
+  Dejan de existir los escritores del costo que podían desincronizarlo.
+- **Toda consulta de ruteo paga la derivación.** En la zona piloto son algunos miles de
+  aristas y no se nota. Se mide con `EXPLAIN` antes de suponer; si molesta, la salida es una
+  vista materializada que se refresca cuando cambia una de las tablas que la alimentan, no
+  una columna que alguien actualiza a mano.
+- **Hacen falta índices parciales de obstáculos activos** por `sidewalk_id`, `kerb_node_id` y
+  `crossing_id`. Los que existen filtran por `IS NOT NULL`, no por estado. Se agregan al
+  implementar el ruteo, con la medición a la vista.
+- **La vista es donde se unen las dos tablas de aristas.** `pgr_dijkstra` necesita una sola
+  relación con `id`, `source`, `target` y `cost`, y los `id` de veredas y cruces se pisan,
+  así que ahí se resuelven los identificadores sintéticos; como el caminar es no dirigido,
+  alcanza con `cost` y `directed => false`, sin `reverse_cost`. La topología y el
+  identificador sintético son del importador.
+- **El semáforo no entra.** `crossings.has_traffic_light` se elimina (§4.3): el costo de un
+  cruce no depende por ahora de nada más que su accesibilidad y sus obstáculos.
 
 ## 5. Administrar un enum
 
@@ -391,21 +569,19 @@ actualizar y la columna sería peso muerto.
 ## 8. Lo que este documento no decide
 
 - **Transiciones de estado.** Qué valores existen lo garantiza la base; qué
-transiciones son válidas lo garantiza la máquina de estados en el servicio, con los
-diagramas `05-est-*.mmd` como fuente y tests que las cubran. Que exista `RESOLVED` no
-impide escribir `PENDING → RESOLVED`; eso no es trabajo del esquema.
-- **Pesos de ruteo.** Cuánto penaliza un nivel de accesibilidad, si un tipo de
-obstáculo bloquea o penaliza, y cómo se combinan. Los catálogos están listos para
-recibir esas columnas cuando se decida.
-- **Pesos de ruteo.** Cuánto penaliza un nivel de accesibilidad, si un tipo de
-  obstáculo bloquea o penaliza, y cómo se combinan. Los catálogos están listos para
-  recibir esas columnas cuando se decida. Mientras tanto, el diagrama de C012 asume un
-  `sidewalks.weight` que todavía no existe.
+  transiciones son válidas lo garantiza la máquina de estados en el servicio, con los
+  diagramas `05-est-*.mmd` como fuente y tests que las cubran. Que exista `RESOLVED` no
+  impide escribir `PENDING → RESOLVED`; eso no es trabajo del esquema.
+- **El valor de los factores de costo.** §4.7 fija la regla —las penalizaciones suman,
+  `NULL` se cobra como `PARTIAL`, `CRITICAL` bloquea— y un punto de partida para los
+  números. Ajustarlos es calibrar, y se hace midiendo rutas reales cuando exista el ruteo.
 - **La identidad de los cruces para reimportar.** `sidewalks` guarda su `osm_way_id`,
   pero `crossings` no tiene ningún identificador externo: si el importador se vuelve a
   correr, no puede reconocer un cruce que ya existe salvo comparando geometría. Se
   resuelve en el importador, no en el esquema, pero conviene tenerlo anotado antes de
-  escribir el importador de OpenStreetMap.
+  escribir el importador de OpenStreetMap. De eso depende también partir una arista en
+  el punto de un obstáculo, que es la única forma de que una barrera no bloquee la
+  cuadra entera (§4.7).
 
 ## 9. Documentos relacionados
 

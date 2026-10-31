@@ -1,6 +1,6 @@
 stateDiagram-v2
     accTitle: Ciclo de vida del obstáculo
-    accDescr: Estados del obstáculo que el moderador crea en el mapa a partir de un reporte aprobado, y su efecto sobre el peso de la vereda en el cálculo de recorridos accesibles.
+    accDescr: Estados del obstáculo que el moderador crea en el mapa a partir de un reporte aprobado, y su efecto sobre el costo del tramo afectado en el cálculo de recorridos accesibles.
 
     state "ACTIVO" as ACTIVE
     state "RESUELTO" as RESOLVED
@@ -14,9 +14,11 @@ stateDiagram-v2
     RESOLVED --> DELETED: baja lógica (deleted_at)
 
     note right of ACTIVE
-        Mientras está activo, el obstáculo se considera
-        en el cálculo de recorridos: la vereda afectada
-        se penaliza o directamente se evita.
+        Mientras está activo, el obstáculo entra en el
+        costo del tramo: la severidad suma metros
+        equivalentes y CRITICAL deja el tramo
+        intransitable. El costo se calcula en cada
+        consulta, no se guarda (docs/09 §4.7).
     end note
 
     note left of ACTIVE
@@ -29,8 +31,9 @@ stateDiagram-v2
     note left of RESOLVED
         En el modelo de datos el estado se guarda con el
         booleano obstacles.is_resolved, no con un estado
-        con nombre propio. Al resolverse, el peso de la
-        vereda vuelve a su valor normal.
+        con nombre propio. Al resolverse deja de contar en
+        el costo: el de la arista se calcula en cada
+        consulta, así que no hay valor que revertir.
     end note
 
     note right of DELETED
