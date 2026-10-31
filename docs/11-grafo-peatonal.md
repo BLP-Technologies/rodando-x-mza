@@ -266,8 +266,10 @@ salen manzanas: `M001` no se genera, se tipea.
 
 No hace falta una columna `key`. El par de nodos ya está en la tabla, y un hash
 guardado sería un dato derivado que hay que recalcular y que depende de la función de
-hash, no del grafo. La restricción de unicidad que lo vuelve clave, y su `Down
-Migration`, son la tarea [#30](https://github.com/BLP-Technologies/rodando-x-mza/issues/30).
+hash, no del grafo. La restricción que lo vuelve clave está en
+`infra/migrations/1793486697815_add-graph-unique-indexes.sql`, con su
+`Down Migration` ([#30](https://github.com/BLP-Technologies/rodando-x-mza/issues/30)), y
+es lo que el importador usa para el `ON CONFLICT`.
 
 El par de nodos es la clave **dentro de cada tabla**: una vereda y un cruce pueden
 unir las mismas dos esquinas sin colisionar, porque cada tabla tiene su índice.
@@ -355,8 +357,7 @@ disparador para revisarla, y el disparador más frecuente es el relevamiento.
 - **La construcción y validación de la topología.** Que las aristas queden
   efectivamente conectadas y que una consulta devuelva un recorrido entre dos puntos
   conocidos: #13.
-- **Los índices únicos** de §4: [#30](https://github.com/BLP-Technologies/rodando-x-mza/issues/30).
-  #12 los usa para el upsert.
+- **Los índices únicos** de §4 ya existen; #12 los usa para el upsert.
 - **El valor de los offsets** (§3.4) y del umbral de boulevard (§3.6). Son puntos de
   partida, y se ajustan mirando el mapa de la zona piloto.
 - **La fórmula del costo.** Vive en [09 §4.7](09-modelo-de-datos.md#47-el-costo-de-las-aristas-se-calcula-no-se-guarda).
