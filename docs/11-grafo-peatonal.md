@@ -25,8 +25,8 @@ esqueleto: qué calles existen, por dónde pasan, cómo se llaman y de qué clas
 Las veredas, las esquinas y los cruces los construye el importador sobre ese
 esqueleto.
 
-No decide el código del importador (#12) ni la construcción y validación de la
-topología con una consulta real (#13). Tampoco el costo de las aristas, que vive en
+No decide el código del importador (#12, #33 y #34) ni la construcción y validación de
+la topología con una consulta real (#13). Tampoco el costo de las aristas, que vive en
 [09 §4.7](09-modelo-de-datos.md): acá se define la forma de la relación, no la
 fórmula. Los números de las tablas son un punto de partida y se revisan con el mapa
 delante.
@@ -115,15 +115,32 @@ donde el borde es la vereda.
 
 ### 3.2 Los nodos
 
-Un `kerb_node` es **la intersección de dos líneas caminables** de calles distintas, o
-el extremo de una línea en el borde del extracto. Nada más crea un nodo.
+Un `kerb_node` es **la intersección de dos líneas caminables** de calles distintas, o el
+extremo de una línea en el borde del extracto. Nada más crea un nodo: un punto que no es
+extremo de ninguna arista no entra a `kerb_nodes`, y si una esquina calculada no cortó
+ninguna línea, el reporte lo dice (§4).
 
 | Situación | Nodos | Aristas por nodo |
 | --- | --- | --- |
-| Dos calles se cruzan (X, cuatro brazos) | 4: cada una de las dos líneas de una calle contra las dos de la otra | 4 |
-| Una calle termina en otra (T, tres brazos) | 4: los mismos pares de líneas, prolongando la que termina a través de la que pasa | 4 y 3: los dos del lado donde no hay esquina quedan sobre la vereda continua, y ahí empieza el cruce |
+| Dos calles se cruzan (X, cuatro brazos) | 4: uno por cuadrante | 4 |
+| Una calle termina en otra (T, tres brazos) | 4: dos esquinas y dos del lado opuesto | 4 y 3: los dos del lado donde no hay esquina quedan sobre la vereda continua, y ahí empieza el cruce |
 | Fin de calle en el borde del extracto | 1 por línea: la vereda termina donde termina el extracto | 1 |
 | La misma calle doblada, sin otra que la cruce | **Ninguno**: el quiebre es geometría de la línea, no un nodo | — |
+
+**Una esquina, una vez.** La esquina la forman los **dos brazos que la bordan**, y de
+cada uno se toma la línea que mira hacia el otro: la de la izquierda de un brazo contra
+la de la derecha del siguiente, en orden angular. Nada más hace falta. En particular, no
+se cruzan todas las líneas de la intersección entre sí: la línea que mira al brazo de al
+lado, cruzada con la que mira al de enfrente, da un punto en el cuadrante equivocado, que
+no es ninguna esquina.
+
+Esa distinción no es un detalle fino. **El ancho de la calle puede cambiar en el nodo**,
+porque `lanes` viene por `way` y una avenida puede tener dos carriles en una cuadra y
+cuatro en la siguiente (§3.4). Con anchos iguales el punto del cuadrante equivocado cae
+encima de la esquina y el error no se ve; con anchos distintos cae a metros, y entonces la
+intersección queda con dos o cuatro nodos por esquina, unidos por veredas de dos metros, y
+un cordón por esquina en lugar de uno. Con la regla del cuadrante cada esquina sale una
+sola vez, en la intersección real de las dos veredas que la forman.
 
 Esta regla es la que explica el grafo de la esquina de
 [09 §4.4](09-modelo-de-datos.md#44-el-modelo-en-la-calle): cuatro nodos y, alrededor,
@@ -146,7 +163,7 @@ tienen grado 2 y no son una intersección, así que no se corta ahí.
 Un chequeo geométrico con tolerancia (~2 m) recorre el extracto buscando **cruces de
 geometría sin nodo compartido**, y **sólo los reporta**: no inventa la intersección.
 Una imperfección de OSM se ve en el reporte de la corrida, y no como dos calles que se
-tocan en el mapa y no en el grafo.
+tocan en el mapa y no en el grafo. En la zona piloto no encuentra ninguno.
 
 **Los nodos que no son de esquina.** Dos casos: el fin de calle del extracto y el
 cambio de nombre (§3.8). En el primero, la vereda termina sin cruce: en el borde del
@@ -173,10 +190,16 @@ termina:
 - **Del lado opuesto** —el de la boca de la T— hay dos nodos que **no son
   intersecciones de dos líneas de vereda**: son donde aterrizan los dos cruces sobre
   la calle que pasa, y salen de prolongar las líneas del brazo que termina hasta la
-  vereda del lado opuesto.
+  vereda del lado opuesto. En la regla del cuadrante son el par que bordan los dos
+  brazos que pasan: uno por cada línea del brazo que termina, cruzada con la vereda de
+  enfrente de la calle que pasa.
 - Entre esos dos nodos va **una vereda más**, la que corre en frente de la boca. Es una
   arista como cualquier otra y es lo que cierra el grafo: sin ella, la vereda del lado
   opuesto queda partida en dos y sin conexión.
+
+Las nueve T de la zona piloto se derivan enteras, con sus cuatro nodos y su vereda de
+la boca. Cuando una boca no se puede cerrar —el lado opuesto no da exactamente dos
+nodos— la corrida lo reporta con el nodo y no inventa la vereda.
 
 **En la zona piloto la corrida encuentra nueve T.** El cuadro original de esta sección
 partía del mapa con el boulevard y la peatonal ya derivados: cuatro T, todas contra
@@ -200,14 +223,15 @@ peatonal, también es #34. Y quedan **tres nodos de tres brazos donde ninguno es
 termina** —una calle que se abre en Y, dos que se tocan en un punto—: ésos se reportan
 y no se derivan, porque no son ni un cruce ni una T.
 
-Una de las nueve —Chile × Avenida Colón— **no deriva su vereda de la boca**: la calle
-que pasa cambia de ancho en el nodo, así que el lado opuesto tiene cuatro esquinas en
-lugar de dos y no hay un segmento que cierre la boca sin decidir algo nuevo. La corrida
-lo reporta con el nodo y el grafo queda con las dos veredas del lado opuesto sueltas.
-
 Un brazo que termina y es un boulevard, o una peatonal, tiene más o menos líneas que
 dos: el lado opuesto recibe entonces más de dos nodos y más de una vereda de la boca.
 Eso se resuelve en #34, junto con esas vías.
+
+**Los tramos que desembocan en una intersección no soportada** quedan sin cortar en esa
+punta, así que no producen vereda de ese lado. En la zona piloto son los nueve brazos de
+los tres nodos en Y, y se reportan una sola vez, por el nodo. Cualquier otro tramo que
+quede sin vereda es un error de corte y el reporte lo dice con el número de tramo y la
+calle (§4).
 
 ### 3.3 El corte en tramos
 
@@ -237,6 +261,14 @@ Cuando la `way` trae `lanes`, gana sobre la clase: `offset = lanes × 3 m / 2 + 
 Los números son un punto de partida: la clase no siempre coincide con lo que se ve
 (`9 de Julio` está como `residential` y no es angosta), así que la tabla admite
 excepciones por calle.
+
+**El offset es por tramo, no por calle.** `lanes` viene en la `way`, y las `way` de una
+misma avenida no siempre lo traen igual: en la zona piloto hay quince intersecciones
+donde el ancho cambia de una cuadra a la siguiente (Las Heras tiene dos carriles de un
+lado y cuatro del otro), así que la vereda de una cuadra queda a 4,5 m del eje y la de
+la cuadra siguiente a 7,5 m. **No se promedian ni se igualan**: el desnivel existe, y
+lo que tiene que quedar bien es que la esquina sea una sola (§3.2). Promediar además
+haría que el error se reparta entre dos cuadras correctas.
 
 **La geometría no se inventa de cero**: es el eje corrido, con la misma forma. Por eso
 un tramo de vereda mide prácticamente lo mismo que su calzada, y por eso el error del
@@ -304,9 +336,21 @@ cuatro cruces, más las 9 T por tres. Contra los 18 que trae OSM, es otra cosa. 
 recuento anterior de 192 salía de estimar 45 cruces y 4 T mirando el mapa; con las
 `way` de la grilla y la regla del grado 3 son 69 intersecciones.)
 
+**Cómo se saben las dos esquinas de un brazo.** Cada brazo queda entre dos de los cuatro
+nodos de la intersección: los dos que bordean sus costados. El cruce los une y nada más,
+así que en un cruce de cuatro brazos salen cuatro y en una T salen tres —sobre el brazo
+que termina, entre sus dos esquinas; sobre cada lado de la calle que pasa, entre una
+esquina y el nodo de la boca—. Con la regla de una esquina por cuadrante (§3.2) ese par
+es único. Si a la intersección le falta una esquina, ese brazo no tiene cruce y el
+reporte lo dice en vez de cruzar el brazo contra el nodo que encontró más cerca.
+
 Su geometría es la **recta entre los dos nodos**, así que su largo sale de los del
 offset de la calle cruzada: no hay un ancho de calzada que inventar por separado, y
 un cruce sobre una avenida es más largo que uno sobre una calle interna.
+
+`crossings.accessibility_level` **se queda en `NULL`**: el nivel de un cruce se deriva
+del peor de sus dos esquinas al rutear ([12 §3](12-relevamiento-de-accesibilidad.md)), y
+el importador no inventa ninguno. `is_verified` lo mismo: nadie miró nada.
 
 `crossings` no tiene `street_name`: un cruce pertenece a la calle que cruza, y esa
 calle tiene dos nombres posibles. El nombre del tramo sale de la vereda que lo
@@ -343,12 +387,11 @@ salen manzanas: `M001` no se genera, se tipea.
 | `sidewalks` y `crossings` | El par de nodos en **orden canónico** (`least`/`greatest`): caminar es no dirigido, y A→B es la misma arista que B→A |
 
 Las coordenadas que el importador **deriva** —esquinas y extremos de línea— se normalizan
-además a **6 decimales** (~10 cm) antes de buscar su fila. La misma esquina calculada
-desde dos pares de líneas distintos puede diferir en centímetros, porque el eje de los
-dos tramos de la calle que pasa no coincide exactamente en el nodo: sin esa
-normalización, la misma esquina entra como dos cordones a un centímetro de distancia y
-la vereda de la boca de una T no encuentra sus dos nodos. Las coordenadas del extracto
-no se tocan: ésas ya vienen con su precisión.
+además a **6 decimales** (~10 cm) antes de buscar su fila. La razón no es juntar casi
+iguales: cada esquina se calcula una sola vez (§3.2), pero el mismo número tiene que
+usarse en tres lugares —el punto que se guarda, el corte de la línea y el par de cordones
+de la vereda—, y si cada uno redondea distinto la vereda no encuentra su esquina. Las
+coordenadas del extracto no se tocan: ésas ya vienen con su precisión.
 
 No hace falta una columna `key`. El par de nodos ya está en la tabla, y un hash
 guardado sería un dato derivado que hay que recalcular y que depende de la función de
@@ -382,8 +425,8 @@ Las tres protecciones que acompañan al upsert:
    queda sin vínculo: en [09 §4.5](09-modelo-de-datos.md#45-reporte-y-obstáculo)
    colgar un obstáculo de cero elementos es válido y su `geom` es la fuente de verdad.
 3. **Reporte de la corrida.** Cuántos nodos, veredas y cruces se crearon, se
-   actualizaron y se reanclaron, cuántos quedaron sin vínculo, y los avisos de §3.2 y
-   §3.6. Es lo que convierte una imperfección del extracto en algo visible.
+   actualizaron y se reanclaron, cuántos quedaron sin vínculo, y los avisos de §3.2,
+   §3.6 y §3.7. Es lo que convierte una imperfección del extracto en algo visible.
 
 **El test es barato:** importar dos veces sobre la misma base y comprobar que los ids
 no cambiaron, que no hay filas nuevas y que los obstáculos conservan sus vínculos.
@@ -408,10 +451,24 @@ vías, el comando falla con un mensaje que dice eso, y no deja nada escrito.
 El **reporte de la corrida** sale por la salida estándar con el logger del backend, y
 es lo que hay que leer antes de mirar el grafo: vías leídas, incluidas y descartadas por
 clase, calzadas de boulevard fuera de la grilla, tramos, intersecciones por tipo,
-cordones y veredas creados y reusados, líneas que `ST_OffsetCurve` devolvió partidas o
-vacías, y una advertencia por cada intersección que no se derivó o T que quedó sin su
-vereda de la boca. Correrlo dos veces seguidas tiene que dar `created: 0` en cordones y
-veredas, y es lo que hace el test de integración con el extracto de prueba.
+cordones y veredas creados y reusados, cruces creados y actualizados, líneas que
+`ST_OffsetCurve` devolvió partidas o vacías, y las advertencias. Cada advertencia dice
+qué pasó y dónde:
+
+- una intersección que no se derivó, con su nodo;
+- una intersección cuyo número de esquinas o de cruces no cierra, con el nodo, los brazos
+  y —si en ese nodo desemboca una vía fuera de la grilla— de qué clase: un brazo de
+  `service` y un error de corte dan el mismo síntoma y no son el mismo problema;
+- una T que no cerró su vereda de la boca;
+- un tramo con una línea que no llegó a vereda;
+- dos vías que se cruzan sin compartir un nodo.
+
+Correrlo dos veces seguidas tiene que dar `created: 0` en cordones, veredas y cruces, y
+es lo que hace el test de integración con el extracto de prueba. Como no borra filas,
+una base que ya tenía un grafo derivado con otra regla conserva lo viejo: para ver el
+resultado nuevo hay que vaciar las tres tablas del grafo (`crossings`, `sidewalks`,
+`kerb_nodes`) antes de reimportar. En desarrollo alcanza; cuando haya relevamiento
+cargado, la protección es la de §3.2 y §4, no el truncado.
 
 ## 5. El grafo para pgRouting
 
@@ -464,7 +521,8 @@ disparador para revisarla, y el disparador más frecuente es el relevamiento.
 ## 7. Lo que este documento no decide
 
 - **El importador.** El código que aplica §2 a §4, y su forma: script por lotes,
-  transacción, reporte. Es #12.
+  transacción, reporte. Son #12 (la grilla), #33 (los cruces) y #34 (el boulevard y la
+  peatonal).
 - **La construcción y validación de la topología.** Que las aristas queden
   efectivamente conectadas y que una consulta devuelva un recorrido entre dos puntos
   conocidos: #13.
