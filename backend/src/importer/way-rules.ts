@@ -13,6 +13,8 @@ const OFFSET_BY_CLASS: ReadonlyMap<string, number> = new Map([
   ['residential', 6.5],
   ['unclassified', 6.5],
   ['living_street', 6.5],
+  // La calle peatonal se camina en todo el ancho: su línea va sobre el eje (docs/11 §3.5).
+  ['pedestrian', 0],
 ]);
 
 const LANE_WIDTH_M = 3;
@@ -54,7 +56,9 @@ type LocalPoint = { east: number; north: number };
  * A 33° de latitud el error es de una parte en mil, y estas distancias se comparan
  * contra umbrales de metros: no hace falta un sistema de referencia de verdad.
  */
-function localProjection(points: readonly OsmNode[]): (point: OsmNode) => LocalPoint {
+function localProjection(
+  points: readonly { lon: number; lat: number }[],
+): (point: { lon: number; lat: number }) => LocalPoint {
   const meanLat = points.reduce((sum, point) => sum + point.lat, 0) / Math.max(points.length, 1);
   const lonScale = Math.cos((meanLat * Math.PI) / 180);
 
@@ -115,32 +119,72 @@ function directionOf(segment: LocalSegment): LocalPoint {
  * La dirección es la del segmento más cercano y no la del eje entero: una calzada
  * curva no tiene una sola dirección, y lo que interesa es con qué sentido se tocan.
  */
+type ClosestApproach = {
+  distance: number;
+  directionFirst: LocalPoint;
+  directionSecond: LocalPoint;
+  pointFirst: LocalPoint;
+  pointSecond: LocalPoint;
+};
+
 function closestApproach(
   first: readonly LocalPoint[],
   second: readonly LocalPoint[],
-): { distance: number; directionFirst: LocalPoint; directionSecond: LocalPoint } | undefined {
-  let closest: { distance: number; directionFirst: LocalPoint; directionSecond: LocalPoint } | undefined;
+): ClosestApproach | undefined {
+  let closest: ClosestApproach | undefined;
 
   for (const left of segmentsOf(first)) {
     for (const right of segmentsOf(second)) {
-      const distance = Math.min(
-        pointToSegment(left.a, right),
-        pointToSegment(left.b, right),
-        pointToSegment(right.a, left),
-        pointToSegment(right.b, left),
-      );
+      const candidates: { distance: number; pointFirst: LocalPoint; pointSecond: LocalPoint }[] = [];
 
-      if (closest === undefined || distance < closest.distance) {
-        closest = {
-          distance,
-          directionFirst: directionOf(left),
-          directionSecond: directionOf(right),
-        };
+      for (const point of [left.a, left.b]) {
+        candidates.push({
+          distance: pointToSegment(point, right),
+          pointFirst: point,
+          pointSecond: footOnSegment(point, right),
+        });
+      }
+      for (const point of [right.a, right.b]) {
+        candidates.push({
+          distance: pointToSegment(point, left),
+          pointFirst: footOnSegment(point, left),
+          pointSecond: point,
+        });
+      }
+
+      for (const candidate of candidates) {
+        if (closest === undefined || candidate.distance < closest.distance) {
+          closest = {
+            ...candidate,
+            directionFirst: directionOf(left),
+            directionSecond: directionOf(right),
+          };
+        }
       }
     }
   }
 
   return closest;
+}
+
+/** El pie de la perpendicular de `point` sobre el segmento, recortado a sus extremos. */
+function footOnSegment(point: LocalPoint, segment: LocalSegment): LocalPoint {
+  const east = segment.b.east - segment.a.east;
+  const north = segment.b.north - segment.a.north;
+  const lengthSquared = east * east + north * north;
+  const t =
+    lengthSquared === 0
+      ? 0
+      : Math.max(
+          0,
+          Math.min(
+            1,
+            ((point.east - segment.a.east) * east + (point.north - segment.a.north) * north) /
+              lengthSquared,
+          ),
+        );
+
+  return { east: segment.a.east + t * east, north: segment.a.north + t * north };
 }
 
 /**
@@ -170,7 +214,7 @@ const BOULEVARD_MIN_DISTANCE_M = 2;
 const PARALLEL_MIN_DOT = Math.SQRT1_2;
 
 /** Dos calzadas en sentidos opuestos de la misma vía (docs/11 §3.6). */
-export type Boulevard = {
+export type BoulevardPair = {
   name: string;
   /** Las dos calzadas, en el orden en que se encontraron. */
   wayIds: readonly [number, number];
@@ -178,20 +222,54 @@ export type Boulevard = {
   distanceM: number;
 };
 
-export type BoulevardDetection = {
-  /** Vías que quedan fuera de la grilla porque son un boulevard (las deriva #34). */
-  excludedWayIds: ReadonlySet<number>;
-  boulevards: readonly Boulevard[];
+/**
+ * Un boulevard entero: la secuencia de pares que corre a lo largo de una calle.
+ *
+ * Un par de `way` no es una avenida. Una avenida se dibuja en varias `way`, así que el
+ * boulevard es la **cadena** de pares y la mediana corre toda la cadena: la unidad de
+ * derivación es el grupo y no el par (docs/11 §3.6).
+ */
+export type BoulevardGroup = {
+  name: string;
+  /** Todas las calzadas del boulevard. */
+  wayIds: readonly number[];
+  /** Las dos cadenas, separadas por el lado de la avenida en que corre cada una. */
+  sides: readonly [readonly number[], readonly number[]];
+  /** Distancia mínima y máxima entre las dos cadenas, en metros. */
+  distanceRangeM: { min: number; max: number };
 };
 
+export type BoulevardDetection = {
+  pairs: readonly BoulevardPair[];
+  groups: readonly BoulevardGroup[];
+  /** Las calzadas de boulevard detectadas: se derivan, no quedan fuera de la grilla. */
+  boulevardWayIds: ReadonlySet<number>;
+  /**
+   * Pares con el mismo `name`, paralelos y a menos de 25 m pero en el **mismo** sentido:
+   * pueden ser un boulevard que el criterio de sentido opuesto no ve. Se reportan en vez
+   * de dejar cuatro veredas sin mediana sin decir nada (docs/11 §3.6).
+   */
+  sameSensePairs: readonly BoulevardPair[];
+};
+
+/** De qué lado de la dirección de la primera línea cae la segunda: +1 izquierda, −1 derecha. */
+function sideOfApproach(approach: ClosestApproach): 1 | -1 {
+  const east = approach.pointSecond.east - approach.pointFirst.east;
+  const north = approach.pointSecond.north - approach.pointFirst.north;
+  const cross = approach.directionFirst.east * north - approach.directionFirst.north * east;
+
+  return cross >= 0 ? 1 : -1;
+}
+
 /**
- * Detecta los boulevards: dos calzadas con el mismo `name`, en sentidos opuestos y a
- * menos de 25 m (docs/11 §3.6).
+ * Detecta los boulevards y los agrupa en avenidas completas (docs/11 §3.6).
  *
- * Es una detección, no una certeza: dos calzadas en el mismo sentido no se detectan y
- * se derivan cuatro veredas sin mediana, que es lo que el reporte de la corrida deja a
- * la vista. Las vías detectadas se excluyen de la grilla porque el boulevard se deriva
- * entero en #34, donde está la mediana.
+ * El criterio del par es el del documento: mismo `name`, paralelas, en sentidos opuestos
+ * y a menos de 25 m. Y un par nunca es una avenida entera: una avenida son varias `way`,
+ * así que los pares se encadenan en grupos y la mediana se deriva una vez por grupo.
+ *
+ * Es una detección, no una certeza: dos calzadas en el mismo sentido no se detectan y se
+ * reportan como posible boulevard no detectado.
  */
 export function detectBoulevards(
   ways: readonly OsmWay[],
@@ -225,10 +303,15 @@ export function detectBoulevards(
     byName.set(candidate.name, group);
   }
 
-  const boulevards: Boulevard[] = [];
-  const excludedWayIds = new Set<number>();
+  const pairs: BoulevardPair[] = [];
+  const sameSensePairs: BoulevardPair[] = [];
+
+  type Edge = { other: number; distanceM: number };
+  const edgesByName = new Map<string, Map<number, Edge[]>>();
 
   for (const [name, group] of byName) {
+    const edges = new Map<number, Edge[]>();
+
     group.forEach((first, index) => {
       for (const second of group.slice(index + 1)) {
         const approach = closestApproach(first.local, second.local);
@@ -245,20 +328,131 @@ export function detectBoulevards(
         // son un boulevard.
         if (Math.abs(dot) < PARALLEL_MIN_DOT) continue;
 
-        // Y en sentidos opuestos: el sentido de circulación es la dirección dibujada
-        // afectada por `oneway`.
-        if (dot * first.sense * second.sense >= 0) continue;
+        const distanceM = Math.round(approach.distance * 10) / 10;
+        const pair = { name, wayIds: [first.way.id, second.way.id] as const, distanceM };
 
-        boulevards.push({
-          name,
-          wayIds: [first.way.id, second.way.id],
-          distanceM: Math.round(approach.distance * 10) / 10,
-        });
-        excludedWayIds.add(first.way.id);
-        excludedWayIds.add(second.way.id);
+        // En sentidos opuestos es boulevard; en el mismo sentido es un candidato que el
+        // criterio no puede confirmar y que el reporte tiene que mostrar.
+        if (dot * first.sense * second.sense >= 0) {
+          sameSensePairs.push(pair);
+          continue;
+        }
+
+        pairs.push(pair);
+        for (const [wayId, other] of [
+          [first.way.id, second.way.id],
+          [second.way.id, first.way.id],
+        ] as const) {
+          const list = edges.get(wayId) ?? [];
+          list.push({ other, distanceM });
+          edges.set(wayId, list);
+        }
       }
+    });
+
+    edgesByName.set(name, edges);
+  }
+
+  const groups: BoulevardGroup[] = [];
+
+  for (const [name, edges] of edgesByName) {
+    if (edges.size === 0) continue;
+
+    // Dos calzadas de una avenida están en lados opuestos, así que cada par es una
+    // arista entre lados distintos: los lados son las dos mitades de un coloreo bipartito
+    // del grafo de pares. Un ciclo impar significa que la detección se contradice y no se
+    // deriva el grupo.
+    const label = new Map<number, 0 | 1>();
+    const distances: number[] = [];
+    let consistent = true;
+
+    for (const start of edges.keys()) {
+      if (label.has(start)) continue;
+      label.set(start, 0);
+      const queue = [start];
+
+      while (queue.length > 0) {
+        const current = queue.shift();
+        if (current === undefined) continue;
+        const currentLabel = label.get(current) ?? 0;
+
+        for (const edge of edges.get(current) ?? []) {
+          distances.push(edge.distanceM);
+          const wanted = currentLabel === 0 ? 1 : 0;
+          const existing = label.get(edge.other);
+
+          if (existing === undefined) {
+            label.set(edge.other, wanted);
+            queue.push(edge.other);
+          } else if (existing !== wanted) {
+            consistent = false;
+          }
+        }
+      }
+    }
+
+    if (!consistent) continue;
+
+    const sideZero = [...label].filter(([, value]) => value === 0).map(([wayId]) => wayId);
+    const sideOne = [...label].filter(([, value]) => value === 1).map(([wayId]) => wayId);
+    if (sideZero.length === 0 || sideOne.length === 0) continue;
+
+    groups.push({
+      name,
+      wayIds: [...label.keys()],
+      sides: [sideZero, sideOne],
+      distanceRangeM: {
+        min: Math.min(...distances),
+        max: Math.max(...distances),
+      },
     });
   }
 
-  return { excludedWayIds, boulevards };
+  return {
+    pairs,
+    groups,
+    boulevardWayIds: new Set(groups.flatMap((group) => group.wayIds)),
+    sameSensePairs,
+  };
+}
+
+/**
+ * De qué lado de la línea `from` corre la línea `to`: +1 izquierda, −1 derecha, en el
+ * sentido en que está dibujada `from` (docs/11 §3.6).
+ *
+ * Es lo que decide cuál de las dos veredas de una calzada de boulevard es la exterior: la
+ * que mira al otro lado de la avenida es la interior, y ésa la ocupa la mediana.
+ */
+export function sideOfLine(
+  from: readonly { lon: number; lat: number }[],
+  to: readonly { lon: number; lat: number }[],
+): 1 | -1 {
+  const project = localProjection([...from, ...to]);
+  const approach = closestApproach(from.map(project), to.map(project));
+
+  return approach === undefined ? 1 : sideOfApproach(approach);
+}
+
+/** Distancia mínima de un punto a una polilínea, en metros. */
+export function distanceToLine(
+  point: { lon: number; lat: number },
+  line: readonly { lon: number; lat: number }[],
+): number {
+  const project = localProjection([...line, point]);
+  const target = project(point);
+
+  return Math.min(
+    ...segmentsOf(line.map(project)).map((segment) => pointToSegment(target, segment)),
+  );
+}
+
+/** Distancia mínima entre dos polilíneas, en metros. */
+export function distanceBetweenLines(
+  first: readonly { lon: number; lat: number }[],
+  second: readonly { lon: number; lat: number }[],
+): number {
+  const project = localProjection([...first, ...second]);
+  const approach = closestApproach(first.map(project), second.map(project));
+
+  return approach?.distance ?? Number.POSITIVE_INFINITY;
 }

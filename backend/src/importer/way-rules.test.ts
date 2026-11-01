@@ -44,23 +44,40 @@ describe('sidewalkOffset', () => {
 });
 
 describe('detectBoulevards', () => {
-  it('detecta las dos calzadas opuestas del fixture', () => {
-    const { boulevards, excludedWayIds } = detectBoulevards(
-      extract.ways,
-      extract.nodes,
-    );
+  it('detecta las dos calzadas opuestas del fixture y las agrupa en un boulevard', () => {
+    const { pairs, groups, boulevardWayIds } = detectBoulevards(extract.ways, extract.nodes);
 
-    expect(boulevards).toHaveLength(1);
-    expect(boulevards[0]?.name).toBe('Avenida Doble');
-    expect([...(boulevards[0]?.wayIds ?? [])].sort()).toEqual([108, 109]);
+    expect(pairs).toHaveLength(1);
+    expect(pairs[0]?.name).toBe('Avenida Doble');
+    expect(groups).toHaveLength(1);
+    // Un par no es una avenida: la unidad de derivación es el grupo, que es la cadena de
+    // pares y lleva una sola mediana (docs/11 §3.6).
+    expect(groups[0]?.name).toBe('Avenida Doble');
+    expect([...(groups[0]?.wayIds ?? [])].sort()).toEqual([108, 109]);
+    expect(groups[0]?.sides.map((side) => [...side].sort())).toEqual([[108], [109]]);
     // Las calzadas están a 0,00016 de longitud, unos 15 m en esta latitud.
-    expect(boulevards[0]?.distanceM).toBeCloseTo(15, -0.5);
-    expect([...excludedWayIds].sort()).toEqual([108, 109]);
+    expect(groups[0]?.distanceRangeM.min).toBeCloseTo(15, -0.5);
+    expect([...boulevardWayIds].sort()).toEqual([108, 109]);
   });
 
   it('no detecta una calle común: no es mano única', () => {
-    const { excludedWayIds } = detectBoulevards(extract.ways, extract.nodes);
+    const { boulevardWayIds } = detectBoulevards(extract.ways, extract.nodes);
 
-    expect(excludedWayIds.has(101)).toBe(false);
+    expect(boulevardWayIds.has(101)).toBe(false);
+  });
+
+  it('reporta las dos calzadas del mismo sentido como posible boulevard', () => {
+    // Dos calzadas paralelas y en el mismo sentido no son un boulevard por el criterio de
+    // sentido opuesto; se reportan en vez de derivar cuatro veredas sin decirlo.
+    const copies: OsmWay[] = [
+      { id: 901, nodeIds: [14, 15], tags: new Map([['highway', 'residential'], ['name', 'Avenida Uno'], ['oneway', 'yes']]) },
+      { id: 902, nodeIds: [16, 17], tags: new Map([['highway', 'residential'], ['name', 'Avenida Uno'], ['oneway', 'yes']]) },
+    ];
+
+    const { pairs, sameSensePairs, groups } = detectBoulevards(copies, extract.nodes);
+
+    expect(pairs).toEqual([]);
+    expect(groups).toEqual([]);
+    expect(sameSensePairs.map((pair) => pair.name)).toEqual(['Avenida Uno']);
   });
 });

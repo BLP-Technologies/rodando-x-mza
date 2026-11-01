@@ -1,4 +1,11 @@
 import type { OsmExtract, OsmWay } from './osm.reader.js';
+import {
+  distanceBetweenLines,
+  distanceToLine,
+  sideOfLine,
+  sidewalkOffset,
+  type BoulevardGroup,
+} from './way-rules.js';
 
 /** Clases de vía que entran al grafo (docs/11 §2.1). */
 export const INCLUDED_CLASSES: ReadonlySet<string> = new Set([
@@ -14,15 +21,15 @@ export type WaySelection = {
   ways: readonly OsmWay[];
   /** Vías descartadas por su clase, contadas por la clase que traen. */
   skippedByClass: ReadonlyMap<string, number>;
-  /** Peatonales sin `area=yes`: son calle, pero las deriva #34. */
+  /** Peatonales sin `area=yes`: entran al grafo, con una sola línea sobre el eje. */
   pedestrian: number;
   /** `highway=pedestrian` con `area=yes`: son plazas, quedan fuera del grafo. */
   pedestrianAreas: number;
   /**
-   * Las vías que quedan fuera de la grilla pero podrían ser un brazo: las descartadas
-   * por su clase y las peatonales. El reporte las usa para explicar un brazo que falta
-   * por su clase en vez de por un error de corte (docs/11 §3.7). Las plazas no entran:
-   * una `area=yes` que toca un nodo no es un brazo.
+   * Las vías que quedaron fuera de la grilla pero podrían ser un brazo: las descartadas
+   * por su clase. El reporte las usa para explicar un brazo que falta por su clase en vez
+   * de por un error de corte (docs/11 §3.7). Las plazas no entran: una `area=yes` que
+   * toca un nodo no es un brazo.
    */
   outsideWays: readonly OsmWay[];
 };
@@ -30,8 +37,8 @@ export type WaySelection = {
 /**
  * Aplica el filtro por clase de docs/11 §2.1.
  *
- * Las peatonales y las plazas se cuentan aparte y se dejan afuera: su derivación es
- * #34, y acá se reportan para que el número no desaparezca sin explicación.
+ * Entran las vías de circulación general y la calle peatonal sin `area=yes`. Las plazas
+ * (`highway=pedestrian` con `area=yes`) se cuentan aparte y quedan afuera: no son calle.
  */
 export function selectGridWays(extract: OsmExtract): WaySelection {
   const ways: OsmWay[] = [];
@@ -48,7 +55,7 @@ export function selectGridWays(extract: OsmExtract): WaySelection {
         pedestrianAreas += 1;
       } else {
         pedestrian += 1;
-        outsideWays.push(way);
+        ways.push(way);
       }
       continue;
     }
@@ -243,12 +250,68 @@ export function buildTramos(ways: readonly OsmWay[]): {
   return { tramos, warnings };
 }
 
+/**
+ * Una línea caminable: una polilínea por la que se camina (docs/11 §3.1).
+ *
+ * Es la unidad del grafo, no la calle: un tramo común produce dos, una calzada de
+ * boulevard produce la suya y la mediana es una línea más, de la avenida entera.
+ */
+export type WalkableLine = {
+  lineId: number;
+  /** `tramo` sale de un tramo del extracto; `median`, de las dos calzadas de un boulevard. */
+  kind: 'tramo' | 'median';
+  /** El tramo del que sale. La mediana no sale de ninguno: es `null`. */
+  tramoId: number | null;
+  /** +1 izquierda y −1 derecha del sentido dibujado; 0 sobre el eje (peatonal y mediana). */
+  side: 1 | -1 | 0;
+  offsetM: number;
+  streetName: string | null;
+  /** `NULL` en la mediana: sale de dos `way`, no de una (docs/11 §3.6). */
+  osmWayId: number | null;
+  boulevardId: number | null;
+};
+
+/** Las líneas de un tramo, con el lado relativo a cómo está dibujado. */
+export type TramoLineRef = { lineId: number; side: 1 | -1 | 0 };
+
+/** Una calzada de boulevard: su línea exterior y la mediana de la avenida (§3.6). */
+export type BoulevardCalzada = {
+  boulevardId: number;
+  medianLineId: number;
+  /** La línea exterior de la otra calzada, por tramo: completa el ancho del brazo. */
+  partnerLines: readonly { tramoId: number; lineId: number }[];
+};
+
+/** Un tramo ya planificado: su offset, sus líneas y, si es calzada, su boulevard. */
+export type PlannedTramo = Tramo & {
+  offsetM: number;
+  lines: readonly TramoLineRef[];
+  calzada: BoulevardCalzada | null;
+};
+
+/** La geometría de la mediana de un boulevard (docs/11 §3.6). */
+export type BoulevardPlan = {
+  boulevardId: number;
+  name: string;
+  medianLineId: number;
+  /** Las `way` de cada lado: son las dos cadenas de donde sale la mediana. */
+  sides: readonly [readonly number[], readonly number[]];
+  /** Más allá de esto la otra calzada no está: la mediana no se deriva ahí. */
+  maxDistanceM: number;
+};
+
 /** Un brazo: un tramo que termina en la intersección, con su dirección de salida. */
 export type JunctionArm = {
   tramoId: number;
   atStart: boolean;
   /** Dirección de salida desde el nodo, en radianes, 0 = este y positivo al norte. */
   bearing: number;
+  /**
+   * Las líneas del brazo de izquierda a derecha, visto desde el nodo hacia afuera. Una
+   * calle común aporta dos, una peatonal una y un boulevard tres: la exterior de cada
+   * calzada y la mediana en el medio (docs/11 §3.1).
+   */
+  lines: readonly number[];
 };
 
 /**
@@ -265,10 +328,17 @@ export type Junction = {
 
 const TWO_PI = Math.PI * 2;
 
-/** Ángulo entre dos direcciones, en [0, π], sin importar el sentido. */
+/**
+ * Ángulo entre dos direcciones, en [0, π], sin importar el sentido.
+ *
+ * El módulo de JavaScript conserva el signo del dividendo, así que `(a - b) % 2π` puede
+ * volver negativo y el ángulo saldría de 2π en vez de π: con `a = -103°` y `b = 168°`
+ * daba 271° en lugar de 89°, y la T se clasificaba como un nodo de tres brazos sin brazo
+ * que termina. Por eso se normaliza a [0, 2π) antes de plegar.
+ */
 function angleBetween(a: number, b: number): number {
-  const difference = Math.abs(((a - b + Math.PI) % TWO_PI) - Math.PI);
-  return difference;
+  const counterClockwise = (((a - b) % TWO_PI) + TWO_PI) % TWO_PI;
+  return counterClockwise > Math.PI ? TWO_PI - counterClockwise : counterClockwise;
 }
 
 /**
@@ -284,7 +354,7 @@ function angleBetween(a: number, b: number): number {
  * importador los asigna recién al insertar.
  */
 export function buildJunctions(
-  tramos: readonly Tramo[],
+  tramos: readonly PlannedTramo[],
   nodes: ReadonlyMap<number, { lon: number; lat: number }>,
 ): { junctions: Junction[]; warnings: string[] } {
   const warnings: string[] = [];
@@ -301,6 +371,62 @@ export function buildJunctions(
     north: to.lat - from.lat,
   });
 
+  /** Los puntos del eje de un tramo, para medir qué calzada de la otra está más cerca. */
+  const axisOf = (tramoIndex: number): { lon: number; lat: number }[] =>
+    (tramos[tramoIndex]?.nodeIds ?? [])
+      .map((nodeId) => nodes.get(nodeId))
+      .filter((node): node is { lon: number; lat: number } => node !== undefined);
+
+  /**
+   * Las líneas del brazo, de izquierda a derecha visto desde el nodo hacia afuera.
+   *
+   * El lado de cada línea es relativo al sentido en que está dibujado el tramo, y el
+   * brazo se mira desde el nodo: si la intersección es el comienzo del tramo, alejarse es
+   * avanzar por la línea y la izquierda coincide; si es el final, se invierte. La mediana
+   * va siempre en el medio, y la vereda exterior de la otra calzada se agrega del lado en
+   * que la mediana la deja, así el brazo de un boulevard mide la avenida entera
+   * (docs/11 §3.1 y §3.6).
+   */
+  const armLines = (
+    tramo: PlannedTramo,
+    atStart: boolean,
+    node: { lon: number; lat: number },
+  ): number[] => {
+    const ordered = tramo.lines.map((line) => ({
+      lineId: line.lineId,
+      lateral: line.side * (atStart ? 1 : -1),
+    }));
+
+    if (tramo.calzada !== null) {
+      const own = ordered[0];
+      const sign = own !== undefined && own.lateral < 0 ? -1 : 1;
+
+      ordered.push({ lineId: tramo.calzada.medianLineId, lateral: 0 });
+
+      let nearest: { lineId: number; distance: number } | undefined;
+      for (const partner of tramo.calzada.partnerLines) {
+        const axis = axisOf(partner.tramoId);
+        if (axis.length < 2) continue;
+        const distance = distanceToLine(node, axis);
+        if (nearest === undefined || distance < nearest.distance) {
+          nearest = { lineId: partner.lineId, distance };
+        }
+      }
+
+      if (nearest === undefined) {
+        warnings.push(
+          `tramo ${tramo.wayIds.join('+')}: no partner carriageway near the junction, the arm is half a boulevard`,
+        );
+      } else {
+        ordered.push({ lineId: nearest.lineId, lateral: -sign });
+      }
+    }
+
+    return ordered
+      .sort((first, second) => second.lateral - first.lateral)
+      .map((line) => line.lineId);
+  };
+
   tramos.forEach((tramo, tramoId) => {
     const first = tramo.nodeIds[0];
     const second = tramo.nodeIds[1];
@@ -313,7 +439,12 @@ export function buildJunctions(
       if (node !== undefined && neighbour !== undefined) {
         const { east, north } = offset(node, neighbour);
         const list = armsByNode.get(first) ?? [];
-        list.push({ tramoId, atStart: true, bearing: Math.atan2(north, east) });
+        list.push({
+          tramoId,
+          atStart: true,
+          bearing: Math.atan2(north, east),
+          lines: armLines(tramo, true, node),
+        });
         armsByNode.set(first, list);
       }
     }
@@ -324,7 +455,12 @@ export function buildJunctions(
       if (node !== undefined && neighbour !== undefined) {
         const { east, north } = offset(node, neighbour);
         const list = armsByNode.get(last) ?? [];
-        list.push({ tramoId, atStart: false, bearing: Math.atan2(north, east) });
+        list.push({
+          tramoId,
+          atStart: false,
+          bearing: Math.atan2(north, east),
+          lines: armLines(tramo, false, node),
+        });
         armsByNode.set(last, list);
       }
     }
@@ -332,17 +468,17 @@ export function buildJunctions(
 
   const junctions: Junction[] = [];
 
-  for (const [nodeId, arms] of armsByNode) {
-    if (arms.length === 4) {
-      junctions.push({ nodeId, kind: 'cross', arms, stemTramoId: null });
+  for (const [nodeId, rawArms] of armsByNode) {
+    if (rawArms.length === 4) {
+      junctions.push({ nodeId, kind: 'cross', arms: rawArms, stemTramoId: null });
       continue;
     }
 
-    if (arms.length === 3) {
+    if (rawArms.length === 3) {
       // El brazo sin par opuesto es la calle que termina. Si no hay exactamente uno,
       // la geometría no es una T: tres calles que se tocan en un punto, por ejemplo.
-      const stems = arms.filter((arm) =>
-        arms.every(
+      const stems = rawArms.filter((arm) =>
+        rawArms.every(
           (other) =>
             other.tramoId === arm.tramoId ||
             angleBetween(arm.bearing, other.bearing) < (2 * Math.PI) / 3,
@@ -352,80 +488,72 @@ export function buildJunctions(
 
       if (stem === undefined) {
         warnings.push(`node ${nodeId}: three arms without a single stem, not derived`);
-        junctions.push({ nodeId, kind: 'unsupported', arms, stemTramoId: null });
+        junctions.push({ nodeId, kind: 'unsupported', arms: rawArms, stemTramoId: null });
         continue;
       }
+
+      // El brazo que termina es una calzada de boulevard: el boulevard se acaba acá y la
+      // otra calzada termina en su propio nodo. El ancho del brazo es el suyo, no el de
+      // la avenida entera (docs/11 §3.6).
+      const own = (tramos[stem.tramoId]?.lines ?? []).map((line) => line.lineId);
+      const arms =
+        own.length === 0
+          ? rawArms
+          : rawArms.map((arm) => (arm.tramoId === stem.tramoId ? { ...arm, lines: own } : arm));
 
       junctions.push({ nodeId, kind: 'tee', arms, stemTramoId: stem.tramoId });
       continue;
     }
 
-    warnings.push(`node ${nodeId}: ${arms.length} arms, not derived`);
-    junctions.push({ nodeId, kind: 'unsupported', arms, stemTramoId: null });
+    warnings.push(`node ${nodeId}: ${rawArms.length} arms, not derived`);
+    junctions.push({ nodeId, kind: 'unsupported', arms: rawArms, stemTramoId: null });
   }
 
   return { junctions, warnings };
 }
 
-/** Una de las dos líneas de un tramo, como la nombra `_import_lines` (docs/11 §3.4). */
-export type TramoLine = {
-  tramoId: number;
-  /** +1 es la izquierda del sentido en que está dibujado el tramo, −1 la derecha. */
-  side: 1 | -1;
-};
-
-/** Una esquina: la intersección de dos líneas de vereda (docs/11 §3.2). */
-export type CornerPlan = {
+/** Un nodo de la intersección: dónde se cruzan dos líneas caminables (docs/11 §3.2). */
+export type NodePlan = {
   /** Posición de la intersección en la lista que devolvió `buildJunctions`. */
   junctionId: number;
-  /** `corner` es una esquina de la intersección; `boca`, un nodo del lado opuesto a la T. */
+  /** `corner` es una esquina o un nodo de mediana; `boca`, uno del lado opuesto a una T. */
   kind: 'corner' | 'boca';
-  first: TramoLine;
-  second: TramoLine;
+  first: number;
+  second: number;
 };
 
-/** El cruce de un brazo: la recta entre las dos esquinas que lo flanquean (docs/11 §3.7). */
+/** Un cruce: la recta entre dos de esos nodos (docs/11 §3.7). */
 export type CrossingPlan = {
   junctionId: number;
-  tramoId: number;
-  /** Posiciones en la lista de esquinas de los dos nodos que une. */
-  cornerIds: readonly [number, number];
+  /** Posiciones en la lista de nodos de los dos que une. */
+  nodeIds: readonly [number, number];
 };
 
 /**
- * El lado de la línea que queda a la izquierda visto **desde el nodo hacia afuera**, que
- * es desde donde se mira qué línea de un brazo enfrenta al brazo de al lado.
+ * Arma los nodos y los cruces de cada intersección (docs/11 §3.2 y §3.7).
  *
- * `_import_lines.side` es relativo al sentido en que está dibujado el tramo, y el tramo
- * se dibuja desde su primer nodo: si la intersección es el comienzo del tramo, alejarse
- * del nodo es avanzar por la línea y la izquierda coincide; si es el final, no.
- */
-const leftAwaySide = (arm: JunctionArm): 1 | -1 => (arm.atStart ? 1 : -1);
-const rightAwaySide = (arm: JunctionArm): 1 | -1 => (arm.atStart ? -1 : 1);
-
-/**
- * Arma las esquinas y los cruces de cada intersección (docs/11 §3.2 y §3.7).
+ * **Un nodo por hueco.** En cada hueco angular hay una esquina: la línea que un brazo
+ * mira hacia el de al lado contra la que el otro mira hacia atrás. No se cruzan todas las
+ * líneas entre sí: la que mira al brazo de lado, cruzada con la que mira al de enfrente,
+ * da un punto en el cuadrante equivocado (docs/11 §3.4).
  *
- * **Una esquina por cuadrante.** La esquina la forman los dos brazos que la bordan, y
- * de cada uno se toma la línea que mira hacia el otro: la de la izquierda de un brazo
- * contra la de la derecha del siguiente. No se cruzan todos los pares de líneas de la
- * intersección: cruzar la línea que mira al brazo de al lado con la que mira al de
- * enfrente da un punto en el cuadrante equivocado, que no es ninguna esquina y que con
- * anchos distintos en cada cuadra queda a metros de la esquina real (docs/11 §3.4).
+ * **Los nodos de la mediana.** La mediana no mira a ningún hueco, va por el medio, pero es
+ * una línea y las de la calle que pasa la cortan: esos cortes son nodos, y son los que
+ * parten el cruce sobre el boulevard en dos, uno por calzada.
  *
- * **La boca de la T.** El hueco angular que no toca al brazo que termina tiene dos nodos
- * en vez de una esquina: son donde aterrizan las dos líneas de ese brazo sobre la vereda
- * de enfrente, y entre ellos va la vereda de la boca.
+ * **La boca de la T.** El hueco abierto no tiene esquina: el brazo que termina prolonga
+ * sus líneas exteriores hasta la vereda de enfrente y ahí aterrizan los cruces. Con dos
+ * líneas exteriores son dos nodos y la vereda de la boca; con una sola (una peatonal, una
+ * calzada suelta) es un nodo y no hay vereda de boca que cerrar.
  *
- * **Los cruces.** Cada brazo tiene el suyo, entre la esquina que deja de un lado y la del
- * otro. Con los cuatro nodos de una esquina, el brazo queda entre dos y el cruce es la
- * recta que los une.
+ * **Los cruces.** El de un brazo es la recta entre el nodo más externo de un lado y el del
+ * otro, pasando por los nodos internos: la mediana parte en dos el cruce de la avenida.
  */
 export function planCorners(junctions: readonly Junction[]): {
-  corners: CornerPlan[];
+  nodes: NodePlan[];
   crossings: CrossingPlan[];
 } {
-  const corners: CornerPlan[] = [];
+  const nodes: NodePlan[] = [];
   const crossings: CrossingPlan[] = [];
 
   junctions.forEach((junction, junctionId) => {
@@ -438,14 +566,15 @@ export function planCorners(junctions: readonly Junction[]): {
     const stemIndex = arms.findIndex((arm) => arm.tramoId === junction.stemTramoId);
     const openGap = junction.kind === 'tee' && stemIndex >= 0 ? (stemIndex + 1) % count : -1;
 
-    const add = (kind: CornerPlan['kind'], first: TramoLine, second: TramoLine): number => {
-      corners.push({ junctionId, kind, first, second });
-      return corners.length - 1;
+    const add = (kind: NodePlan['kind'], first: number, second: number): number => {
+      nodes.push({ junctionId, kind, first, second });
+      return nodes.length - 1;
     };
 
-    // Qué nodo hay de cada lado de cada hueco angular: en un cuadrante normal es la misma
-    // esquina para los dos brazos; en la boca de la T, uno para cada brazo.
-    type Gap = { forArm: number; forNext: number };
+    // Los nodos de cada hueco: los que usa el brazo de la izquierda y los del derecho.
+    // En un cuadrante normal son la misma esquina para los dos; en la boca de la T, uno
+    // para cada brazo. Cada lista va del nodo más externo hacia adentro.
+    type Gap = { forArm: readonly number[]; forNext: readonly number[] };
     const gaps: Gap[] = [];
 
     for (let index = 0; index < count; index += 1) {
@@ -453,45 +582,248 @@ export function planCorners(junctions: readonly Junction[]): {
       const next = arms[(index + 1) % count];
       if (arm === undefined || next === undefined) continue;
 
+      const armFacing = arm.lines[0];
+      const nextFacing = next.lines.at(-1);
+
       if (index === openGap) {
         const stem = arms[stemIndex];
-        if (stem === undefined) continue;
+        if (stem === undefined || armFacing === undefined || nextFacing === undefined) continue;
 
-        const left = add(
-          'boca',
-          { tramoId: stem.tramoId, side: leftAwaySide(stem) },
-          { tramoId: arm.tramoId, side: leftAwaySide(arm) },
-        );
-        const right = add(
-          'boca',
-          { tramoId: stem.tramoId, side: rightAwaySide(stem) },
-          { tramoId: next.tramoId, side: rightAwaySide(next) },
-        );
-        gaps.push({ forArm: left, forNext: right });
+        // Un nodo de boca por cada línea exterior del brazo que termina. Si el brazo tiene
+        // una sola línea, el mismo punto cae sobre las dos veredas del hueco y hay que
+        // cortar las dos: son dos planes en el mismo lugar, y el cordón que sale es uno.
+        const outer = stem.lines.length <= 1 ? [stem.lines[0]] : [stem.lines[0], stem.lines.at(-1)];
+        const bocaForArm = add('boca', outer[0] ?? armFacing, armFacing);
+        const bocaForNext = add('boca', outer[1] ?? outer[0] ?? nextFacing, nextFacing);
+
+        gaps.push({ forArm: [bocaForArm], forNext: [bocaForNext] });
         continue;
       }
 
-      const corner = add(
-        'corner',
-        { tramoId: arm.tramoId, side: leftAwaySide(arm) },
-        { tramoId: next.tramoId, side: rightAwaySide(next) },
-      );
-      gaps.push({ forArm: corner, forNext: corner });
+      if (armFacing === undefined || nextFacing === undefined) continue;
+
+      // La esquina del hueco, más los nodos donde las líneas internas de cada brazo —la
+      // mediana— cortan la vereda de enfrente.
+      const corner = add('corner', armFacing, nextFacing);
+      const armInterior = arm.lines.slice(1, -1);
+      const nextInterior = next.lines.slice(1, -1);
+
+      gaps.push({
+        forArm: [corner, ...armInterior.map((line) => add('corner', line, nextFacing))],
+        forNext: [corner, ...nextInterior.map((line) => add('corner', armFacing, line))],
+      });
     }
 
     for (let index = 0; index < count; index += 1) {
       const gap = gaps[index];
       const previous = gaps[(index - 1 + count) % count];
-      const arm = arms[index];
-      if (gap === undefined || previous === undefined || arm === undefined) continue;
+      if (gap === undefined || previous === undefined) continue;
 
-      crossings.push({
-        junctionId,
-        tramoId: arm.tramoId,
-        cornerIds: [previous.forNext, gap.forArm],
-      });
+      const outer = previous.forNext[0];
+      const last = gap.forArm[0];
+      if (outer === undefined || last === undefined) continue;
+
+      // Del nodo externo de un lado al del otro, pasando por los internos.
+      const chain = [outer, ...previous.forNext.slice(1), ...gap.forArm.slice(1), last];
+
+      for (let position = 1; position < chain.length; position += 1) {
+        const from = chain[position - 1];
+        const to = chain[position];
+        if (from === undefined || to === undefined || from === to) continue;
+        crossings.push({ junctionId, nodeIds: [from, to] });
+      }
     }
   });
 
-  return { corners, crossings };
+  return { nodes, crossings };
+}
+
+/**
+ * Arma las líneas caminables de la corrida (docs/11 §3.1).
+ *
+ * Un tramo común da dos líneas, una por costado, a la distancia de su clase o de `lanes`
+ * (§3.4). Una calle peatonal da una sola sobre su eje (§3.5), y una calzada de boulevard
+ * da sólo la exterior: la de adentro la ocupa la mediana, que es una línea de la avenida
+ * entera y no de una calzada (§3.6).
+ */
+export function planLines(
+  tramos: readonly Tramo[],
+  waysById: ReadonlyMap<number, OsmWay>,
+  nodes: ReadonlyMap<number, { lon: number; lat: number }>,
+  boulevards: readonly BoulevardGroup[],
+): {
+  tramos: PlannedTramo[];
+  lines: WalkableLine[];
+  boulevards: BoulevardPlan[];
+  warnings: string[];
+} {
+  const warnings: string[] = [];
+  const lines: WalkableLine[] = [];
+
+  const boulevardByWay = new Map<number, number>();
+  const sideByWay = new Map<number, 0 | 1>();
+
+  boulevards.forEach((boulevard, boulevardId) => {
+    for (const wayId of boulevard.wayIds) boulevardByWay.set(wayId, boulevardId);
+    boulevard.sides.forEach((side, label) => {
+      for (const wayId of side) sideByWay.set(wayId, label === 0 ? 0 : 1);
+    });
+  });
+
+  const pointsOf = (tramo: Tramo): { lon: number; lat: number }[] =>
+    tramo.nodeIds
+      .map((nodeId) => nodes.get(nodeId))
+      .filter((node): node is { lon: number; lat: number } => node !== undefined);
+
+  // La mediana de cada boulevard: una línea de la avenida entera, no de una calzada, y
+  // con `osm_way_id` en NULL porque sale de dos `way` (docs/11 §3.6).
+  const medianPlans: BoulevardPlan[] = [];
+  const medianLineByBoulevard = new Map<number, number>();
+
+  boulevards.forEach((boulevard, boulevardId) => {
+    const lineId = lines.length;
+    lines.push({
+      lineId,
+      kind: 'median',
+      tramoId: null,
+      side: 0,
+      offsetM: 0,
+      streetName: boulevard.name,
+      osmWayId: null,
+      boulevardId,
+    });
+    medianLineByBoulevard.set(boulevardId, lineId);
+    medianPlans.push({
+      boulevardId,
+      name: boulevard.name,
+      medianLineId: lineId,
+      sides: boulevard.sides,
+      maxDistanceM: Math.round(boulevard.distanceRangeM.max * 1.5 * 10) / 10,
+    });
+  });
+
+  // De qué boulevard y de qué lado de la avenida es cada tramo, si es una calzada.
+  const traceOf = (tramo: Tramo): { boulevardId: number; side: 0 | 1 } | null => {
+    const ids = new Set(tramo.wayIds.map((wayId) => boulevardByWay.get(wayId) ?? -1));
+    const [only] = [...ids];
+    if (ids.size !== 1 || only === undefined || only < 0) return null;
+    const side = sideByWay.get(tramo.wayIds[0] ?? -1);
+    return side === undefined ? null : { boulevardId: only, side };
+  };
+
+  const traces = tramos.map(traceOf);
+  const geometries = tramos.map(pointsOf);
+
+  /** El tramo de la otra calzada que corre al lado de éste, si lo hay. */
+  const partnerOf = (
+    tramoIndex: number,
+    trace: { boulevardId: number; side: 0 | 1 },
+  ): number | undefined => {
+    let nearest: { tramoId: number; distance: number } | undefined;
+
+    traces.forEach((other, otherIndex) => {
+      if (other === null || otherIndex === tramoIndex) return;
+      if (other.boulevardId !== trace.boulevardId || other.side === trace.side) return;
+
+      const distance = distanceBetweenLines(
+        geometries[tramoIndex] ?? [],
+        geometries[otherIndex] ?? [],
+      );
+      if (nearest === undefined || distance < nearest.distance) {
+        nearest = { tramoId: otherIndex, distance };
+      }
+    });
+
+    return nearest?.tramoId;
+  };
+
+  // Primera pasada: de qué lado corre la línea de cada tramo. Dos costados para una calle
+  // común, el eje para la peatonal y **sólo la exterior** para una calzada de boulevard:
+  // la de adentro la ocupa la mediana (docs/11 §3.4 y §3.6).
+  const drafts = tramos.map((tramo, tramoIndex) => {
+    const way = waysById.get(tramo.wayIds[0] ?? -1);
+    if (way === undefined) throw new Error(`Tramo without a way: [${tramo.wayIds.join(', ')}]`);
+
+    const offsetM = sidewalkOffset(way);
+    const trace = traces[tramoIndex] ?? null;
+    const pedestrian = way.tags.get('highway') === 'pedestrian';
+
+    if (pedestrian) return { tramoIndex, offsetM, trace, sides: [0] as (1 | -1 | 0)[], partner: null };
+    if (trace === null) return { tramoIndex, offsetM, trace, sides: [1, -1] as (1 | -1 | 0)[], partner: null };
+
+    const partner = partnerOf(tramoIndex, trace);
+    const own = geometries[tramoIndex] ?? [];
+
+    if (partner === undefined || own.length < 2) {
+      warnings.push(
+        `tramo ${tramo.wayIds.join('+')} (${tramo.streetName ?? 'sin nombre'}): carriageway without its pair, two sidewalks`,
+      );
+      return { tramoIndex, offsetM, trace, sides: [1, -1] as (1 | -1 | 0)[], partner: null };
+    }
+
+    // La vereda exterior es la que mira al otro lado de la avenida: la interior es la que
+    // ocupa la mediana.
+    const exterior: 1 | -1 = sideOfLine(own, geometries[partner] ?? []) === 1 ? -1 : 1;
+
+    return { tramoIndex, offsetM, trace, sides: [exterior] as (1 | -1 | 0)[], partner };
+  });
+
+  // Segunda pasada: las líneas, en el orden de los tramos para que el `lineId` sea estable.
+  const plannedLines: number[][] = [];
+
+  for (const draft of drafts) {
+    const tramo = tramos[draft.tramoIndex];
+    if (tramo === undefined) continue;
+    const way = waysById.get(tramo.wayIds[0] ?? -1);
+
+    plannedLines[draft.tramoIndex] = draft.sides.map((side) => {
+      const lineId = lines.length;
+      lines.push({
+        lineId,
+        kind: 'tramo',
+        tramoId: draft.tramoIndex,
+        side,
+        offsetM: draft.offsetM,
+        streetName: tramo.streetName,
+        osmWayId: way?.id ?? null,
+        boulevardId: draft.trace?.boulevardId ?? null,
+      });
+      return lineId;
+    });
+  }
+
+  const planned: PlannedTramo[] = drafts.map((draft) => {
+    const tramo = tramos[draft.tramoIndex];
+    if (tramo === undefined) throw new Error('Tramo without a source');
+
+    const trace = draft.trace;
+    const calzada =
+      trace === null
+        ? null
+        : {
+            boulevardId: trace.boulevardId,
+            medianLineId: medianLineByBoulevard.get(trace.boulevardId) ?? -1,
+            partnerLines: traces.flatMap((other, otherIndex) => {
+              if (other === null || otherIndex === draft.tramoIndex) return [];
+              if (other.boulevardId !== trace.boulevardId || other.side === trace.side) return [];
+
+              const lineId = plannedLines[otherIndex]?.[0];
+              return lineId === undefined ? [] : [{ tramoId: otherIndex, lineId }];
+            }),
+          };
+
+    const lineIds = plannedLines[draft.tramoIndex] ?? [];
+
+    return {
+      ...tramo,
+      offsetM: draft.offsetM,
+      lines: lineIds.flatMap((lineId, position) => {
+        const side = draft.sides[position];
+        return side === undefined ? [] : [{ lineId, side }];
+      }),
+      calzada,
+    };
+  });
+
+  return { tramos: planned, lines, boulevards: medianPlans, warnings };
 }

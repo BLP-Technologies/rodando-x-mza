@@ -4,11 +4,12 @@ import {
   buildJunctions,
   buildTramos,
   planCorners,
+  planLines,
   selectGridWays,
 } from './importer.service.js';
-import { writeGraph, type JunctionReport, type PlannedTramo } from './importer.sql.js';
+import { writeGraph, type JunctionReport } from './importer.sql.js';
 import { readOsm, type OsmWay } from './osm.reader.js';
-import { detectBoulevards, sidewalkOffset } from './way-rules.js';
+import { detectBoulevards } from './way-rules.js';
 
 /**
  * El reporte de una corrida: lo que entró, lo que se derivó y lo que quedó afuera.
@@ -24,19 +25,21 @@ export type ImportReport = {
   waysIncluded: number;
   /** Vías descartadas por su clase, contadas por clase. */
   waysSkippedByClass: Record<string, number>;
-  /** Calzadas de boulevard: se detectaron y se dejan para #34 (docs/11 §3.6). */
-  waysExcludedByBoulevard: number;
-  boulevards: number;
-  /** Peatonales sin `area=yes`: son calle, las deriva #34. */
+  /** Los boulevards detectados: una avenida cada uno, con sus pares y sus calzadas. */
+  boulevards: { groups: number; pairs: number; carriageways: number; names: readonly string[] };
+  /** Peatonales sin `area=yes`: entran con una sola línea sobre el eje. */
   pedestrianWays: number;
   /** `highway=pedestrian` con `area=yes`: plazas, fuera del grafo. */
   pedestrianAreas: number;
   tramos: number;
+  /** Líneas caminables: dos por tramo común, una por calzada y una por mediana. */
+  walkableLines: { total: number; medians: number };
   junctions: { cross: number; tee: number; unsupported: number };
   /** Cordones creados y reusados: la clave es la coordenada (docs/11 §4). */
   kerbs: { created: number; reused: number };
   sidewalks: { created: number; updated: number; boca: number };
-  crossings: { created: number; updated: number };
+  /** `median`: los que salen de la mediana al atravesar una calle (docs/11 §3.6). */
+  crossings: { created: number; updated: number; median: number };
   /** Vías que se cruzan sin compartir un nodo: se reportan y no se derivan. */
   unsharedCrossings: number;
   /** Defectos de `ST_OffsetCurve` que se resolvieron y se cuentan. */
@@ -54,7 +57,7 @@ export type ImportReport = {
 };
 
 /**
- * Importa un extracto y deja el grafo de la grilla en la base.
+ * Importa un extracto y deja el grafo en la base.
  *
  * Recibe la transacción ya abierta: la derivación geométrica y las dos escrituras van
  * juntas, así que una corrida que falla no deja cordones sin veredas. No borra nada:
@@ -63,35 +66,24 @@ export type ImportReport = {
 export async function importOsm(filePath: string, trx: Transaction<DB>): Promise<ImportReport> {
   const extract = await readOsm(filePath);
   const selection = selectGridWays(extract);
+  const waysById = new Map(selection.ways.map((way) => [way.id, way]));
 
   const boulevard = detectBoulevards(selection.ways, extract.nodes);
-  const gridWays = selection.ways.filter((way) => !boulevard.excludedWayIds.has(way.id));
-  const waysById = new Map(gridWays.map((way) => [way.id, way]));
 
-  const { tramos, warnings: tramoWarnings } = buildTramos(gridWays);
-  const planned: PlannedTramo[] = tramos.map((tramo) => {
-    const firstWayId = tramo.wayIds[0];
-    const way = firstWayId === undefined ? undefined : waysById.get(firstWayId);
-    if (way === undefined) {
-      throw new Error(`Tramo without a way: [${tramo.wayIds.join(', ')}]`);
-    }
-
-    return { ...tramo, offsetM: sidewalkOffset(way) };
-  });
-
-  const { junctions, warnings: junctionWarnings } = buildJunctions(planned, extract.nodes);
-  const { corners, crossings } = planCorners(junctions);
-  const outsideClasses = outsideClassesByNode([
-    ...selection.outsideWays,
-    ...selection.ways.filter((way) => boulevard.excludedWayIds.has(way.id)),
-  ]);
+  const { tramos, warnings: tramoWarnings } = buildTramos(selection.ways);
+  const planned = planLines(tramos, waysById, extract.nodes, boulevard.groups);
+  const { junctions, warnings: junctionWarnings } = buildJunctions(planned.tramos, extract.nodes);
+  const { nodes: nodePlans, crossings } = planCorners(junctions);
+  const outsideClasses = outsideClassesByNode(selection.outsideWays);
 
   const counts = await writeGraph(trx, {
     nodes: [...extract.nodes.values()],
-    ways: gridWays,
-    tramos: planned,
+    ways: selection.ways,
+    tramos: planned.tramos,
+    lines: planned.lines,
+    boulevards: planned.boulevards,
     junctions,
-    corners,
+    nodePlans,
     crossings,
   });
 
@@ -109,13 +101,21 @@ export async function importOsm(filePath: string, trx: Transaction<DB>): Promise
   return {
     extract: filePath,
     waysRead: extract.ways.length,
-    waysIncluded: gridWays.length,
+    waysIncluded: selection.ways.length,
     waysSkippedByClass: Object.fromEntries(selection.skippedByClass),
-    waysExcludedByBoulevard: boulevard.excludedWayIds.size,
-    boulevards: boulevard.boulevards.length,
+    boulevards: {
+      groups: boulevard.groups.length,
+      pairs: boulevard.pairs.length,
+      carriageways: boulevard.boulevardWayIds.size,
+      names: boulevard.groups.map((group) => group.name),
+    },
     pedestrianWays: selection.pedestrian,
     pedestrianAreas: selection.pedestrianAreas,
-    tramos: planned.length,
+    tramos: planned.tramos.length,
+    walkableLines: {
+      total: planned.lines.length,
+      medians: planned.lines.filter((line) => line.kind === 'median').length,
+    },
     junctions: junctionKinds,
     kerbs: { created: counts.kerbsCreated, reused: counts.kerbsReused },
     sidewalks: {
@@ -123,7 +123,11 @@ export async function importOsm(filePath: string, trx: Transaction<DB>): Promise
       updated: counts.sidewalksUpdated,
       boca: counts.bocaSidewalks,
     },
-    crossings: { created: counts.crossingsCreated, updated: counts.crossingsUpdated },
+    crossings: {
+      created: counts.crossingsCreated,
+      updated: counts.crossingsUpdated,
+      median: counts.medianCrossings,
+    },
     unsharedCrossings: counts.unsharedCrossings.length,
     lines: {
       split: counts.linesSplit,
@@ -135,11 +139,25 @@ export async function importOsm(filePath: string, trx: Transaction<DB>): Promise
     warnings: [
       ...tramoWarnings,
       ...junctionWarnings,
+      ...planned.warnings,
       ...counts.bocaMissingNodeIds.map(
         (nodeId) =>
-          `node ${nodeId}: the tee has no "boca" sidewalk, the opposite side is not two corners`,
+          `node ${nodeId}: the tee has no "boca" sidewalk, the opposite side is not two nodes`,
       ),
-      ...junctionCountWarnings(counts.junctions, outsideClasses),
+      ...counts.mediansWithoutPieces.map(
+        (boulevardId) => `boulevard ${boulevardId}: the median has no edges, no street crosses it`,
+      ),
+      ...counts.medians
+        .filter((median) => median.dropped > 0)
+        .map(
+          (median) =>
+            `boulevard ${median.boulevardId}: ${median.dropped} median stations dropped, the other carriageway ends there`,
+        ),
+      ...boulevard.sameSensePairs.map(
+        (pair) =>
+          `ways ${pair.wayIds.join(' and ')} (${pair.name}): two carriageways ${pair.distanceM} m apart in the same direction, maybe an undetected boulevard`,
+      ),
+      ...junctionShapeWarnings(counts.junctions, outsideClasses),
       ...counts.unsharedCrossings.map(([first, second]) =>
         unsharedCrossingWarning(first, second, waysById),
       ),
@@ -192,13 +210,15 @@ function outsideClassesByNode(ways: readonly OsmWay[]): ReadonlyMap<number, stri
 }
 
 /**
- * Las advertencias que salen de contar esquinas y cruces por intersección.
+ * Las advertencias que salen de la forma de cada intersección (docs/11 §4).
  *
- * Un cruce por brazo y cuatro nodos por intersección son las dos cuentas de docs/11 §3.2
- * y §3.7. Cuando no cierran se reporta el nodo, y si ahí desemboca una vía fuera de la
- * grilla se dice cuál: los dos síntomas son iguales y los problemas no.
+ * No hay una cuenta fija que exigir: con el boulevard y la peatonal, los brazos aportan
+ * una, dos o tres líneas y la cuenta depende de la forma. Lo que sí no puede pasar es una
+ * intersección sin nodos o sin ningún cruce, y cuando pasa el reporte dice el nodo, y si
+ * ahí desemboca una vía fuera de la grilla se dice cuál: un `service` que termina en la
+ * esquina y un error de corte dan el mismo síntoma y no son el mismo problema.
  */
-function junctionCountWarnings(
+function junctionShapeWarnings(
   junctions: readonly JunctionReport[],
   outsideClasses: ReadonlyMap<number, string[]>,
 ): string[] {
@@ -209,15 +229,15 @@ function junctionCountWarnings(
     const note =
       outside.length === 0 ? '' : `, an out-of-grid way ends here (${outside.join(', ')})`;
 
-    if (junction.corners !== 4) {
+    if (junction.nodes < 2) {
       warnings.push(
-        `node ${junction.osmNodeId}: ${junction.corners} corners for ${junction.arms} arms${note}`,
+        `node ${junction.osmNodeId}: ${junction.nodes} nodes for ${junction.arms} arms${note}`,
       );
     }
 
-    if (junction.crossings !== junction.arms) {
+    if (junction.crossings === 0) {
       warnings.push(
-        `node ${junction.osmNodeId}: ${junction.crossings} crossings for ${junction.arms} arms${note}`,
+        `node ${junction.osmNodeId}: ${junction.arms} arms without crossings${note}`,
       );
     }
   }
