@@ -52,10 +52,11 @@ describe('selectGridWays', () => {
   it('deja pasar las clases de la grilla y cuenta lo que descarta', () => {
     const selection = selectGridWays(extract);
 
-    // 101 a 109 más la 114: las cuatro de Calle A, Ancha, Uno, Corta, la sin nombre, las
-    // dos del boulevard y la peatonal, que entra con una sola línea sobre su eje.
+    // 101 a 109, la 112, la 114 y las dos calles que tocan el boulevard: las cuatro de
+    // Calle A, Ancha, Uno, Corta, la sin nombre, las dos del boulevard, la peatonal —que
+    // entra con una sola línea sobre su eje—, Calle Nueva y Calle Corta Dos.
     expect(selection.ways.map((way) => way.id)).toEqual([
-      101, 102, 103, 104, 105, 106, 114, 107, 108, 109, 112,
+      101, 102, 103, 104, 105, 106, 115, 116, 114, 107, 108, 109, 112,
     ]);
     expect([...selection.skippedByClass]).toEqual([
       ['service', 1],
@@ -79,17 +80,30 @@ describe('buildTramos', () => {
         '105 6-7 boundary|junction',
         '105 7-8 junction|junction',
         '105 8-9 junction|boundary',
-        '106 10-26 boundary|junction',
+        // Calle Uno se nombra Calle Nueva en el nodo 10, así que ahí corta sin esquina;
+        // y la peatonal la parte en 33, que sí es un cruce.
+        '106 10-26 name-change|junction',
         '106 26-2 junction|junction',
         '106 2-7 junction|junction',
-        '106 7-11 junction|boundary',
+        '106 7-33 junction|junction',
+        '106 33-11 junction|boundary',
         '107 12-4 boundary|junction',
         '107 4-8 junction|junction',
         '107 8-13 junction|boundary',
-        '108 14-15 boundary|boundary',
-        '109 16-17 boundary|boundary',
-        '112 22-23 boundary|boundary',
+        // El boulevard se parte donde lo cruza Calle Nueva (28 y 29) y donde termina
+        // Calle Corta Dos (32): son los nodos que le dan a la mediana sus cortes.
+        '108 14-32 boundary|junction',
+        '108 32-28 junction|junction',
+        '108 28-15 junction|boundary',
+        '109 16-29 boundary|junction',
+        '109 29-17 junction|boundary',
+        '112 22-33 boundary|junction',
+        '112 33-23 junction|boundary',
         '114 27-26 boundary|junction',
+        '115 30-28 boundary|junction',
+        '115 28-29 junction|junction',
+        '115 29-10 junction|name-change',
+        '116 31-32 boundary|junction',
       ].sort(),
     );
   });
@@ -127,12 +141,14 @@ describe('planLines', () => {
     // Calle A es común: dos veredas por tramo, y son cuatro tramos.
     expect(linesOf(101)).toBe(2);
     expect(linesOf(104)).toBe(2);
-    // Las dos calzadas del boulevard aportan una línea cada una.
-    expect(linesOf(108)).toBe(1);
-    expect(linesOf(109)).toBe(1);
-    // La peatonal, una sola.
-    expect(linesOf(112)).toBe(1);
-    // Y cada boulevard aporta su mediana: una franja para toda la avenida (docs/11 §3.6).
+    // Cada tramo de una calzada del boulevard aporta una sola línea: su vereda exterior.
+    // Calle Nueva y Calle Corta Dos la parten, así que son tres tramos en la 108 y dos en
+    // la 109 (docs/11 §3.6).
+    expect(linesOf(108)).toBe(3);
+    expect(linesOf(109)).toBe(2);
+    // La peatonal, una sola por tramo: Calle Uno la parte en dos (docs/11 §3.5).
+    expect(linesOf(112)).toBe(2);
+    // Y el boulevard aporta su mediana: una franja para toda la avenida (docs/11 §3.6).
     expect(lines.filter((line) => line.kind === 'median')).toHaveLength(1);
   });
 
@@ -151,22 +167,37 @@ describe('planLines', () => {
 
     // La vereda exterior de cada calzada es la que mira al otro lado de la avenida: las
     // dos calzadas del fixture están dibujadas en sentidos opuestos, así que la línea
-    // exterior de una está a un lado y la de la otra al opuesto.
+    // exterior de una está a un lado y la de la otra al opuesto. Son cinco tramos porque
+    // las dos calles nuevas parten las calzadas en 14-32, 32-28 y 28-15 (oeste) y en
+    // 16-29 y 29-17 (este).
     const sides = tramos
       .filter((tramo) => tramo.calzada !== null)
       .map((tramo) => tramo.lines[0]?.side);
-    expect(sides.sort()).toEqual([-1, 1]);
+    expect(sides.sort()).toEqual([-1, -1, -1, 1, 1]);
   });
 });
 
 describe('buildJunctions', () => {
-  it('clasifica cuatro cruces y una T', () => {
+  it('clasifica los cruces y las dos T', () => {
     const { junctions, warnings } = buildJunctions(planFixture(extract).tramos, extract.nodes);
 
     expect(warnings).toEqual([]);
+    // Ocho nodos de la grilla más Calle Nueva, que cruza el boulevard con un nodo en cada
+    // calzada (28 y 29). Las dos T son Calle Corta en Calle Uno y Calle Corta Dos contra la
+    // calzada oeste (32).
     expect(
       junctions.map((junction) => `${junction.nodeId}:${junction.kind}`).sort(),
-    ).toEqual(['26:tee', '2:cross', '4:cross', '7:cross', '8:cross']);
+    ).toEqual([
+      '26:tee',
+      '28:cross',
+      '29:cross',
+      '2:cross',
+      '32:tee',
+      '33:cross',
+      '4:cross',
+      '7:cross',
+      '8:cross',
+    ]);
   });
 
   it('en la T identifica el brazo que termina', () => {
@@ -237,12 +268,12 @@ describe('planCorners', () => {
     const junctions = gridJunctions(extract);
     const { nodes, crossings } = planCorners(junctions);
 
-    // Cuatro cruces de cuatro brazos y una T, todas con dos líneas por brazo: 4 nodos cada
-    // cruce y 4 nodos la T (dos esquinas y los dos de la boca), y tantos cruces como brazos
-    // (docs/11 §3.2 y §3.7).
-    expect(junctions).toHaveLength(5);
-    expect(nodes).toHaveLength(20);
-    expect(crossings).toHaveLength(4 * 4 + 3);
+    // Siete cruces de cuatro brazos y dos T: 4 nodos cada una (en la T, dos esquinas y los
+    // dos de la boca) y tantos cruces como brazos (docs/11 §3.2 y §3.7). Nueve
+    // intersecciones por cuatro nodos son 36, y por tres o cuatro cruces, 34.
+    expect(junctions).toHaveLength(9);
+    expect(nodes).toHaveLength(36);
+    expect(crossings).toHaveLength(7 * 4 + 2 * 3);
     expect(crossings.every((crossing) => crossing.nodeIds[0] !== crossing.nodeIds[1])).toBe(true);
   });
 
@@ -270,31 +301,45 @@ describe('planCorners', () => {
   });
 
   it('en un cruce cada brazo pone una línea en cada esquina que bordea', () => {
-    const { lines } = planFixture(extract);
     const junctions = gridJunctions(extract);
     const { nodes } = planCorners(junctions);
 
     // Es la propiedad que hace que haya una sola esquina por cuadrante: el brazo aporta una
     // línea a la esquina de un lado y la otra a la del otro, y nunca las dos al mismo
-    // cuadrante (docs/11 §3.2).
+    // cuadrante (docs/11 §3.2). Vale para los brazos de dos líneas; la peatonal aporta una
+    // sola y por eso su cruce (33) va aparte, más abajo.
     const crosses = junctions
       .map((junction, junctionId) => ({ junction, junctionId }))
-      .filter(({ junction }) => junction.kind === 'cross');
+      .filter(
+        ({ junction }) =>
+          junction.kind === 'cross' && junction.arms.every((arm) => arm.lines.length === 2),
+      );
 
-    expect(crosses).toHaveLength(4);
+    expect(crosses).toHaveLength(6);
     for (const { junction, junctionId } of crosses) {
-      const used = nodes
-        .filter((node) => node.junctionId === junctionId)
-        .flatMap((node) => [node.first, node.second]);
+      const own = nodes.filter((node) => node.junctionId === junctionId);
 
-      expect(used).toHaveLength(8);
-      expect(new Set(used).size).toBe(8);
+      // Cuatro esquinas, todas distintas: nunca dos pares de líneas dan el mismo punto.
+      expect(own).toHaveLength(4);
+      expect(new Set(own.map((node) => [node.first, node.second].sort().join('/'))).size).toBe(4);
+
+      // Cada esquina la bordan dos brazos distintos, y ninguna línea del brazo queda sin
+      // esquina: es lo que hace que la esquina sea una y que no sobre ninguna vereda.
+      const armsOfLine = (lineId: number): number[] =>
+        junction.arms.flatMap((arm, index) => (arm.lines.includes(lineId) ? [index] : []));
+
+      for (const node of own) {
+        const first = armsOfLine(node.first);
+        const second = armsOfLine(node.second);
+        expect(first.length).toBeGreaterThan(0);
+        expect(second.length).toBeGreaterThan(0);
+        expect(first.some((index) => !second.includes(index))).toBe(true);
+      }
+
       for (const arm of junction.arms) {
-        const own = used.filter((lineId) => {
-          const line = lines.find((candidate) => candidate.lineId === lineId);
-          return line?.tramoId === arm.tramoId;
-        });
-        expect(own).toHaveLength(2);
+        for (const lineId of arm.lines) {
+          expect(own.some((node) => node.first === lineId || node.second === lineId)).toBe(true);
+        }
       }
     }
   });

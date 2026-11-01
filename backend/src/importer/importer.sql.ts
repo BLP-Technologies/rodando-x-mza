@@ -169,7 +169,8 @@ async function stageExtract(trx: Transaction<DB>, input: GraphInput): Promise<vo
   await sql`
     DROP TABLE IF EXISTS
       _import_nodes, _import_way_nodes, _import_ways, _import_tramo_nodes,
-      _import_tramos, _import_tramo_ways, _import_lines_plan, _import_lines,
+      _import_tramos, _import_tramo_ways, _import_lines_plan, _import_lines_raw,
+      _import_lines,
       _import_boulevards, _import_boulevard_ways, _import_median_lines,
       _import_junctions, _import_junction_arms, _import_node_plans, _import_crossing_plans,
       _import_corner_points, _import_line_end_points, _import_boca_pieces,
@@ -711,7 +712,10 @@ async function deriveCorners(trx: Transaction<DB>): Promise<void> {
  * clase a mitad de cuadra (docs/11 §3.2 y §3.8).
  *
  * Los extremos de una intersección no entran: ahí la línea termina en el centro de la
- * intersección y las esquinas ya los reemplazaron.
+ * intersección y las esquinas ya los reemplazaron. La mediana no tiene tramo —es de la
+ * avenida entera—, así que sus dos puntas son siempre nodos: sin ellos la mediana quedaba
+ * sin cortar en sus extremos y el nodo donde la corta la última calle quedaba como un
+ * cordón sin ninguna vereda, un callejón sin salida para el ruteo (docs/11 §3.6).
  */
 async function deriveLineEnds(trx: Transaction<DB>): Promise<void> {
   await sql`
@@ -720,9 +724,10 @@ async function deriveLineEnds(trx: Transaction<DB>): Promise<void> {
            CASE WHEN ends.at_start THEN ST_StartPoint(l.geom) ELSE ST_EndPoint(l.geom) END
              AS geom
     FROM _import_lines l
-    JOIN _import_tramos t ON t.tramo_id = l.tramo_id
+    LEFT JOIN _import_tramos t ON t.tramo_id = l.tramo_id
     CROSS JOIN (VALUES (true), (false)) AS ends(at_start)
-    WHERE (ends.at_start AND t.start_cut <> 'junction')
+    WHERE t.tramo_id IS NULL
+       OR (ends.at_start AND t.start_cut <> 'junction')
        OR (NOT ends.at_start AND t.end_cut <> 'junction')
   `.execute(trx);
 }
@@ -867,6 +872,13 @@ async function mapCornerKerbIds(trx: Transaction<DB>): Promise<void> {
  *
  * La mediana entra como una línea más: el corte en sus nodos es lo que la parte en el
  * lugar donde la cruza cada calle (docs/11 §3.6).
+ *
+ * Un corte se acepta si cae sobre la línea **o sobre su prolongación de la punta**:
+ * `ST_OffsetCurve` recorta la vereda donde el eje dobla justo antes del nodo, y la esquina
+ * real queda 3 a 7 m más allá del final de la línea. Sin esa prolongación la punta no
+ * tenía ningún corte, la línea quedaba sin vereda y el tramo desaparecía del grafo. El
+ * corte cae en el extremo (`ST_LineLocatePoint` lo recorta a 0 o 1) y el cordón es el de
+ * la esquina, que es la coordenada con la que después se arma el par.
  */
 async function derivePieces(trx: Transaction<DB>): Promise<void> {
   await sql`
@@ -881,7 +893,10 @@ async function derivePieces(trx: Transaction<DB>): Promise<void> {
       FROM corner_lines lines
       JOIN _import_corner_points point ON point.plan_id = lines.plan_id
       JOIN _import_lines line ON line.line_id = lines.line_id
-      WHERE ST_DWithin(ST_Transform(point.geom, 32719), ST_Transform(line.geom, 32719), 1)
+      WHERE ST_DWithin(
+              ST_Transform(point.geom, 32719),
+              ST_LineExtend(
+                ST_Transform(line.geom, 32719), line.offset_m + 2, line.offset_m + 2), 1)
     ),
     ends AS (
       SELECT line_id,
@@ -1131,9 +1146,12 @@ async function deriveCrossings(
   `.execute(trx);
 
   const result = await sql<{ rows: string; median_crossings: string }>`
-    SELECT count(*) AS rows,
-           count(*) FILTER (WHERE junction_id IS NULL) AS median_crossings
-    FROM _import_crossing_rows
+    SELECT (SELECT count(*) FROM _import_crossing_rows) AS rows,
+           -- Las piezas de mediana que resultaron cruces. Se cuentan de acá y no de las
+           -- filas escritas: el par de nodos de la mediana es el mismo que el del cruce que
+           -- arma el brazo de la transversal, así que la escritura deduplica las dos y la
+           -- fila que queda puede ser cualquiera de las dos (docs/11 §3.6 y §3.7).
+           (SELECT count(*) FROM _import_median_crossings) AS median_crossings
   `.execute(trx);
 
   return {
@@ -1244,19 +1262,47 @@ async function findMediansWithoutPieces(trx: Transaction<DB>): Promise<number[]>
  * no caen sobre ella: la línea queda sin par de nodos y no hay arista que insertar. Es un
  * error de corte y se reporta como tal, en vez de dejar la calle afuera del grafo sin
  * decirlo (docs/11 §4).
+ *
+ * La excepción es el tramo que atraviesa un boulevard: su vereda **es** el cruce. Camina
+ * entre las dos calzadas, así que la cubren los dos cruces —uno por calzada— y el nodo de
+ * mediana en el medio; si el tramo es corto, el nodo de mediana cae en su propia punta y
+ * no queda ni un metro que insertar (docs/11 §3.6). Se reconoce porque el único corte de
+ * la línea es contra la mediana, y ahí no se avisa: no hay nada que derivar.
  */
 async function findLinesWithoutSidewalk(
   trx: Transaction<DB>,
 ): Promise<{ tramoId: number; streetName: string | null }[]> {
   const result = await sql<{ tramo_id: number; street_name: string | null }>`
-    SELECT line.tramo_id, max(tramo.street_name) AS street_name
-    FROM _import_lines line
-    JOIN _import_tramos tramo ON tramo.tramo_id = line.tramo_id
-    WHERE NOT EXISTS (
-      SELECT 1 FROM _import_pieces piece WHERE piece.line_id = line.line_id
+    WITH line_corners AS (
+      -- Qué líneas cortaron a cada línea: un corte es un plano que cayó sobre ella.
+      SELECT DISTINCT cut.line_id, other.kind AS other_kind
+      FROM _import_node_plans plan
+      JOIN _import_corner_points point ON point.plan_id = plan.plan_id
+      JOIN _import_cut_points cut
+        ON cut.x = point.x AND cut.y = point.y
+       AND cut.line_id IN (plan.line_a, plan.line_b)
+      JOIN _import_lines other
+        ON other.line_id = CASE
+             WHEN cut.line_id = plan.line_a THEN plan.line_b ELSE plan.line_a END
+    ),
+    without_piece AS (
+      SELECT line.line_id, line.tramo_id,
+             EXISTS (SELECT 1 FROM line_corners cut
+                      WHERE cut.line_id = line.line_id) AS has_cut,
+             EXISTS (SELECT 1 FROM line_corners cut
+                      WHERE cut.line_id = line.line_id AND cut.other_kind <> 'median')
+               AS has_other_cut
+      FROM _import_lines line
+      WHERE NOT EXISTS (
+        SELECT 1 FROM _import_pieces piece WHERE piece.line_id = line.line_id
+      )
     )
-    GROUP BY line.tramo_id
-    ORDER BY line.tramo_id
+    SELECT without_piece.tramo_id, max(tramo.street_name) AS street_name
+    FROM without_piece
+    JOIN _import_tramos tramo ON tramo.tramo_id = without_piece.tramo_id
+    WHERE without_piece.has_other_cut OR NOT without_piece.has_cut
+    GROUP BY without_piece.tramo_id
+    ORDER BY without_piece.tramo_id
   `.execute(trx);
 
   return result.rows.map((row) => ({

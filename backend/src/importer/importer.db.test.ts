@@ -72,18 +72,25 @@ async function snapshot(trx: Transaction<DB>): Promise<Record<string, number[] |
  */
 function fixtureEdges(shape: 'narrow' | 'wide'): string {
   const extra = shape === 'wide' ? ', edge.geom, edge.element_kind AS scope' : '';
+  // La mediana del boulevard del fixture tiene `osm_way_id` en NULL porque sale de dos
+  // `way`, así que entra por su nombre: sin ella el grafo del fixture quedaría partido en
+  // las dos calzadas (docs/11 §3.6).
+  const sidewalks = `
+    SELECT id, start_node_id, end_node_id FROM sidewalks
+    WHERE osm_way_id BETWEEN 101 AND 116
+       OR (osm_way_id IS NULL AND street_name = 'Avenida Doble')
+  `;
   const nodes = `
-    SELECT start_node_id FROM sidewalks WHERE osm_way_id BETWEEN 101 AND 114
+    SELECT start_node_id FROM (${sidewalks}) fixture
     UNION
-    SELECT end_node_id FROM sidewalks WHERE osm_way_id BETWEEN 101 AND 114
+    SELECT end_node_id FROM (${sidewalks}) fixture
   `;
 
   return `
     SELECT edge.id, edge.source, edge.target, edge.cost${extra}
     FROM walkable_edges edge
     WHERE (edge.element_kind = 'sidewalk'
-           AND edge.element_id IN (
-             SELECT id FROM sidewalks WHERE osm_way_id BETWEEN 101 AND 114))
+           AND edge.element_id IN (SELECT id FROM (${sidewalks}) fixture))
        OR (edge.element_kind = 'crossing'
            AND edge.source IN (${nodes}) AND edge.target IN (${nodes}))
   `;
@@ -141,15 +148,17 @@ describe.skipIf(!process.env.DATABASE_URL)('importOsm contra la base', () => {
       return { first, second, before, after };
     });
 
-    // Las cuentas del fixture, que es el lugar donde viven los invariantes: 14 tramos,
-    // dos líneas cada uno, una pieza por línea más la vereda de la boca de la T; y cuatro
-    // nodos por intersección más dos cordones por cada extremo de borde. Un cruce por
-    // brazo, entre las dos esquinas que lo flanquean.
-    expect(outcome.first.junctions).toEqual({ cross: 4, tee: 1, unsupported: 0 });
+    // Las cuentas del fixture, que es el lugar donde viven los invariantes: 26 tramos, con
+    // dos líneas por tramo —una sobre el eje para la peatonal y una sola por calzada de
+    // boulevard—, una pieza por línea y las dos veredas de boca de las dos T. Nueve
+    // intersecciones —siete cruces y dos T— dan cuatro nodos cada una; y los cordones son
+    // esos 36 más los 26 de las puntas del extracto que no son intersección. Un cruce por
+    // brazo: 34.
+    expect(outcome.first.junctions).toEqual({ cross: 7, tee: 2, unsupported: 0 });
     expect(outcome.first.sidewalks.boca).toBe(1);
-    expect(outcome.first.sidewalks.created + outcome.first.sidewalks.updated).toBe(29);
-    expect(outcome.first.kerbs.created + outcome.first.kerbs.reused).toBe(38);
-    expect(outcome.first.crossings.created + outcome.first.crossings.updated).toBe(19);
+    expect(outcome.first.sidewalks.created + outcome.first.sidewalks.updated).toBe(52);
+    expect(outcome.first.kerbs.created + outcome.first.kerbs.reused).toBe(62);
+    expect(outcome.first.crossings.created + outcome.first.crossings.updated).toBe(30);
 
     // La segunda no crea nada: reconoce todo por coordenada y por par de nodos.
     expect(outcome.second.kerbs.created).toBe(0);
@@ -247,12 +256,12 @@ describe.skipIf(!process.env.DATABASE_URL)('importOsm contra la base', () => {
         return result.rows[0];
       });
 
-      // 29 veredas y 19 cruces del fixture: una arista cada una, y ningún id repetido
+      // 50 veredas y 30 cruces del fixture: una arista cada una, y ningún id repetido
       // entre las dos tablas (docs/11 §5).
-      expect(outcome?.edges).toBe('48');
-      expect(outcome?.ids).toBe('48');
-      expect(outcome?.sidewalks).toBe('29');
-      expect(outcome?.crossings).toBe('19');
+      expect(outcome?.edges).toBe('82');
+      expect(outcome?.ids).toBe('82');
+      expect(outcome?.sidewalks).toBe('52');
+      expect(outcome?.crossings).toBe('30');
       expect(outcome?.unsourced).toBe('0');
     });
 

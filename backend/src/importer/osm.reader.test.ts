@@ -8,8 +8,8 @@ describe('parseOsm', () => {
   it('lee nodos y vías del extracto', async () => {
     const extract = await readOsm(FIXTURE);
 
-    expect(extract.nodes.size).toBe(27);
-    expect(extract.ways).toHaveLength(14);
+    expect(extract.nodes.size).toBe(33);
+    expect(extract.ways).toHaveLength(16);
     expect(extract.nodes.get(2)).toEqual({ id: 2, lon: -68.846, lat: -32.888 });
   });
 

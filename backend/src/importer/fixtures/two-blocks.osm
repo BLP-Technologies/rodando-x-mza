@@ -4,7 +4,7 @@
 
   No es un recorte del extracto real: es el caso controlado que usan los tests para
   poder afirmar números exactos. Contiene, a propósito, los casos que el importador
-  tiene que distinguir (ver docs/11 y el issue #12):
+  tiene que distinguir (ver docs/11 y los issues #12 y #34):
 
     - una calle partida en dos `way` con un nodo intermedio de grado 2 (Calle A),
     - dos cruces de cuatro brazos en Calle A y dos en Avenida Ancha,
@@ -14,7 +14,12 @@
     - un `service` y un `footway` sueltos, que no entran,
     - dos peatonales, una con `area=yes` (plaza) y otra sin,
     - dos calzadas opuestas a 15 m con el mismo nombre, que son un boulevard: van
-dibujadas en el mismo sentido y `oneway=-1` invierte una, que es como OSM lo escribe.
+  dibujadas en el mismo sentido y `oneway=-1` invierte una, que es como OSM lo escribe,
+    - una calle que **cruza el boulevard con un nodo en cada calzada** (Calle Nueva),
+  que es lo que lo conecta con la grilla y le da a la mediana sus nodos,
+    - una **T contra una calzada** del boulevard (Calle Corta Dos termina en la calzada
+  oeste, así que la avenida no se acaba ahí: la otra calzada sigue),
+    - la peatonal **cruzando una calle** con un nodo compartido en el eje de Calle Uno.
 
   Las coordenadas son de Mendoza pero el damero es inventado y las distancias están
   redondeadas: 0,0001 de longitud ~9,35 m y 0,0001 de latitud ~11,13 m.
@@ -45,11 +50,25 @@ dibujadas en el mismo sentido y `oneway=-1` invierte una, que es como OSM lo esc
   <node id="26" lat="-32.8880" lon="-68.84625"/>
   <node id="27" lat="-32.8875" lon="-68.84625"/>
 
-  <!-- Boulevard: dos calzadas separadas 15 m, en sentidos opuestos -->
+  <!-- Boulevard: dos calzadas separadas 15 m, en sentidos opuestos. La 108 es la oeste y
+       la 109 la este, así que Calle Nueva las cruza de oeste a este y Calle Corta Dos
+       termina en la 108. -->
   <node id="14" lat="-32.8875" lon="-68.8480"/>
   <node id="15" lat="-32.8885" lon="-68.8480"/>
   <node id="16" lat="-32.8875" lon="-68.84784"/>
   <node id="17" lat="-32.8885" lon="-68.84784"/>
+
+  <!-- Calle Nueva: cruza el boulevard con un nodo en cada calzada (28 y 29) -->
+  <node id="28" lat="-32.8880" lon="-68.84800"/>
+  <node id="29" lat="-32.8880" lon="-68.84784"/>
+  <node id="30" lat="-32.8880" lon="-68.84820"/>
+
+  <!-- Calle Corta Dos: una T contra la calzada oeste, en una avenida que sigue -->
+  <node id="31" lat="-32.8878" lon="-68.84830"/>
+  <node id="32" lat="-32.8878" lon="-68.84800"/>
+
+  <!-- Nodo compartido entre la peatonal y Calle Uno -->
+  <node id="33" lat="-32.8880" lon="-68.8447"/>
 
   <!-- Vías que no entran al grafo -->
   <node id="18" lat="-32.8878" lon="-68.8470"/>
@@ -101,9 +120,28 @@ dibujadas en el mismo sentido y `oneway=-1` invierte una, que es como OSM lo esc
     <nd ref="26"/>
     <nd ref="2"/>
     <nd ref="7"/>
+    <nd ref="33"/>
     <nd ref="11"/>
     <tag k="highway" v="residential"/>
     <tag k="name" v="Calle Uno"/>
+  </way>
+
+  <!-- Cruza el boulevard con nodo en cada calzada y entra a la grilla por Calle Uno -->
+  <way id="115">
+    <nd ref="30"/>
+    <nd ref="28"/>
+    <nd ref="29"/>
+    <nd ref="10"/>
+    <tag k="highway" v="residential"/>
+    <tag k="name" v="Calle Nueva"/>
+  </way>
+
+  <!-- Termina en la calzada oeste: una T contra una avenida que sigue de largo -->
+  <way id="116">
+    <nd ref="31"/>
+    <nd ref="32"/>
+    <tag k="highway" v="residential"/>
+    <tag k="name" v="Calle Corta Dos"/>
   </way>
 
   <!-- Termina en Calle Uno: una T de tres brazos, con nodo 26 compartido -->
@@ -124,6 +162,8 @@ dibujadas en el mismo sentido y `oneway=-1` invierte una, que es como OSM lo esc
 
   <way id="108">
     <nd ref="14"/>
+    <nd ref="32"/>
+    <nd ref="28"/>
     <nd ref="15"/>
     <tag k="highway" v="residential"/>
     <tag k="name" v="Avenida Doble"/>
@@ -131,6 +171,7 @@ dibujadas en el mismo sentido y `oneway=-1` invierte una, que es como OSM lo esc
   </way>
   <way id="109">
     <nd ref="16"/>
+    <nd ref="29"/>
     <nd ref="17"/>
     <tag k="highway" v="residential"/>
     <tag k="name" v="Avenida Doble"/>
@@ -149,6 +190,7 @@ dibujadas en el mismo sentido y `oneway=-1` invierte una, que es como OSM lo esc
   </way>
   <way id="112">
     <nd ref="22"/>
+    <nd ref="33"/>
     <nd ref="23"/>
     <tag k="highway" v="pedestrian"/>
     <tag k="name" v="Peatonal Abierta"/>

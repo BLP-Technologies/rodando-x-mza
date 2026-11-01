@@ -1,7 +1,6 @@
 import type { OsmExtract, OsmWay } from './osm.reader.js';
 import {
   distanceBetweenLines,
-  distanceToLine,
   sideOfLine,
   sidewalkOffset,
   type BoulevardGroup,
@@ -274,12 +273,11 @@ export type WalkableLine = {
 /** Las líneas de un tramo, con el lado relativo a cómo está dibujado. */
 export type TramoLineRef = { lineId: number; side: 1 | -1 | 0 };
 
-/** Una calzada de boulevard: su línea exterior y la mediana de la avenida (§3.6). */
+/** Lo que aporta un tramo por ser calzada de un boulevard (§3.6). */
 export type BoulevardCalzada = {
   boulevardId: number;
+  /** La mediana de la avenida: es la otra línea del brazo, del lado de la otra calzada. */
   medianLineId: number;
-  /** La línea exterior de la otra calzada, por tramo: completa el ancho del brazo. */
-  partnerLines: readonly { tramoId: number; lineId: number }[];
 };
 
 /** Un tramo ya planificado: su offset, sus líneas y, si es calzada, su boulevard. */
@@ -308,8 +306,12 @@ export type JunctionArm = {
   bearing: number;
   /**
    * Las líneas del brazo de izquierda a derecha, visto desde el nodo hacia afuera. Una
-   * calle común aporta dos, una peatonal una y un boulevard tres: la exterior de cada
-   * calzada y la mediana en el medio (docs/11 §3.1).
+   * calle común aporta dos, una peatonal una y una calzada de boulevard dos: su vereda
+   * exterior y la mediana, una de cada lado (docs/11 §3.6).
+   *
+   * La vereda exterior de la **otra** calzada no está acá: es del brazo de esa calzada, y
+   * su esquina se deriva en el nodo de ella. Ponerla en los dos brazos dejaba la esquina de
+   * este nodo a media avenida de distancia (docs/11 §3.2).
    */
   lines: readonly number[];
 };
@@ -371,27 +373,17 @@ export function buildJunctions(
     north: to.lat - from.lat,
   });
 
-  /** Los puntos del eje de un tramo, para medir qué calzada de la otra está más cerca. */
-  const axisOf = (tramoIndex: number): { lon: number; lat: number }[] =>
-    (tramos[tramoIndex]?.nodeIds ?? [])
-      .map((nodeId) => nodes.get(nodeId))
-      .filter((node): node is { lon: number; lat: number } => node !== undefined);
-
   /**
    * Las líneas del brazo, de izquierda a derecha visto desde el nodo hacia afuera.
    *
    * El lado de cada línea es relativo al sentido en que está dibujado el tramo, y el
    * brazo se mira desde el nodo: si la intersección es el comienzo del tramo, alejarse es
-   * avanzar por la línea y la izquierda coincide; si es el final, se invierte. La mediana
-   * va siempre en el medio, y la vereda exterior de la otra calzada se agrega del lado en
-   * que la mediana la deja, así el brazo de un boulevard mide la avenida entera
-   * (docs/11 §3.1 y §3.6).
+   * avanzar por la línea y la izquierda coincide; si es el final, se invierte. Una calzada
+   * de boulevard suma la mediana **del lado de la otra calzada**: el brazo queda con una
+   * línea de cada lado, y la vereda exterior de la otra calzada es del brazo de ella
+   * (docs/11 §3.6).
    */
-  const armLines = (
-    tramo: PlannedTramo,
-    atStart: boolean,
-    node: { lon: number; lat: number },
-  ): number[] => {
+  const armLines = (tramo: PlannedTramo, atStart: boolean): number[] => {
     const ordered = tramo.lines.map((line) => ({
       lineId: line.lineId,
       lateral: line.side * (atStart ? 1 : -1),
@@ -401,25 +393,7 @@ export function buildJunctions(
       const own = ordered[0];
       const sign = own !== undefined && own.lateral < 0 ? -1 : 1;
 
-      ordered.push({ lineId: tramo.calzada.medianLineId, lateral: 0 });
-
-      let nearest: { lineId: number; distance: number } | undefined;
-      for (const partner of tramo.calzada.partnerLines) {
-        const axis = axisOf(partner.tramoId);
-        if (axis.length < 2) continue;
-        const distance = distanceToLine(node, axis);
-        if (nearest === undefined || distance < nearest.distance) {
-          nearest = { lineId: partner.lineId, distance };
-        }
-      }
-
-      if (nearest === undefined) {
-        warnings.push(
-          `tramo ${tramo.wayIds.join('+')}: no partner carriageway near the junction, the arm is half a boulevard`,
-        );
-      } else {
-        ordered.push({ lineId: nearest.lineId, lateral: -sign });
-      }
+      ordered.push({ lineId: tramo.calzada.medianLineId, lateral: -sign });
     }
 
     return ordered
@@ -443,7 +417,7 @@ export function buildJunctions(
           tramoId,
           atStart: true,
           bearing: Math.atan2(north, east),
-          lines: armLines(tramo, true, node),
+          lines: armLines(tramo, true),
         });
         armsByNode.set(first, list);
       }
@@ -459,7 +433,7 @@ export function buildJunctions(
           tramoId,
           atStart: false,
           bearing: Math.atan2(north, east),
-          lines: armLines(tramo, false, node),
+          lines: armLines(tramo, false),
         });
         armsByNode.set(last, list);
       }
@@ -803,13 +777,6 @@ export function planLines(
         : {
             boulevardId: trace.boulevardId,
             medianLineId: medianLineByBoulevard.get(trace.boulevardId) ?? -1,
-            partnerLines: traces.flatMap((other, otherIndex) => {
-              if (other === null || otherIndex === draft.tramoIndex) return [];
-              if (other.boulevardId !== trace.boulevardId || other.side === trace.side) return [];
-
-              const lineId = plannedLines[otherIndex]?.[0];
-              return lineId === undefined ? [] : [{ tramoId: otherIndex, lineId }];
-            }),
           };
 
     const lineIds = plannedLines[draft.tramoIndex] ?? [];
