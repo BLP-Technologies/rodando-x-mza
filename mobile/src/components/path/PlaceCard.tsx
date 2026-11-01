@@ -21,9 +21,17 @@ export const PlaceCard = ({
   const { styles, theme } = useStyles(getStyles);
 
   return (
-    <View style={styles.cardContainer}>
+    <View
+      style={styles.cardContainer}
+      accessible={true}
+      accessibilityLabel={`Lugar frecuente: ${title}, dirección: ${address}`}
+    >
       {/* Contenedor del ícono principal */}
-      <View style={styles.iconBox}>
+      <View
+        style={styles.iconBox}
+        importantForAccessibility="no-hide-descendants"
+        accessibilityElementsHidden={true}
+      >
         <Ionicons
           name={iconName}
           size={36}
@@ -32,7 +40,11 @@ export const PlaceCard = ({
       </View>
 
       {/* Información del lugar */}
-      <View style={styles.infoContainer}>
+      <View
+        style={styles.infoContainer}
+        importantForAccessibility="no-hide-descendants"
+        accessibilityElementsHidden={true}
+      >
         <Text style={styles.title}>{title}</Text>
         <Text style={styles.address}>{address}</Text>
       </View>
@@ -42,9 +54,11 @@ export const PlaceCard = ({
         <TouchableOpacity
           style={styles.editButton}
           onPress={onEdit}
+          accessible={true}
           accessibilityRole="button"
           accessibilityLabel={`Editar ${title}`}
-          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+          accessibilityHint="Abre el formulario para modificar los datos de este lugar"
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
           <Ionicons
             name="pencil-sharp"
@@ -56,9 +70,11 @@ export const PlaceCard = ({
         <TouchableOpacity
           style={styles.deleteButton}
           onPress={onDelete}
+          accessible={true}
           accessibilityRole="button"
           accessibilityLabel={`Eliminar ${title}`}
-          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+          accessibilityHint="Abre el diálogo de confirmación para borrar este lugar de tus guardados"
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
           <Ionicons
             name="trash-outline"
@@ -76,7 +92,7 @@ const getStyles = (theme: Theme) => ({
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     backgroundColor: theme.colors.surface.card,
-    borderRadius: theme.metrics.radius.card, // 24px
+    borderRadius: theme.metrics.radius.card,
     borderWidth: 1.5,
     borderColor: theme.colors.border.default,
     paddingVertical: theme.spacing.lg,
@@ -86,7 +102,7 @@ const getStyles = (theme: Theme) => ({
   iconBox: {
     width: 64,
     height: 64,
-    borderRadius: theme.metrics.radius.card, // 24px
+    borderRadius: theme.metrics.radius.card,
     borderWidth: 1.5,
     borderColor: theme.colors.border.focus,
     justifyContent: 'center' as const,
@@ -108,7 +124,7 @@ const getStyles = (theme: Theme) => ({
   },
   address: {
     color: theme.colors.text.main,
-    fontSize: theme.metrics.font.body.size - 1, // 16px
+    fontSize: theme.metrics.font.body.size - 1,
     lineHeight: theme.metrics.font.body.lineHeight,
     fontWeight: '500' as const,
   },

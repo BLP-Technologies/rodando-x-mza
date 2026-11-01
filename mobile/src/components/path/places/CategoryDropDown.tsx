@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, Modal, FlatList } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useStyles, Theme } from '@/theme';
-import { PlaceCategory } from '@/navigation/types';
+import { PlaceCategory } from '@/types/places';
 
 interface CategoryDropdownProps {
   value: PlaceCategory;

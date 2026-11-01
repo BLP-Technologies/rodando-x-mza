@@ -1,13 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as Location from 'expo-location';
 import { MapLocationPickerModal } from '@/components/report/MapLocationPickerModal';
 import { ReportStackParamList, BottomTabParamList } from '@/navigation/types';
 import { useStyles, Theme } from '@/theme';
+import { useAuth } from '@/auth/AuthContext';
 import { AppHeader } from '@/components/common/AppHeader';
 import { ScreenHeader } from '@/components/common/ScreenHeader';
 import { PrimaryButton } from '@/components/common/PrimaryButton';
@@ -26,6 +27,9 @@ type ReportScreenNavProp = NativeStackNavigationProp<ReportStackParamList, 'Repo
 export const ReportsScreen = () => {
   const { styles, theme } = useStyles(getStyles);
   const navigation = useNavigation<ReportScreenNavProp>();
+
+  // Consumo del estado global de sesión
+  const { isGuest, user, cerrarSesion, irAAutenticacion } = useAuth();
 
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [locationMode, setLocationMode] = useState<LocationMode>('current');
@@ -51,11 +55,23 @@ export const ReportsScreen = () => {
 
   const [validationModalVisible, setValidationModalVisible] = useState(false);
   const [cancelModalVisible, setCancelModalVisible] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
 
   //Estado para abrir o cerrar mapa
   const [isMapModalVisible, setIsMapModalVisible] = useState(false);
 
-  const handleLogout = () => console.log('Cerrar sesión');
+ // Bloqueo inmediato para invitados al enfocar la pantalla
+  useFocusEffect(
+    useCallback(() => {
+      if (isGuest) {
+        setShowAuthModal(true);
+      }
+    }, [isGuest])
+  );
+
+  const handleLogout = () => {
+    cerrarSesion();
+  };
 
   // Obtener ubicación GPS real y resolver la dirección con Photon
   const fetchCurrentLocation = async () => {
@@ -156,9 +172,22 @@ export const ReportsScreen = () => {
     navigation.getParent<BottomTabNavigationProp<BottomTabParamList>>()?.navigate('Inicio');
   };
 
+  const handleCloseAuthModal = () => {
+    setShowAuthModal(false);
+    navigation.goBack();
+  };
+
+  const userInitial = isGuest
+    ? 'A'
+    : user?.nombre?.[0]?.toUpperCase() || 'U';
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <AppHeader userInitial="C" onLogout={handleLogout} />
+      <AppHeader
+        userInitial={userInitial}
+        isGuest={isGuest}
+        onLogout={handleLogout}
+      />
 
       <ScrollView
         style={styles.scrollView}
@@ -228,6 +257,8 @@ export const ReportsScreen = () => {
           variant="outline"
           onPress={() => setCancelModalVisible(true)}
           style={styles.buttonSecondary}
+          accessibilityLabel="Continuar a la confirmación del reporte"
+          accessibilityHint="Verifica los datos y pasa a la pantalla de confirmación"
         />
       </ScrollView>
 
@@ -268,6 +299,26 @@ export const ReportsScreen = () => {
         initialLongitude={coordinates?.longitude || -68.8458}
         onConfirm={handleMapLocationConfirmed}
         onClose={() => setIsMapModalVisible(false)}
+      />
+
+      {/* Modal restrictivo para usuarios invitados */}
+      <StatusModal
+        visible={showAuthModal}
+        type="auth"
+        title="Para reportar una barrera necesitás una cuenta"
+        message="Al iniciar sesión podemos asociar el reporte a tu cuenta y permitir el seguimiento de su estado."
+        onClose={handleCloseAuthModal}
+        confirmText="CREAR CUENTA"
+        onConfirm={() => {
+          setShowAuthModal(false);
+          irAAutenticacion();
+        }}
+        secondaryText="INICIAR SESIÓN"
+        onSecondary={() => {
+          setShowAuthModal(false);
+          irAAutenticacion();
+        }}
+        dismissText="Ahora no"
       />
     </SafeAreaView>
   );

@@ -27,7 +27,12 @@ export const RouteCard = ({
     <View style={styles.cardContainer}>
       {/* Fila superior: información y botón eliminar */}
       <View style={styles.topRow}>
-        <View style={styles.infoCol}>
+        <View
+          style={styles.infoCol}
+          accessible={true}
+          accessibilityRole="text"
+          accessibilityLabel={`Recorrido ${label}: desde ${origin} hacia ${destination}. Última consulta: ${lastConsulted}.`}
+        >
           <Text style={styles.label}>{label}</Text>
           <Text style={styles.routeTitle}>
             {origin} <Text style={styles.arrow}>→</Text> {destination}
@@ -38,21 +43,25 @@ export const RouteCard = ({
         <TouchableOpacity
           style={styles.deleteButton}
           onPress={onDelete}
+          accessible={true}
           accessibilityRole="button"
           accessibilityLabel={`Eliminar recorrido ${label}`}
+          accessibilityHint="Abre el diálogo de confirmación para borrar este recorrido de tu lista"
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
           <Ionicons name="trash-outline" size={20} color={theme.colors.text.inverse} />
         </TouchableOpacity>
       </View>
 
-      {/* Botón de acción Buscar Ruta en color teal */}
+      {/* Botón de acción Buscar Ruta*/}
       <PrimaryButton
         title="BUSCAR RUTA ACCESIBLE AHORA"
         variant="teal"
         onPress={onSearchRoute}
         style={styles.actionButton}
         textStyle={styles.actionButtonText}
+        accessibilityLabel={`Buscar ruta accesible para ${label}`}
+        accessibilityHint="Calcula y traza en el mapa el recorrido accesible entre ambos puntos"
       />
     </View>
   );
@@ -61,10 +70,10 @@ export const RouteCard = ({
 const getStyles = (theme: Theme) => ({
   cardContainer: {
     backgroundColor: theme.colors.surface.card,
-    borderRadius: theme.metrics.radius.card, // 20
+    borderRadius: theme.metrics.radius.card,
     borderWidth: 1.5,
     borderColor: theme.colors.border.default,
-    padding: theme.spacing.lg, // 16
+    padding: theme.spacing.lg,
   },
   topRow: {
     flexDirection: 'row' as const,
@@ -85,7 +94,7 @@ const getStyles = (theme: Theme) => ({
   },
   routeTitle: {
     color: theme.colors.brand.navy,
-    fontSize: theme.metrics.font.body.size + 1, // 16
+    fontSize: theme.metrics.font.body.size + 1,
     lineHeight: theme.metrics.font.body.lineHeight,
     fontWeight: '800' as const,
     marginBottom: theme.spacing.xs,
@@ -109,10 +118,10 @@ const getStyles = (theme: Theme) => ({
   },
   actionButton: {
     minHeight: 48,
-    borderRadius: theme.metrics.radius.card - 4, // 16
+    borderRadius: theme.metrics.radius.card - 4,
   },
   actionButtonText: {
-    fontSize: theme.metrics.font.caption.size + 1, // 14
+    fontSize: theme.metrics.font.caption.size + 1,
     letterSpacing: 0.5,
   },
 });

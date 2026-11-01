@@ -1,9 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text } from 'react-native';
+import { useAuth } from '@/auth/AuthContext';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { useStyles, Theme } from '@/theme';
 import { BottomTabParamList } from './types';
+import { StatusModal } from '@/components/common/StatusModal';
 
 //screens
 import { HomeScreen } from '@/screens/home/HomeScreen';
@@ -16,97 +18,130 @@ const Tab = createBottomTabNavigator<BottomTabParamList>();
 
 export const BottomTabNavigator = () => {
   const { styles, theme } = useStyles(getStyles);
+  const { isGuest, irAAutenticacion } = useAuth();
+  const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
 
   return (
-    <Tab.Navigator
-      screenOptions={({ route }) => ({
-        headerShown: false,
-        tabBarShowLabel: false,
-        tabBarStyle: styles.tabBar,
-        tabBarItemStyle: styles.tabBarItem,
-        tabBarIcon: ({ focused }) => {
-          let iconName: keyof typeof Ionicons.glyphMap;
-          let labelText = '';
+    <>
+      <Tab.Navigator
+        screenOptions={({ route }) => ({
+          headerShown: false,
+          tabBarShowLabel: false,
+          tabBarStyle: styles.tabBar,
+          tabBarItemStyle: styles.tabBarItem,
+          tabBarIcon: ({ focused }) => {
+            let iconName: keyof typeof Ionicons.glyphMap;
+            let labelText = '';
 
-          switch (route.name) {
-            case 'Inicio':
-              iconName = focused ? 'home' : 'home-outline';
-              labelText = 'Inicio';
-              break;
-            case 'Recorrido':
-              iconName = focused ? 'map' : 'map-outline';
-              labelText = 'Recorrido';
-              break;
-            case 'Reportar':
-              iconName = focused ? 'alert-circle' : 'alert-circle-outline';
-              labelText = 'Reportar';
-              break;
-            case 'Tutoriales':
-              iconName = focused ? 'book' : 'book-outline';
-              labelText = 'Tutoriales';
-              break;
-            default:
-              iconName = 'ellipse-outline';
-              labelText = '';
-          }
+            switch (route.name) {
+              case 'Inicio':
+                iconName = focused ? 'home' : 'home-outline';
+                labelText = 'Inicio';
+                break;
+              case 'Recorrido':
+                iconName = focused ? 'map' : 'map-outline';
+                labelText = 'Recorrido';
+                break;
+              case 'Reportar':
+                iconName = focused ? 'alert-circle' : 'alert-circle-outline';
+                labelText = 'Reportar';
+                break;
+              case 'Tutoriales':
+                iconName = focused ? 'book' : 'book-outline';
+                labelText = 'Tutoriales';
+                break;
+              default:
+                iconName = 'ellipse-outline';
+                labelText = '';
+            }
 
-          const cardBackground = focused
-            ? theme.colors.brand.orange
-            : theme.colors.surface.welcome;
+            const cardBackground = focused
+              ? theme.colors.brand.orange
+              : theme.colors.surface.welcome;
 
-          return (
-            <View
-              style={[
-                styles.tabCard,
-                { backgroundColor: cardBackground },
-              ]}
-            >
-              <Ionicons
-                name={iconName}
-                size={24}
-                color={theme.colors.brand.navy}
-              />
-              <Text style={styles.tabLabel}>
-                {labelText}
-              </Text>
-            </View>
-          );
-        },
-      })}
-    >
-      <Tab.Screen
-        name="Inicio"
-        component={HomeScreen}
-        options={{
-          tabBarLabel: 'Inicio',
-          tabBarAccessibilityLabel: 'Pestaña Inicio',
+            return (
+              <View
+                style={[
+                  styles.tabCard,
+                  { backgroundColor: cardBackground },
+                ]}
+              >
+                <Ionicons
+                  name={iconName}
+                  size={24}
+                  color={theme.colors.brand.navy}
+                />
+                <Text style={styles.tabLabel}>
+                  {labelText}
+                </Text>
+              </View>
+            );
+          },
+        })}
+      >
+        <Tab.Screen
+          name="Inicio"
+          component={HomeScreen}
+          options={{
+            tabBarLabel: 'Inicio',
+            tabBarAccessibilityLabel: 'Pestaña Inicio',
+          }}
+        />
+        <Tab.Screen
+          name="Recorrido"
+          component={RouteStackNavigator}
+          options={{
+            tabBarLabel: 'Recorrido',
+            tabBarAccessibilityLabel: 'Pestaña Recorrido',
+          }}
+        />
+        <Tab.Screen
+          name="Reportar"
+          component={ReportStackNavigator}
+          options={{
+            tabBarLabel: 'Reportes',
+            tabBarAccessibilityLabel: 'Pestaña Lista de reportes',
+          }}
+          listeners={{
+            tabPress: (e) => {
+              if (isGuest) {
+                // Impide el cambio de pestaña para visitantes
+                e.preventDefault();
+                setShowAuthModal(true);
+              }
+            },
+          }}
+        />
+        <Tab.Screen
+          name="Tutoriales"
+          component={TutorialsStackNavigator}
+          options={{
+            tabBarLabel: 'Tutoriales',
+            tabBarAccessibilityLabel: 'Pestaña Lista de tutoriales',
+          }}
+        />
+      </Tab.Navigator>
+
+      {/* Modal global de bloqueo para la pestaña Reportar */}
+      <StatusModal
+        visible={showAuthModal}
+        type="auth"
+        title="Para reportar una barrera necesitás una cuenta"
+        message="Al iniciar sesión podemos asociar el reporte a tu cuenta y permitir el seguimiento de su estado."
+        onClose={() => setShowAuthModal(false)}
+        confirmText="CREAR CUENTA"
+        onConfirm={() => {
+          setShowAuthModal(false);
+          irAAutenticacion();
         }}
-      />
-      <Tab.Screen
-        name="Recorrido"
-        component={RouteStackNavigator}
-        options={{
-          tabBarLabel: 'Recorrido',
-          tabBarAccessibilityLabel: 'Pestaña Recorrido',
+        secondaryText="INICIAR SESIÓN"
+        onSecondary={() => {
+          setShowAuthModal(false);
+          irAAutenticacion();
         }}
+        dismissText="Ahora no"
       />
-      <Tab.Screen
-        name="Reportar"
-        component={ReportStackNavigator}
-        options={{
-          tabBarLabel: 'Reportes',
-          tabBarAccessibilityLabel: 'Pestaña Lista de reportes',
-        }}
-      />
-      <Tab.Screen
-        name="Tutoriales"
-        component={TutorialsStackNavigator}
-        options={{
-          tabBarLabel: 'Tutoriales',
-          tabBarAccessibilityLabel: 'Pestaña Lista de tutoriales',
-        }}
-      />
-    </Tab.Navigator>
+    </>  
   );
 };
 

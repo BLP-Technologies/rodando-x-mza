@@ -5,7 +5,6 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { ThemeProvider, useTheme } from '@/theme';
 import { BottomTabNavigator } from '@/navigation/BottomTabNavigator';
-import { MyPlacesScreen } from '@/screens/path/MyPlacesScreens';
 import { ProfileScreen } from '@/screens/profile/ProfileScreen';
 import { RootStackParamList } from '@/navigation/types';
 import { AuthProvider, useAuth } from './src/auth/AuthContext';

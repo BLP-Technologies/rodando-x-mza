@@ -1,7 +1,6 @@
 import React from 'react';
-import { View, Platform, StyleSheet } from 'react-native';
+import { View, Platform } from 'react-native';
 import { useStyles, Theme } from '@/theme';
-
 
 let WebView: any = null;
 if (Platform.OS !== 'web') {
@@ -24,12 +23,24 @@ interface OSMRouteMapProps {
   height?: number;
 }
 
+const escapeString = (str: string): string => {
+  return (str || '')
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'")
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+};
+
 export const OSMRouteMap = ({
   origin,
   destination,
   height = 240,
 }: OSMRouteMapProps) => {
   const { styles } = useStyles(getStyles);
+
+  const safeOriginLabel = escapeString(origin.label);
+  const safeDestLabel = escapeString(destination.label);
 
   // Centro geométrico entre ambos puntos
   const centerLat = (origin.latitude + destination.latitude) / 2;
@@ -38,8 +49,9 @@ export const OSMRouteMap = ({
   // HTML con Leaflet.js y azulejos oficiales de OpenStreetMap
   const leafletHtml = `
     <!DOCTYPE html>
-    <html>
+    <html lang="es">
       <head>
+        <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
         <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
         <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -61,11 +73,11 @@ export const OSMRouteMap = ({
           // Marcadores
           const originMarker = L.marker([${origin.latitude}, ${origin.longitude}])
             .addTo(map)
-            .bindPopup("<b>${origin.label}</b>");
+            .bindPopup("<b>${safeOriginLabel}</b>");
 
           const destMarker = L.marker([${destination.latitude}, ${destination.longitude}])
             .addTo(map)
-            .bindPopup("<b>${destination.label}</b>");
+            .bindPopup("<b>${safeDestLabel}</b>");
 
           // Trazado de ruta accesible (color Teal / Celeste Rodando)
           const latlngs = [
@@ -88,12 +100,18 @@ export const OSMRouteMap = ({
   `;
 
   return (
-    <View style={[styles.container, { height }]}>
+    <View
+      style={[styles.container, { height }]}
+      accessible={true}
+      accessibilityRole="image"
+      accessibilityLabel={`Mapa de ruta trazada desde ${origin.label} hasta ${destination.label}`}
+      accessibilityHint="Muestra visualmente el recorrido accesible recomendado entre ambos puntos"
+    >
       {Platform.OS === 'web' ? (
         <iframe
           srcDoc={leafletHtml}
           style={{ width: '100%', height: '100%', border: 'none' }}
-          title="OpenStreetMap Route"
+          title={`Mapa interactivo de recorrido desde ${origin.label} hasta ${destination.label}`}
         />
       ) : WebView ? (
         <WebView
@@ -101,6 +119,10 @@ export const OSMRouteMap = ({
           source={{ html: leafletHtml }}
           style={styles.webView}
           scrollEnabled={false}
+          javaScriptEnabled={true}
+          domStorageEnabled={true}
+          showsHorizontalScrollIndicator={false}
+          showsVerticalScrollIndicator={false}
         />
       ) : (
         <View style={styles.fallback} />

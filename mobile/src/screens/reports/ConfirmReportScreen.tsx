@@ -1,12 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, Text, ScrollView, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation, useRoute, RouteProp, CommonActions } from '@react-navigation/native';
+import { useNavigation, useRoute, RouteProp, CommonActions, useFocusEffect } from '@react-navigation/native';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { CompositeNavigationProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { ReportStackParamList, BottomTabParamList } from '@/navigation/types';
 import { useStyles, Theme } from '@/theme';
+import { useAuth } from '@/auth/AuthContext';
 import { AppHeader } from '@/components/common/AppHeader';
 import { ScreenHeader } from '@/components/common/ScreenHeader';
 import { PrimaryButton } from '@/components/common/PrimaryButton';
@@ -26,6 +27,9 @@ export const ConfirmReportScreen = () => {
   const navigation = useNavigation<ConfirmScreenNavProp>();
   const route = useRoute<ConfirmScreenRouteProp>();
 
+  // Consumo del estado global de sesión y navegación hacia autenticación
+  const { isGuest, user, cerrarSesion, irAAutenticacion } = useAuth();
+
   // Extraemos todos los parámetros que viajaron desde ReportsScreen
   const {
     locationMode,
@@ -40,6 +44,7 @@ export const ConfirmReportScreen = () => {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
   const [modalConfig, setModalConfig] = useState<{
     type: StatusType;
     title: string;
@@ -50,13 +55,29 @@ export const ConfirmReportScreen = () => {
     message: 'Tu reporte fue registrado exitosamente.',
   });
 
-  const handleLogout = () => console.log('Cerrar sesión');
+  // Verificación de acceso al enfocar la pantalla
+  useFocusEffect(
+    useCallback(() => {
+      if (isGuest) {
+        setShowAuthModal(true);
+      }
+    }, [isGuest])
+  );
+
+  const handleLogout = () => {
+    cerrarSesion();
+  };
 
   const handleCancel = () => {
     navigation.goBack();
   };
 
   const handleSendReport = async () => {
+    if (isGuest) {
+      setShowAuthModal(true);
+      return;
+    }
+    
     setIsSubmitting(true);
 
     try {
@@ -73,10 +94,6 @@ export const ConfirmReportScreen = () => {
         description: description?.trim() || undefined,
         photoUri: photoUri || null,
       });
-
-      //Temporal, para verificar persistencia  
-      const allStored = await reportsService.getAll();
-      console.log('📦 Reportes persistidos en AsyncStorage:', JSON.stringify(allStored, null, 2));
 
       setModalConfig({
         type: 'success',
@@ -110,15 +127,27 @@ export const ConfirmReportScreen = () => {
     }
   };
 
+  const handleCloseAuthModal = () => {
+    setShowAuthModal(false);
+    navigation.goBack();
+  };
+
   const modeBadgeText =
     locationMode === 'current'
       ? 'Ubicación actual (GPS)'
       : 'Punto marcado en el mapa';
 
+  const userInitial = isGuest
+    ? 'A'
+    : user?.nombre?.[0]?.toUpperCase() || 'U';
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <AppHeader userInitial="C" onLogout={handleLogout} />
-
+      <AppHeader
+        userInitial={userInitial}
+        isGuest={isGuest}
+        onLogout={handleLogout}
+      />
       <ScrollView
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
@@ -130,7 +159,12 @@ export const ConfirmReportScreen = () => {
         />
 
         {/* Tarjeta de Resumen */}
-        <View style={styles.card}>
+        <View 
+          style={styles.card}
+          accessible={true}
+          accessibilityRole="summary"
+          accessibilityLabel="Resumen de datos del reporte de barrera"
+        >
           {/* Ubicación y dirección */}
           <View style={styles.itemGroup}>
             <Text style={styles.label}>Ubicación</Text>
@@ -157,6 +191,9 @@ export const ConfirmReportScreen = () => {
                   source={{ uri: photoUri }}
                   style={styles.imagePreview}
                   resizeMode="cover"
+                  accessible={true}
+                  accessibilityRole="summary"
+                  accessibilityLabel="Resumen de datos del reporte de barrera"
                 />
               </View>
             ) : (
@@ -181,6 +218,7 @@ export const ConfirmReportScreen = () => {
             onPress={handleSendReport}
             loading={isSubmitting}
             accessibilityLabel="Confirmar y enviar reporte"
+            accessibilityHint="Registra la barrera en el sistema para alertar a la comunidad"
           />
 
           <PrimaryButton
@@ -188,7 +226,8 @@ export const ConfirmReportScreen = () => {
             variant="outline"
             onPress={handleCancel}
             disabled={isSubmitting}
-            accessibilityLabel="Cancelar y volver a editar reporte"
+            accessibilityLabel="Cancelar y volver"
+            accessibilityHint="Regresa a la pantalla anterior para editar los datos del reporte"
           />
         </View>
       </ScrollView>
@@ -200,6 +239,26 @@ export const ConfirmReportScreen = () => {
         title={modalConfig.title}
         message={modalConfig.message}
         onClose={handleCloseModal}
+      />
+
+      {/* Modal restrictivo para usuarios invitados */}
+      <StatusModal
+        visible={showAuthModal}
+        type="auth"
+        title="Para reportar una barrera necesitás una cuenta"
+        message="Al iniciar sesión podemos asociar el reporte a tu cuenta y permitir el seguimiento de su estado."
+        onClose={handleCloseAuthModal}
+        confirmText="CREAR CUENTA"
+        onConfirm={() => {
+          setShowAuthModal(false);
+          irAAutenticacion();
+        }}
+        secondaryText="INICIAR SESIÓN"
+        onSecondary={() => {
+          setShowAuthModal(false);
+          irAAutenticacion();
+        }}
+        dismissText="Ahora no"
       />
     </SafeAreaView>
   );

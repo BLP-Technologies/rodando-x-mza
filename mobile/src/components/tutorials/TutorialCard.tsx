@@ -10,6 +10,7 @@ export interface TutorialItem {
   duration: string;
   description: string;
   iconName: keyof typeof Ionicons.glyphMap;
+  youtubeId?: string;
 }
 
 interface TutorialCardProps {
@@ -20,21 +21,33 @@ interface TutorialCardProps {
 export const TutorialCard = ({ item, onPress }: TutorialCardProps) => {
   const { styles, theme } = useStyles(getStyles);
 
+  const accessibilitySummary = `${item.title}. Categoría: ${item.category}. Duración estimada: ${item.duration}. ${item.description}`;
+
   return (
     <TouchableOpacity
       style={styles.card}
       onPress={onPress}
       activeOpacity={0.7}
+      accessible={true}
       accessibilityRole="button"
-      accessibilityLabel={`${item.title}, ${item.category}, duración ${item.duration}`}
+      accessibilityLabel={accessibilitySummary}
+      accessibilityHint="Abre el detalle con el video explicativo y las instrucciones paso a paso"
     >
       {/* Ícono contenedor */}
-      <View style={styles.iconContainer}>
+      <View
+        style={styles.iconContainer}
+        importantForAccessibility="no-hide-descendants"
+        accessibilityElementsHidden={true}
+      >
         <Ionicons name={item.iconName} size={24} color={theme.colors.brand.navy} />
       </View>
 
       {/* Contenido textual */}
-      <View style={styles.textContainer}>
+      <View
+        style={styles.textContainer}
+        importantForAccessibility="no-hide-descendants"
+        accessibilityElementsHidden={true}
+      >
         <Text style={styles.title} numberOfLines={1}>
           {item.title}
         </Text>
@@ -46,12 +59,14 @@ export const TutorialCard = ({ item, onPress }: TutorialCardProps) => {
         </Text>
       </View>
 
-      {/* Flecha chevron */}
+      {/* Flecha chevron decorativa */}
       <Ionicons
         name="chevron-forward"
         size={20}
         color={theme.colors.brand.navy}
         style={styles.chevron}
+        importantForAccessibility="no-hide-descendants"
+        accessibilityElementsHidden={true}
       />
     </TouchableOpacity>
   );
@@ -66,6 +81,7 @@ const getStyles = (theme: Theme) => ({
     padding: theme.spacing.lg,
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
+    minHeight: 88,
     shadowColor: theme.colors.brand.navy,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
@@ -76,7 +92,7 @@ const getStyles = (theme: Theme) => ({
     width: 48,
     height: 48,
     borderRadius: 14,
-    backgroundColor: '#7DBBB7', // Tono verde azulado de los íconos de la app
+    backgroundColor: '#7DBBB7',
     justifyContent: 'center' as const,
     alignItems: 'center' as const,
     marginRight: theme.spacing.md,
@@ -86,7 +102,7 @@ const getStyles = (theme: Theme) => ({
     marginRight: theme.spacing.xs,
   },
   title: {
-    fontSize: theme.metrics.font.body.size + 1, // ~17px
+    fontSize: theme.metrics.font.body.size + 1,
     fontWeight: '800' as const,
     color: theme.colors.brand.navy,
     marginBottom: 2,
@@ -98,7 +114,7 @@ const getStyles = (theme: Theme) => ({
     marginBottom: 4,
   },
   description: {
-    fontSize: theme.metrics.font.caption.size + 1, // ~13-14px
+    fontSize: theme.metrics.font.caption.size + 1,
     color: theme.colors.brand.navy,
     lineHeight: 18,
   },

@@ -10,16 +10,22 @@ export type DatosSesion = { nombre: string; email: string };
 
 interface AuthContextType {
   sesion: Sesion;
+  isGuest: boolean; //agregago
+  user: { nombre: string; email: string } | null;//agregado
   iniciarSesion: (datos: DatosSesion) => void;
   entrarComoInvitado: () => void;
   cerrarSesion: () => void;
+  irAAutenticacion: () => void;//Vuelve al flujo de auth si el invitado quiere registrarse
 }
 
 const AuthContext = createContext<AuthContextType>({
   sesion: null,
+  isGuest:false,//
+  user: null,//
   iniciarSesion: () => {},
   entrarComoInvitado: () => {},
   cerrarSesion: () => {},
+  irAAutenticacion: () => {},//
 });
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
@@ -37,9 +43,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     setSesion(null);
   }, []);
 
+  const isGuest = sesion?.tipo === 'invitado';
+  const user = sesion?.tipo === 'usuario' ? { nombre: sesion.nombre, email: sesion.email } : null;
+
   const value = useMemo(
-    () => ({ sesion, iniciarSesion, entrarComoInvitado, cerrarSesion }),
-    [sesion, iniciarSesion, entrarComoInvitado, cerrarSesion],
+    () => ({ sesion, isGuest, user, iniciarSesion, entrarComoInvitado, cerrarSesion, irAAutenticacion: cerrarSesion, }),
+    [sesion, isGuest, user, iniciarSesion, entrarComoInvitado, cerrarSesion],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

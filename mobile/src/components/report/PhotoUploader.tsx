@@ -13,27 +13,32 @@ export const PhotoUploader = ({ imageUri, onImageChange }: PhotoUploaderProps) =
   const { styles, theme } = useStyles(getStyles);
 
   const pickImage = async () => {
-    // 1. Pedir permisos de galería
-    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    try {
+      // 1. Pedir permisos de galería
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
-    if (!permissionResult.granted) {
-      Alert.alert(
-        'Permiso denegado',
-        'Necesitamos acceso a tus imágenes para poder adjuntar la foto del obstáculo.'
-      );
-      return;
-    }
+      if (!permissionResult.granted) {
+        Alert.alert(
+          'Permiso necesario',
+          'Necesitamos acceso a tus imágenes para poder adjuntar la foto del obstáculo.'
+        );
+        return;
+      }
 
-    // 2. Abrir selector de archivos/galería
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      aspect: [4, 3],
-      quality: 0.7, // Buena calidad sin saturar el tamaño del archivo
-    });
+      // 2. Abrir selector de archivos/galería
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.7,
+      });
 
-    if (!result.canceled && result.assets && result.assets.length > 0) {
-      onImageChange(result.assets[0].uri);
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        onImageChange(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('Error al abrir la galería:', error);
+      Alert.alert('Error', 'No se pudo abrir la galería de imágenes en este momento.');
     }
   };
 
@@ -44,12 +49,22 @@ export const PhotoUploader = ({ imageUri, onImageChange }: PhotoUploaderProps) =
   if (imageUri) {
     return (
       <View style={styles.previewContainer}>
-        <Image source={{ uri: imageUri }} style={styles.previewImage} resizeMode="cover" />
+        <Image
+          source={{ uri: imageUri }}
+          style={styles.previewImage}
+          resizeMode="cover"
+          accessible={true}
+          accessibilityRole="image"
+          accessibilityLabel="Fotografía adjunta de la barrera u obstáculo"
+        />
         <TouchableOpacity
           style={styles.removeButton}
           onPress={removeImage}
+          accessible={true}
           accessibilityRole="button"
           accessibilityLabel="Eliminar foto seleccionada"
+          accessibilityHint="Elimina la imagen actual y permite volver a elegir otra de la galería"
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
           <Ionicons name="trash-outline" size={20} color={theme.colors.text.inverse} />
         </TouchableOpacity>
@@ -61,8 +76,11 @@ export const PhotoUploader = ({ imageUri, onImageChange }: PhotoUploaderProps) =
     <TouchableOpacity
       style={styles.photoUploadBox}
       onPress={pickImage}
+      activeOpacity={0.7}
+      accessible={true}
       accessibilityRole="button"
       accessibilityLabel="Agregar foto del obstáculo"
+      accessibilityHint="Abre la galería del dispositivo para seleccionar una imagen"
     >
       <Ionicons name="images-outline" size={22} color={theme.colors.brand.teal} />
       <Text style={styles.photoUploadText}>Agregar foto</Text>
@@ -82,6 +100,7 @@ const getStyles = (theme: Theme) => ({
     borderRadius: theme.metrics.radius.card,
     backgroundColor: theme.colors.surface.card,
     paddingVertical: theme.spacing.lg,
+    minHeight: 56,
     marginBottom: theme.spacing.xl,
   },
   photoUploadText: {

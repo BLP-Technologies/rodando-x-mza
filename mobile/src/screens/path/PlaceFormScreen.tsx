@@ -1,12 +1,13 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import { useNavigation, useRoute, RouteProp, useFocusEffect } from '@react-navigation/native';
 import { useStyles, Theme } from '@/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { RouteStackParamList } from '@/navigation/types';
 import { PlaceCategory, PlaceSchema } from '@/types/places';
 import { placesService } from '@/services/placesService';
+import { useAuth } from '@/auth/AuthContext';
 import { searchAddressSuggestions, PlaceSuggestion } from '@/services/geocoding';
 import { AppHeader } from '@/components/common/AppHeader';
 import { ScreenHeader } from '@/components/common/ScreenHeader';
@@ -26,6 +27,9 @@ export const PlaceFormScreen = () => {
   const { styles, theme } = useStyles(getStyles);
   const navigation = useNavigation<any>();
   const route = useRoute<PlaceFormRouteProp>();
+
+  // Consumimos el contexto global de sesión
+  const { isGuest, user, cerrarSesion, irAAutenticacion } = useAuth();
 
   // Si viene placeId, estamos editando; si no, estamos creando
   const placeId = route.params?.placeId;
@@ -48,6 +52,9 @@ export const PlaceFormScreen = () => {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Modal restrictivo para visitantes
+  const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
+
   // Modal de feedback (éxito o error)
   const [modalConfig, setModalConfig] = useState<{
     visible: boolean;
@@ -60,9 +67,18 @@ export const PlaceFormScreen = () => {
     title: '',
   });
 
-  // Si edita, cargar datos existentes
+  // Verificación de acceso al entrar a la pantalla
+  useFocusEffect(
+    useCallback(() => {
+      if (isGuest) {
+        setShowAuthModal(true);
+      }
+    }, [isGuest])
+  );
+
+  // Si edita y el usuario está autenticado, cargar datos existentes
   useEffect(() => {
-    if (placeId) {
+    if (placeId && !isGuest) {
       placesService.getById(placeId).then((place) => {
         if (place) {
           setName(place.name);
@@ -74,7 +90,7 @@ export const PlaceFormScreen = () => {
         }
       });
     }
-  }, [placeId]);
+  }, [placeId, isGuest]);
 
 // Manejo de búsqueda en tiempo real con debounce
   const handleAddressChange = (text: string) => {
@@ -114,9 +130,14 @@ export const PlaceFormScreen = () => {
   };
 
 
-  const handleLogout = () => console.log('Cerrar sesión');
+  const handleLogout = () => cerrarSesion();;
 
   const handleSubmit = async () => {
+
+    if (isGuest) {
+      setShowAuthModal(true);
+      return;
+    }
 
 // 1. Obtener coordenadas exactas usando Photon si no están fijadas
     let lat = coordinates.latitude;
@@ -198,13 +219,26 @@ export const PlaceFormScreen = () => {
     const wasSuccess = modalConfig.type === 'success';
     setModalConfig((prev) => ({ ...prev, visible: false }));
     if (wasSuccess) {
-      navigation.goBack(); // Vuelve a Mis Lugares con la lista actualizada
+      navigation.goBack(); 
     }
   };
 
+  const handleCloseAuthModal = () => {
+    setShowAuthModal(false);
+    navigation.goBack();
+  };
+
+  const userInitial = isGuest
+    ? 'A'
+    : user?.nombre?.[0]?.toUpperCase() || 'U';
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <AppHeader userInitial="C" onLogout={handleLogout} />
+      <AppHeader
+        userInitial={userInitial}
+        isGuest={isGuest}
+        onLogout={handleLogout}
+      />
 
       <ScrollView
         style={styles.scrollView}
@@ -252,13 +286,23 @@ export const PlaceFormScreen = () => {
 
             {/* Desplegable de Sugerencias de Photon */}
             {showSuggestions && suggestions.length > 0 && (
-              <View style={styles.suggestionsContainer}>
+              <View style=
+                {styles.suggestionsContainer}
+                accessible={true}
+                accessibilityRole="list"
+                accessibilityLabel="Sugerencias de direcciones encontradas"
+              >
                 {suggestions.map((item) => (
                   <TouchableOpacity
                     key={item.id}
                     style={styles.suggestionItem}
                     onPress={() => handleSelectSuggestion(item)}
                     activeOpacity={0.7}
+                    accessible={true}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${item.name}, ${item.fullAddress}`}
+                    accessibilityHint="Selecciona esta dirección para el formulario"
+
                   >
                     <Ionicons
                       name="location-outline"
@@ -289,6 +333,8 @@ export const PlaceFormScreen = () => {
             variant="orange"
             onPress={handleSubmit}
             style={styles.submitButton}
+            accessibilityLabel={isEditing ? 'Modificar lugar' : 'Guardar lugar'}
+            accessibilityHint="Guarda la información del lugar en tus direcciones frecuentes"
           />
         </View>
       </ScrollView>
@@ -301,6 +347,26 @@ export const PlaceFormScreen = () => {
         title={modalConfig.title}
         message={modalConfig.message}
         onClose={handleCloseModal}
+      />
+
+      {/* Modal restrictivo para usuarios invitados */}
+      <StatusModal
+        visible={showAuthModal}
+        type="auth"
+        title="Para guardar lugares necesitás una cuenta"
+        message="Al iniciar sesión o crear tu cuenta podés registrar direcciones frecuentes para calcular tus recorridos rápidamente."
+        onClose={handleCloseAuthModal}
+        confirmText="CREAR CUENTA"
+        onConfirm={() => {
+          setShowAuthModal(false);
+          irAAutenticacion();
+        }}
+        secondaryText="INICIAR SESIÓN"
+        onSecondary={() => {
+          setShowAuthModal(false);
+          irAAutenticacion();
+        }}
+        dismissText="Ahora no"
       />
     </SafeAreaView>
   );

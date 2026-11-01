@@ -52,12 +52,20 @@ export const RouteStatusBadge = ({ status }: RouteStatusBadgeProps) => {
         styles.badge,
         { backgroundColor: config.bg, borderColor: config.border },
       ]}
+      accessible={true}
       accessibilityRole="text"
       accessibilityLabel={`Estado del tramo: ${config.label}`}
     >
-      <Ionicons name={config.icon} size={14} color={config.text} style={styles.icon} />
-      <Text style={[styles.text, { color: config.text }]}>{config.label}</Text>
+      <View
+        style={styles.innerRow}
+        importantForAccessibility="no-hide-descendants"
+        accessibilityElementsHidden={true}
+      >
+        <Ionicons name={config.icon} size={14} color={config.text} style={styles.icon} />
+        <Text style={[styles.text, { color: config.text }]}>{config.label}</Text>
+      </View>
     </View>
+    
   );
 };
 
@@ -70,6 +78,10 @@ const getStyles = (theme: Theme) => ({
     borderRadius: 12,
     borderWidth: 1,
     alignSelf: 'flex-start' as const,
+  },
+  innerRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
   },
   icon: {
     marginRight: 4,

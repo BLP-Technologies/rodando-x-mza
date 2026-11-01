@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useStyles, Theme } from '@/theme';
-import { Place, PlaceCategory } from '@/navigation/types';
+import { Place, PlaceCategory } from '@/types/places';
 
 interface RoutePointCardProps {
   label: 'ORIGEN' | 'DESTINO';

@@ -1,29 +1,15 @@
 import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  Switch,
-  TouchableOpacity,
-} from 'react-native';
+import { View, Text, ScrollView, Switch, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import {
-  useStyles,
-  Theme,
-  useAccessibility,
-  FontScaleOption,
-} from '@/theme';
+import { useStyles, Theme, useAccessibility, FontScaleOption } from '@/theme';
+import { useAuth } from '@/auth/AuthContext';
+
 import { AppHeader } from '@/components/common/AppHeader';
 import { PrimaryButton } from '@/components/common/PrimaryButton';
 import { ScreenHeader } from '@/components/common/ScreenHeader';
 import { useVoiceReader } from '@/hooks/useVoiceReader';
 
-interface UserProfile {
-  name: string;
-  email: string;
-  initial: string;
-}
 
 export const ProfileScreen = () => {
   const { styles, theme } = useStyles(getStyles);
@@ -35,6 +21,9 @@ export const ProfileScreen = () => {
     setReadingGuide,
     setScreenReaderEnabled,
   } = useAccessibility();
+
+  // Consumo de la sesión central
+  const { isGuest, user, cerrarSesion, irAAutenticacion } = useAuth();
 
   //Instancia lector de voz
   const { speak } = useVoiceReader();
@@ -56,14 +45,6 @@ export const ProfileScreen = () => {
 
   const [isHelpOpen, setIsHelpOpen] = useState(false);
 
-  // --- ESTADO DE AUTENTICACIÓN (Preparado para conectar con AuthContext / compañero) ---
-  // Cambiá este valor a false o true para probar ambos estados visuales al instante:
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(true);
-  const [user, setUser] = useState<UserProfile>({
-    name: 'Ciro',
-    email: 'ciroascencio@mail.com',
-    initial: 'C',
-  });
 
   const fontScaleLabels: Record<FontScaleOption, string> = {
     normal: 'Normal',
@@ -80,11 +61,20 @@ export const ProfileScreen = () => {
     speak(`Tamaño de texto: ${fontScaleLabels[newScale]}.`);
   };
 
+  const handleLogout = () => {
+    cerrarSesion();
+  };
+
+  const userInitial = isGuest
+    ? 'A'
+    : user?.nombre?.[0]?.toUpperCase() || 'U';
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <AppHeader
-        userInitial={isAuthenticated ? user.initial : 'B'}
-        onLogout={() => setIsAuthenticated((prev) => !prev)} // Simula cerrar sesión o cambiar de estado
+        userInitial={userInitial}
+        isGuest={isGuest}
+        onLogout={handleLogout}
       />
       <View style={styles.fixedHeaderContainer}> 
     
@@ -102,29 +92,31 @@ export const ProfileScreen = () => {
         showsVerticalScrollIndicator={false}
       >
         {/* ============================================================== */}
-        {/* BLOQUE CONDICIONAL: USUARIO AUTENTICADO vs VISITANTE          */}
+        {/* BLOQUE CONDICIONAL: USUARIO REGISTRADO vs INVITADO             */}
         {/* ============================================================== */}
-        {isAuthenticated ? (
-          // CASO 1: USUARIO AUTENTICADO
+        {!isGuest ? (
+          // CASO 1: USUARIO REGISTRADO
           <>
             {/* Tarjeta de bienvenida con Avatar y botón Editar datos */}
             <View style={styles.welcomeCard}>
               <View style={styles.userInfoRow}>
                 <View style={styles.avatarCircleAuth}>
-                  <Text style={styles.avatarAuthText}>{user.initial}</Text>
+                  <Text style={styles.avatarAuthText}>{userInitial}</Text>
                 </View>
 
                 <View style={styles.userDetailsCol}>
                   <Text style={styles.greetingText}>¡Hola! 👋</Text>
-                  <Text style={styles.userNameText}>{user.name}</Text>
-                  <Text style={styles.userEmailText}>{user.email}</Text>
+                  <Text style={styles.userNameText}>{user?.nombre || 'Visitante'}</Text>
+                  <Text style={styles.userEmailText}>{user?.email || 'Sin correo asociado'}</Text>
                 </View>
 
                 <TouchableOpacity
                   style={styles.editDataButton}
-                  onPress={() => console.log('Navegar a Editar datos')}
+                  onPress={() => console.log('Navegar a Editar datos')}//ToDo
+                  accessible={true}
                   accessibilityRole="button"
                   accessibilityLabel="Editar datos personales"
+                  accessibilityHint="Abre la pantalla para modificar tu nombre o correo"
                 >
                   <Text style={styles.editDataText}>Editar datos</Text>
                 </TouchableOpacity>
@@ -132,7 +124,12 @@ export const ProfileScreen = () => {
             </View>
 
             {/* Tarjeta Cuenta Activa */}
-            <View style={styles.activeAccountCard}>
+            <View 
+              style={styles.activeAccountCard}
+              accessible={true}
+              accessibilityRole="summary"
+              accessibilityLabel="Estado de la cuenta: Cuenta activa. Tus datos se guardan en este dispositivo."
+              >
               <View style={styles.activeAccountLeftStripe} />
               <View style={styles.activeAccountContent}>
                 <Text style={styles.activeAccountTitle}>✓ Cuenta activa</Text>
@@ -149,12 +146,12 @@ export const ProfileScreen = () => {
             <View style={styles.welcomeCard}>
               <View style={styles.userInfoRow}>
                 <View style={styles.avatarCircleGuest}>
-                  <Text style={styles.avatarGuestText}>B</Text>
+                  <Text style={styles.avatarGuestText}>A</Text>
                 </View>
 
                 <View style={styles.userDetailsCol}>
                   <Text style={styles.greetingText}>¡Hola! 👋</Text>
-                  <Text style={styles.userNameText}>B</Text>
+                  <Text style={styles.userNameText}>Visitante</Text>
                   <Text style={styles.guestStatusText}>
                     Estás usando la aplicación sin cuenta.
                   </Text>
@@ -166,7 +163,7 @@ export const ProfileScreen = () => {
             <View style={styles.guestCtaCard}>
               <View style={styles.guestCtaLeftStripe} />
               <Text style={styles.guestCtaTitle}>
-                Creá una cuenta para más opciones
+                Creá una cuenta para más opciones y colaborar con la comunidad.
               </Text>
               <Text style={styles.guestCtaSubtitle}>
                 Podrás guardar tus recorridos, tus lugares favoritos y hacer reportes.
@@ -175,14 +172,18 @@ export const ProfileScreen = () => {
                 <PrimaryButton
                   title="Crear cuenta"
                   variant="teal"
-                  onPress={() => console.log('Ir a Registro')}
+                  onPress={irAAutenticacion}
                   style={styles.authButton}
+                  accessibilityLabel="Crear cuenta"
+                  accessibilityHint="Abre el formulario de registro"
                 />
                 <PrimaryButton
                   title="Iniciar sesión"
                   variant="outline"
-                  onPress={() => console.log('Ir a Login')}
+                  onPress={irAAutenticacion}
                   style={styles.authButton}
+                  accessibilityLabel="Iniciar sesión"
+                  accessibilityHint="Abre la pantalla de ingreso con tu cuenta existente"
                 />
               </View>
             </View>
@@ -208,6 +209,9 @@ export const ProfileScreen = () => {
               onValueChange={handleToggleVoiceReading}
               trackColor={{ false: '#D1D5DB', true: theme.colors.brand.teal }}
               thumbColor="#FFFFFF"
+              accessibilityRole="switch"
+              accessibilityLabel="Lectura en voz alta"
+              accessibilityState={{ checked: preferences.screenReaderEnabled }}
             />
           </View>
 
@@ -226,6 +230,9 @@ export const ProfileScreen = () => {
               onValueChange={setHighContrast}
               trackColor={{ false: '#D1D5DB', true: theme.colors.brand.teal }}
               thumbColor="#FFFFFF"
+              accessibilityRole="switch"
+              accessibilityLabel="Modo alto contraste"
+              accessibilityState={{ checked: preferences.highContrast }}
             />
           </View>
 
@@ -242,8 +249,10 @@ export const ProfileScreen = () => {
             <TouchableOpacity
               style={styles.dropdownBadge}
               onPress={handleNextFontScale}
+              accessible={true}
               accessibilityRole="button"
               accessibilityLabel={`Tamaño actual: ${fontScaleLabels[preferences.fontScale]}. Tocar para cambiar`}
+              accessibilityHint="Tocar para alternar entre Normal, Grande y Extra grande"
             >
               <Text style={styles.dropdownBadgeText}>
                 {fontScaleLabels[preferences.fontScale]}
@@ -267,6 +276,9 @@ export const ProfileScreen = () => {
               onValueChange={setReadingGuide}
               trackColor={{ false: '#D1D5DB', true: theme.colors.brand.teal }}
               thumbColor="#FFFFFF"
+              accessibilityRole="switch"
+              accessibilityLabel="Guía de lectura"
+              accessibilityState={{ checked: preferences.readingGuide }}
             />
           </View>
 
@@ -285,6 +297,9 @@ export const ProfileScreen = () => {
               onValueChange={setReduceMotion}
               trackColor={{ false: '#D1D5DB', true: theme.colors.brand.teal }}
               thumbColor="#FFFFFF"
+              accessibilityRole="switch"
+              accessibilityLabel="Reducir movimiento"
+              accessibilityState={{ checked: preferences.reduceMotion }}
             />
           </View>
         </View>
@@ -294,6 +309,11 @@ export const ProfileScreen = () => {
           style={styles.helpAccordion}
           onPress={() => setIsHelpOpen((prev) => !prev)}
           activeOpacity={0.7}
+          accessible={true}
+          accessibilityRole="button"
+          accessibilityLabel="Sección de ayuda"
+          accessibilityHint={isHelpOpen ? 'Tocar para contraer la sección de ayuda' : 'Tocar para expandir la sección de ayuda'}
+          accessibilityState={{ expanded: isHelpOpen }}
         >
           <Text style={styles.helpTitle}>Ayuda</Text>
           <Ionicons
@@ -304,7 +324,12 @@ export const ProfileScreen = () => {
         </TouchableOpacity>
 
         {isHelpOpen && (
-          <View style={styles.helpContent}>
+          <View 
+            style={styles.helpContent}
+            accessible={true}
+            accessibilityRole="text"
+            accessibilityLabel="Encontrá tutoriales de uso, preguntas frecuentes o comunicate con el equipo de soporte de Rodando por Mendoza."
+          >
             <Text style={styles.helpContentText}>
               Encontrá tutoriales de uso, preguntas frecuentes o comunicate con el equipo de soporte de Rodando x Mza.
             </Text>
@@ -349,7 +374,7 @@ const getStyles = (theme: Theme) => ({
     width: 48,
     height: 48,
     borderRadius: theme.metrics.radius.pill,
-    backgroundColor: '#129B9B',
+    backgroundColor: theme.colors.brand.teal,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
     marginRight: theme.spacing.md,

@@ -1,15 +1,16 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRoute, RouteProp } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useStyles, Theme } from '@/theme';
 import { RouteStackParamList, RouteStep } from '@/navigation/types';
+import { useAuth } from '@/auth/AuthContext';
 import { AppHeader } from '@/components/common/AppHeader';
 import { ScreenHeader } from '@/components/common/ScreenHeader';
 import { RouteStepItem } from '@/components/path/RouteStepItem';
 
-// Opcional: npx expo install expo-speech para lectura de voz real
+// Opcional: pnpm expo install expo-speech para lectura de voz real
 let Speech: any = null;
 try {
   Speech = require('expo-speech');
@@ -19,6 +20,7 @@ try {
 
 type DetailRouteProp = RouteProp<RouteStackParamList, 'RouteDetail'>;
 
+//¿Debería recibir un json con los detalles de los pasos?
 const DEFAULT_STEPS: RouteStep[] = [
   {
     id: '1',
@@ -50,8 +52,11 @@ const DEFAULT_STEPS: RouteStep[] = [
 ];
 
 export const RouteDetailScreen = () => {
-  const { styles, theme } = useStyles(getStyles);
+  const { styles } = useStyles(getStyles);
   const route = useRoute<DetailRouteProp>();
+
+  // Consumo de sesión global
+  const { isGuest, user, cerrarSesion } = useAuth();
 
   const originLabel = route.params?.originLabel || 'Casa';
   const destinationLabel = route.params?.destinationLabel || 'Escuela';
@@ -59,7 +64,22 @@ export const RouteDetailScreen = () => {
 
   const [isSpeaking, setIsSpeaking] = useState(false);
 
-  const handleLogout = () => console.log('Cerrar sesión');
+  // Detener la reproducción de voz al salir o desmontar la pantalla
+  useEffect(() => {
+    return () => {
+      if (Speech && isSpeaking) {
+        Speech.stop();
+      }
+    };
+  }, [isSpeaking]);
+
+  const handleLogout = () => {
+    if (Speech && isSpeaking) {
+      Speech.stop();
+    }
+    cerrarSesion();
+  };
+
 
   const handleSpeakDirections = () => {
     if (Speech) {
@@ -87,9 +107,17 @@ export const RouteDetailScreen = () => {
     }
   };
 
+  const userInitial = isGuest
+    ? 'A'
+    : user?.nombre?.[0]?.toUpperCase() || 'U';
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <AppHeader userInitial="C" onLogout={handleLogout} />
+      <AppHeader
+        userInitial={userInitial}
+        isGuest={isGuest}
+        onLogout={handleLogout}
+      />
 
       <ScrollView
         style={styles.scrollView}
@@ -104,7 +132,11 @@ export const RouteDetailScreen = () => {
 
         {/* Fila: Resumen de origen/destino y botón de lectura por voz */}
         <View style={styles.subHeaderRow}>
-          <Text style={styles.routeSummaryText}>
+          <Text 
+            style={styles.routeSummaryText}
+            accessible={true}
+            accessibilityLabel={`Trayecto desde ${originLabel} hacia ${destinationLabel}`}
+            >
             {originLabel} → {destinationLabel}
           </Text>
 
@@ -113,7 +145,13 @@ export const RouteDetailScreen = () => {
             onPress={handleSpeakDirections}
             activeOpacity={0.8}
             accessibilityRole="button"
-            accessibilityLabel="Escuchar indicaciones por voz"
+            accessibilityLabel={
+              isSpeaking
+                ? 'Detener lectura por voz de las indicaciones'
+                : 'Escuchar indicaciones por voz'
+            }
+            accessibilityHint="Lee en voz alta las indicaciones paso a paso del trayecto"
+            accessibilityLiveRegion="polite"
           >
             <View style={styles.voiceIconWrapper}>
               <Ionicons
@@ -129,7 +167,12 @@ export const RouteDetailScreen = () => {
         </View>
 
         {/* Lista de pasos numerados */}
-        <View style={styles.stepsList}>
+        <View 
+          style={styles.stepsList}
+          accessible={true}
+          accessibilityRole="list"
+          accessibilityLabel="Lista de indicaciones paso a paso"
+        >
           {steps.map((step) => (
             <RouteStepItem key={step.id} step={step} />
           ))}

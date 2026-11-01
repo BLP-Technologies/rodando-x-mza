@@ -32,8 +32,19 @@ export const BarrierTypeSelector = ({
 
   return (
     <View style={styles.container}>
-      <Text style={styles.sectionLabel}>TIPO DE BARRERA</Text>
-      <View style={styles.chipsRow}>
+      <Text
+        style={styles.sectionLabel}
+        accessible={true}
+        accessibilityRole="header"
+      >
+        TIPO DE BARRERA
+      </Text>
+      <View
+        style={styles.chipsRow}
+        accessible={true}
+        accessibilityRole="radiogroup"
+        accessibilityLabel="Opciones de tipo de barrera"
+      >
         {options.map((option) => {
           const isSelected = selectedValue === option.id;
           return (
@@ -41,9 +52,16 @@ export const BarrierTypeSelector = ({
               key={option.id}
               style={[styles.chip, isSelected && styles.chipSelected]}
               onPress={() => onSelect(option.id)}
-              accessibilityRole="checkbox"
-              accessibilityState={{ checked: isSelected }}
+              accessible={true}
+              accessibilityRole="radio"
+              accessibilityState={{ selected: isSelected }}
               accessibilityLabel={option.label}
+              accessibilityHint={
+                isSelected
+                  ? 'Opción actualmente seleccionada'
+                  : 'Toca dos veces para seleccionar este tipo de barrera'
+              }
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
             >
               <Text
                 style={[styles.chipText, isSelected && styles.chipTextSelected]}
@@ -82,6 +100,9 @@ const getStyles = (theme: Theme) => ({
     borderWidth: 1.5,
     borderColor: theme.colors.border.default,
     backgroundColor: theme.colors.surface.card,
+    minHeight: 40,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
   },
   chipSelected: {
     backgroundColor: theme.colors.brand.teal,

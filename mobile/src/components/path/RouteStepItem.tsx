@@ -1,25 +1,50 @@
 import React from 'react';
 import { View, Text } from 'react-native';
 import { useStyles, Theme } from '@/theme';
-import { RouteStep } from '@/navigation/types';
+import { RouteStep, RouteStepStatus } from '@/navigation/types';
 import { RouteStatusBadge } from './RouteStatusBadge';
 
 interface RouteStepItemProps {
   step: RouteStep;
 }
 
+const STATUS_TEXT: Record<RouteStepStatus, string> = {
+  accessible: 'Tramo accesible',
+  unverified: 'Tramo sin verificar',
+  partially_accessible: 'Tramo con precaución',
+  not_accessible: 'Tramo no accesible',
+};
+
 export const RouteStepItem = ({ step }: RouteStepItemProps) => {
   const { styles } = useStyles(getStyles);
 
+  const statusDescription = step.status ? STATUS_TEXT[step.status] : '';
+  const distanceDescription = step.distance ? `Distancia: ${step.distance}.` : '';
+
+  const fullAccessibilityLabel = `Paso ${step.stepNumber}: ${step.instruction}. ${distanceDescription} ${statusDescription}`.trim();
+
   return (
-    <View style={styles.container}>
-      {/* 1. Indicador numérico */}
-      <View style={styles.numberBadge}>
+    <View
+      style={styles.container}
+      accessible={true}
+      accessibilityRole="text"
+      accessibilityLabel={fullAccessibilityLabel}
+    >
+      {/* 1. Indicador numérico visual */}
+      <View
+        style={styles.numberBadge}
+        importantForAccessibility="no-hide-descendants"
+        accessibilityElementsHidden={true}
+      >
         <Text style={styles.numberText}>{step.stepNumber}</Text>
       </View>
 
       {/* 2. Instrucción y metadatos */}
-      <View style={styles.content}>
+      <View
+        style={styles.content}
+        importantForAccessibility="no-hide-descendants"
+        accessibilityElementsHidden={true}
+      >
         <Text style={styles.instructionText}>{step.instruction}</Text>
 
         {(step.distance || step.status) && (

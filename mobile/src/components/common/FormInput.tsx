@@ -27,9 +27,22 @@ export const FormInput = ({
   onVoiceInput,
   isListening = false,
   style,
+  onFocus,
+  onBlur,
   ...rest
 }: FormInputProps) => {
   const { styles, theme } = useStyles(getStyles);
+  const [isFocused, setIsFocused] = useState(false);
+
+  const handleFocus: TextInputProps['onFocus'] = (e) => {
+    setIsFocused(true);
+    onFocus?.(e);
+  };
+
+  const handleBlur: TextInputProps['onBlur'] = (e) => {
+    setIsFocused(false);
+    onBlur?.(e);
+  };
 
   const handleVoicePress = () => {
     if (onVoiceInput) {
@@ -41,12 +54,21 @@ export const FormInput = ({
 
   return (
     <View style={[styles.container, containerStyle]}>
-      {label ? <Text style={styles.label}>{label}</Text> : null}
+      {label ? (
+        <Text
+          style={styles.label}
+          accessible={true}
+          accessibilityRole="header"
+        >
+          {label}
+        </Text>
+      ) : null}
 
       <View
         style={[
           styles.inputWrapper,
           multiline && styles.multilineWrapper,
+          isFocused && styles.inputWrapperFocused,
           isListening && styles.inputWrapperListening,
         ]}
       >
@@ -56,6 +78,11 @@ export const FormInput = ({
           multiline={multiline}
           numberOfLines={numberOfLines}
           textAlignVertical={multiline ? 'top' : 'center'}
+          onFocus={handleFocus}
+          onBlur={handleBlur}
+          accessible={true}
+          accessibilityLabel={label || rest.placeholder || rest.accessibilityLabel}
+          accessibilityState={{ disabled: rest.editable === false }}
           {...rest}
         />
 
@@ -67,12 +94,20 @@ export const FormInput = ({
               isListening && styles.voiceButtonListening,
             ]}
             onPress={handleVoicePress}
+            accessible={true}
             accessibilityRole="button"
             accessibilityLabel={
               isListening
                 ? 'Detener dictado por voz'
-                : `Dictar con voz para ${label || 'este campo'}`
+                : `Dictar por voz para ${label || 'este campo'}`
             }
+            accessibilityHint={
+              isListening
+                ? 'Finaliza la captura de voz e ingresa el texto dictado'
+                : 'Activa el micrófono para dictar el contenido de este campo'
+            }
+            accessibilityState={{ selected: isListening }}
+            accessibilityLiveRegion="polite"
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             <Ionicons
@@ -112,6 +147,9 @@ const getStyles = (theme: Theme) => ({
     borderRadius: theme.metrics.radius.card,
     minHeight: 48,
     paddingRight: theme.spacing.xs,
+  },
+  inputWrapperFocused: {
+    borderColor: theme.colors.brand.teal,
   },
   inputWrapperListening: {
     borderColor: theme.colors.state.danger,

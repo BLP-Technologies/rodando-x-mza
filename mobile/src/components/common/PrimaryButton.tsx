@@ -18,6 +18,7 @@ interface PrimaryButtonProps {
   style?: ViewStyle;
   textStyle?: TextStyle;
   accessibilityLabel?: string;
+  accessibilityHint?: string;
 }
 
 export const PrimaryButton = ({
@@ -29,6 +30,7 @@ export const PrimaryButton = ({
   style,
   textStyle,
   accessibilityLabel,
+  accessibilityHint
 }: PrimaryButtonProps) => {
   const { styles, theme } = useStyles(getStyles);
 
@@ -69,6 +71,7 @@ export const PrimaryButton = ({
       accessibilityRole="button"
       accessibilityState={{ disabled: disabled || loading }}
       accessibilityLabel={accessibilityLabel || title}
+      accessibilityHint={accessibilityHint}
     >
       {loading ? (
         <ActivityIndicator 

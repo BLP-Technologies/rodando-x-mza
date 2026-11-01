@@ -17,6 +17,7 @@ interface ActionButtonProps {
   style?: ViewStyle;
   textStyle?: TextStyle;
   accessibilityLabel?: string;
+  accessibilityHint?: string;
 }
 
 export const ActionButton = ({
@@ -28,6 +29,7 @@ export const ActionButton = ({
   style,
   textStyle,
   accessibilityLabel,
+  accessibilityHint,
 }: ActionButtonProps) => {
   const { styles, theme } = useStyles(getStyles);
 
@@ -57,6 +59,7 @@ export const ActionButton = ({
       activeOpacity={0.8}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel || title}
+      accessibilityHint={accessibilityHint}
     >
       {loading ? (
         <ActivityIndicator color={getTextColor()} size="small" />

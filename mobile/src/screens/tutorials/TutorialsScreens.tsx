@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, ScrollView, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useStyles, Theme } from '@/theme';
+import { useAuth } from '@/auth/AuthContext';
 import { AppHeader } from '@/components/common/AppHeader';
 import { ScreenHeader } from '@/components/common/ScreenHeader';
 import { FormInput } from '@/components/common/FormInput';
@@ -53,7 +54,10 @@ export const TutorialsScreen = () => {
   const navigation = useNavigation<TutorialsScreenNavProp>();
   const [searchQuery, setSearchQuery] = useState('');
 
-  const handleLogout = () => console.log('Cerrar sesión');
+  // Consumo de la sesión real
+  const { isGuest, user, cerrarSesion } = useAuth();
+
+  const handleLogout = () => cerrarSesion();
 
   const filteredTutorials = TUTORIALS_DATA.filter((tutorial) =>
     tutorial.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -65,11 +69,18 @@ export const TutorialsScreen = () => {
    navigation.navigate('TutorialDetail', { tutorial });
   };
 
+  const userInitial = isGuest
+    ? 'A'
+    : user?.nombre?.[0]?.toUpperCase() || 'U';
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       {/* 1. Header institucional */}
-      <AppHeader userInitial="C" onLogout={handleLogout} />
-
+      <AppHeader
+        userInitial={userInitial}
+        isGuest={isGuest}
+        onLogout={handleLogout}
+      />
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.contentContainer}
@@ -85,7 +96,12 @@ export const TutorialsScreen = () => {
         />
 
         {/* 3. Banner de aviso de prototipo */}
-        <View style={styles.prototypeBanner}>
+        <View 
+          style={styles.prototypeBanner}
+          accessible={true}
+          accessibilityRole="text"
+          accessibilityLabel="Aviso de prototipo: Contenido de referencia. Los tutoriales definitivos serán validados con referentes especializados."
+        >
           <Text style={styles.prototypeText}>
             Contenido de referencia para el prototipo. Los tutoriales definitivos
             serán validados con referentes especializados indicaciones
@@ -98,10 +114,18 @@ export const TutorialsScreen = () => {
           placeholder="¿Qué necesitás aprender?"
           value={searchQuery}
           onChangeText={setSearchQuery}
+          multiline={false}
+          numberOfLines={1}
+          enableVoiceInput={true}
         />
 
         {/* 5. Lista de tarjetas */}
-        <View style={styles.cardsList}>
+        <View 
+          style={styles.cardsList}
+          accessible={true}
+          accessibilityRole="list"
+          accessibilityLabel="Lista de tutoriales disponibles"
+        >
           {filteredTutorials.map((item) => (
             <TutorialCard
               key={item.id}
@@ -111,7 +135,12 @@ export const TutorialsScreen = () => {
           ))}
 
           {filteredTutorials.length === 0 && (
-            <View style={styles.emptyContainer}>
+            <View 
+              style={styles.emptyContainer}
+              accessible={true}
+              accessibilityRole="text"
+              accessibilityLiveRegion="polite" 
+            >
               <Text style={styles.emptyText}>
                 No se encontraron tutoriales que coincidan con la búsqueda.
               </Text>

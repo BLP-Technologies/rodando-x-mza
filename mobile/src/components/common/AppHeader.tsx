@@ -6,12 +6,14 @@ import { useStyles, Theme } from '@/theme';
 
 interface AppHeaderProps {
   userInitial?: string;
+  isGuest?: boolean;
   onLogout?: () => void;
   onPressProfile?: () => void;
 }
 
 export const AppHeader = ({
   userInitial = 'C',
+  isGuest = false,
   onLogout,
   onPressProfile,
 }: AppHeaderProps) => {
@@ -36,34 +38,51 @@ export const AppHeader = ({
     }
   };
 
+  // Color de avatar según tipo de usuario: orange para invitado, teal para registrado
+  const avatarBgColor = isGuest
+    ? theme.colors.brand.orange
+    : theme.colors.brand.teal;
+
   return (
-    <View style={styles.headerContainer}>
-      {/* Logotipo */}
-      <View style={styles.logoPlaceholder}>
+    <View
+      style={styles.headerContainer}
+      accessible={false} // Permite que los lectores naveguen a los botones hijos
+    >
+      {/* Logotipo accesible */}
+      <View
+        style={styles.logoPlaceholder}
+        accessible={true}
+        accessibilityRole="header"
+        accessibilityLabel="Rodando por Mendoza"
+      >
         <Text style={styles.logoText}>
           RODANDO<Text style={{ color: theme.colors.state.warning }}>X</Text>
           <Text style={{ color: theme.colors.brand.teal }}>MZA</Text>
         </Text>
       </View>
 
-      {/* Contenedor del Perfil + Botón Salir */}
+      {/* Contenedor Perfil + Salir */}
       <View style={styles.profileBadge}>
-        {/* Tocar el avatar navega a la pantalla de Perfil */}
+        {/* Avatar -> Perfil */}
         <TouchableOpacity
           onPress={handleProfilePress}
-          style={styles.avatarCircle}
+          style={[styles.avatarCircle, { backgroundColor: avatarBgColor }]}
+          accessible={true}
           accessibilityRole="button"
-          accessibilityLabel="Ir al perfil y preferencias de accesibilidad"
+          accessibilityLabel={`Perfil de usuario, inicial ${userInitial}`}
+          accessibilityHint="Abre la pantalla de perfil y configuración de accesibilidad"
         >
           <Text style={styles.avatarText}>{userInitial}</Text>
         </TouchableOpacity>
 
-        {/* Tocar Salir dispara el logout */}
+        {/* Salir */}
         <TouchableOpacity
           onPress={handleLogoutPress}
           style={styles.logoutButton}
+          accessible={true}
           accessibilityRole="button"
-          accessibilityLabel="Cerrar sesión"
+          accessibilityLabel="Salir"
+          accessibilityHint={isGuest ? 'Finaliza el modo invitado' : 'Cierra tu sesión actual'}
         >
           <Ionicons name="exit-outline" size={18} color={theme.colors.brand.navy} />
           <Text style={styles.logoutText}>Salir</Text>

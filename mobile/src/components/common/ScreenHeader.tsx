@@ -39,7 +39,8 @@ export const ScreenHeader = ({
           style={styles.backButton}
           onPress={handleBack}
           accessibilityRole="button"
-          accessibilityLabel="Volver atrás"
+          accessibilityLabel="Volver a la pantalla anterior"
+          accessibilityHint="Regresa a la pantalla previa"
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
           <Ionicons

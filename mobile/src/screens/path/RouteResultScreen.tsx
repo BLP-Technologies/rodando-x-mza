@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { useAuth } from '@/auth/AuthContext';
+
 import {
   View,
   Text,
@@ -18,47 +20,53 @@ import { StatusModal, StatusType } from '@/components/common/StatusModal';
 import { routesService } from '@/services/routesService';
 import { CreateRouteInput } from '@/types/routes';
 
-
 type RouteResultProp = RouteProp<RouteStackParamList, 'RouteResult'>;
 
 export const RouteResultScreen = () => {
   const { styles, theme } = useStyles(getStyles);
   const navigation = useNavigation<any>();
   const route = useRoute<RouteResultProp>();
-  const [isSaved, setIsSaved] = useState(false);
 
 
-  // Parámetros recibidos de NewRouteScreen (con fallback por si se abre directo)
+  // Consumimos el contexto global:
+  const { isGuest, user, cerrarSesion, irAAutenticacion } = useAuth();
+
+  const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
+  const [isSaved, setIsSaved] = useState<boolean>(false);
+  const [customName, setCustomName] = useState<string>('');
+
+  
+
+  // Parámetros recibidos de NewRouteScreen (con fallback)
   const { origin, destination } = route.params || {
     origin: { label: 'Casa', latitude: -32.8895, longitude: -68.8458 },
     destination: { label: 'Escuela', latitude: -32.8791, longitude: -68.8412 },
   };
 
-    // Verificar al entrar si la ruta actual ya está en la lista de guardados
+  // Solo busca rutas guardadas si el usuario no es visitante
   useEffect(() => {
     let isActive = true;
-    routesService.getAll().then((existingRoutes) => {
-      if (!isActive) return;
-      const alreadyExists = existingRoutes.some(
-        (r) =>
-          r.origin.latitude === origin.latitude &&
-          r.origin.longitude === origin.longitude &&
-          r.destination.latitude === destination.latitude &&
-          r.destination.longitude === destination.longitude
-      );
-      if (alreadyExists) {
-        setIsSaved(true);
-      }
-    });
+    if (!isGuest) {
+      routesService.getAll().then((existingRoutes) => {
+        if (!isActive) return;
+        const alreadyExists = existingRoutes.some(
+          (r) =>
+            r.origin.latitude === origin.latitude &&
+            r.origin.longitude === origin.longitude &&
+            r.destination.latitude === destination.latitude &&
+            r.destination.longitude === destination.longitude
+        );
+        if (alreadyExists) {
+          setIsSaved(true);
+        }
+      });
+    }
     return () => {
       isActive = false;
     };
-  }, [origin.latitude, origin.longitude, destination.latitude, destination.longitude]);
+  }, [isGuest, origin.latitude, origin.longitude, destination.latitude, destination.longitude]);
 
-
-  const [customName, setCustomName] = useState('');
-  
-  // Control de estado para StatusModal
+  // Modal para éxito o error al guardar
   const [modalConfig, setModalConfig] = useState<{
     visible: boolean;
     type: StatusType;
@@ -69,17 +77,16 @@ export const RouteResultScreen = () => {
     type: 'success',
     title: '',
   });
-  
-  
 
-  // Simulación de cálculo de ruta (Mock para conectar luego al backend)
   const routeMetrics = {
     distance: '340 m',
     duration: '16 min aprox.',
     warningMessage: 'Hay un tramo de vereda sin verificar.',
   };
 
-  const handleLogout = () => console.log('Cerrar sesión');
+  const handleLogout = () => {
+    cerrarSesion();
+  };
 
   const handleViewDetail = () => {
     navigation.navigate('RouteDetail', {
@@ -89,6 +96,12 @@ export const RouteResultScreen = () => {
   };
 
   const handleSaveRoute = async () => {
+    // Si es visitante, abre el modal de solicitud de inicio/registro
+    if (isGuest) {
+      setShowAuthModal(true);
+      return;
+    }
+
     if (isSaved) return;
 
     try {
@@ -123,9 +136,7 @@ export const RouteResultScreen = () => {
 
       await routesService.create(newRoutePayload);
 
-      // Marcamos como guardado
       setIsSaved(true);
-
       setModalConfig({
         visible: true,
         type: 'success',
@@ -142,8 +153,7 @@ export const RouteResultScreen = () => {
     }
   };
 
-  // Al cerrar el modal navegamos a Mis Recorridos o permanecemos en la pantalla
-  const handleCloseModal = () => {
+  const handleCloseStatusModal = () => {
     const wasSuccess = modalConfig.type === 'success';
     setModalConfig((prev) => ({ ...prev, visible: false }));
     if (wasSuccess) {
@@ -153,15 +163,21 @@ export const RouteResultScreen = () => {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <AppHeader userInitial="C" onLogout={handleLogout} />
+      <AppHeader
+        userInitial={isGuest ? 'A' : (user?.nombre?.[0]?.toUpperCase() || 'U')}
+        isGuest={isGuest}
+        onLogout={handleLogout}
+      />
 
-      {/* Botón Volver */}
+      {/* Botón Volver con Touch Target accesible */}
       <View style={styles.backButtonContainer}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}
           style={styles.backButton}
+          accessible={true}
           accessibilityRole="button"
           accessibilityLabel="Volver atrás"
+          accessibilityHint="Regresa a la selección de puntos de recorrido"
         >
           <Ionicons name="chevron-back" size={28} color={theme.colors.brand.navy} />
         </TouchableOpacity>
@@ -174,40 +190,61 @@ export const RouteResultScreen = () => {
         keyboardShouldPersistTaps="handled"
       >
         {/* Vista previa del Mapa */}
-        <View style={styles.mapWrapper}>
+        <View
+          style={styles.mapWrapper}
+          accessible={true}
+          accessibilityRole="image"
+          accessibilityLabel={`Mapa de ruta accesible desde ${origin.label} hasta ${destination.label}`}
+        >
           <OSMRouteMap
             origin={origin}
             destination={destination}
             height={230}
           />
           {/* Badge de advertencia sobre el mapa */}
-          <View style={styles.mapWarningBadge}>
+          <View
+            style={styles.mapWarningBadge}
+            accessible={true}
+            accessibilityRole="alert"
+            accessibilityLabel="Advertencia: Tramo sin verificar sobre el mapa"
+          >
             <Ionicons name="warning-outline" size={16} color="#7A4D00" />
             <Text style={styles.mapWarningText}>Tramo sin verificar</Text>
           </View>
         </View>
 
-        {/* Sección Informativa */}
+        {/* Sección Informativa agrupada para lectores de pantalla */}
         <View style={styles.infoSection}>
-          <Text style={styles.eyebrow}>RUTA ACCESIBLE ENCONTRADA</Text>
+          <View
+            accessible={true}
+            accessibilityRole="summary"
+            accessibilityLabel={`Ruta accesible encontrada: desde ${origin.label} hasta ${destination.label}. Distancia: ${routeMetrics.distance}, duración estimada: ${routeMetrics.duration}`}
+          >
+            <Text style={styles.eyebrow}>RUTA ACCESIBLE ENCONTRADA</Text>
 
-          <View style={styles.titleRow}>
-            <Text style={styles.pointTitle}>{origin.label}</Text>
-            <Ionicons
-              name="arrow-forward"
-              size={20}
-              color={theme.colors.brand.navy}
-              style={styles.arrowIcon}
-            />
-            <Text style={styles.pointTitle}>{destination.label}</Text>
+            <View style={styles.titleRow}>
+              <Text style={styles.pointTitle}>{origin.label}</Text>
+              <Ionicons
+                name="arrow-forward"
+                size={20}
+                color={theme.colors.brand.navy}
+                style={styles.arrowIcon}
+              />
+              <Text style={styles.pointTitle}>{destination.label}</Text>
+            </View>
+
+            <Text style={styles.metricsText}>
+              {routeMetrics.distance} | {routeMetrics.duration}
+            </Text>
           </View>
 
-          <Text style={styles.metricsText}>
-            {routeMetrics.distance} | {routeMetrics.duration}
-          </Text>
-
           {/* Banner de alerta de accesibilidad */}
-          <View style={styles.alertBanner}>
+          <View
+            style={styles.alertBanner}
+            accessible={true}
+            accessibilityRole="alert"
+            accessibilityLabel={routeMetrics.warningMessage}
+          >
             <Ionicons name="help-circle-outline" size={18} color="#9C3B53" />
             <Text style={styles.alertText}>{routeMetrics.warningMessage}</Text>
           </View>
@@ -219,9 +256,11 @@ export const RouteResultScreen = () => {
               variant="primary"
               onPress={handleViewDetail}
               style={styles.flexButton}
+              accessibilityLabel="Ver detalle"
+              accessibilityHint="Abre la lista de indicaciones paso a paso de este trayecto"
             />
             <ActionButton
-              title={isSaved ? "RECORRIDO GUARDADO" : "GUARDAR RECORRIDO"}
+              title={isSaved ? 'RECORRIDO GUARDADO' : 'GUARDAR RECORRIDO'}
               variant="primary"
               onPress={handleSaveRoute}
               disabled={isSaved}
@@ -229,6 +268,12 @@ export const RouteResultScreen = () => {
                 ...styles.flexButton,
                 ...(isSaved ? styles.disabledButton : {}),
               }}
+              accessibilityLabel={isSaved ? 'Recorrido guardado' : 'Guardar recorrido'}
+              accessibilityHint={
+                isGuest
+                  ? 'Abre aviso para registrarse o iniciar sesión antes de guardar'
+                  : 'Guarda esta ruta en tu lista de recorridos frecuentes'
+              }
             />
           </View>
 
@@ -241,20 +286,41 @@ export const RouteResultScreen = () => {
             multiline={false}
             numberOfLines={1}
             enableVoiceInput={true}
+            accessibilityLabel="Nombre opcional para el recorrido"
+            accessibilityHint="Ingresá un nombre personalizado para identificar fácilmente esta ruta"
           />
         </View>
       </ScrollView>
 
-      {/* Modal de confirmación de guardado */}
+      {/* Modal de confirmación o error (éxito al guardar) */}
       <StatusModal
         visible={modalConfig.visible}
         type={modalConfig.type}
         layout="row"
         title={modalConfig.title}
         message={modalConfig.message}
-        onClose={handleCloseModal}
+        onClose={handleCloseStatusModal}
       />
 
+      {/* Modal de autenticación requerida para visitantes */}
+      <StatusModal
+        visible={showAuthModal}
+        type="auth"
+        title="Para guardar un recorrido necesitás una cuenta"
+        message="Al iniciar sesión podemos asociar el recorrido a tu cuenta y podrás consultarlos más adelante."
+        onClose={() => setShowAuthModal(false)}
+        confirmText="CREAR CUENTA"
+        onConfirm={() => {
+          setShowAuthModal(false);
+          irAAutenticacion();
+        }}
+        secondaryText="INICIAR SESIÓN"
+        onSecondary={() => {
+          setShowAuthModal(false);
+          irAAutenticacion();
+        }}
+        dismissText="Ahora no"
+      />
     </SafeAreaView>
   );
 };
@@ -278,7 +344,7 @@ const getStyles = (theme: Theme) => ({
   },
   contentContainer: {
     paddingHorizontal: theme.spacing.xl,
-    paddingBottom: 130, // Margen para el BottomTab
+    paddingBottom: 130,
   },
   mapWrapper: {
     position: 'relative' as const,
@@ -321,7 +387,7 @@ const getStyles = (theme: Theme) => ({
     marginBottom: 6,
   },
   pointTitle: {
-    fontSize: theme.metrics.font.header.size - 4, // ~24
+    fontSize: theme.metrics.font.header.size - 4,
     fontWeight: '800' as const,
     color: theme.colors.brand.navy,
   },
@@ -337,7 +403,7 @@ const getStyles = (theme: Theme) => ({
   alertBanner: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    backgroundColor: '#E79CAE', // Tono rosado de la maqueta
+    backgroundColor: '#E79CAE',
     borderRadius: theme.metrics.radius.card - 6,
     paddingVertical: theme.spacing.md,
     paddingHorizontal: theme.spacing.lg,
@@ -362,5 +428,4 @@ const getStyles = (theme: Theme) => ({
     flex: 1,
     paddingHorizontal: 4,
   },
-    
 });

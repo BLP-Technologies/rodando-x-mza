@@ -5,7 +5,6 @@ import {
   Text,
   TouchableOpacity,
   Platform,
-  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
@@ -41,6 +40,16 @@ export const MapLocationPickerModal = ({
 
   const [isResolving, setIsResolving] = useState(false);
 
+  // Sincronizar coordenadas cuando el modal se vuelve a abrir o cambian las iniciales
+  useEffect(() => {
+    if (visible) {
+      setCurrentCoords({
+        latitude: initialLatitude,
+        longitude: initialLongitude,
+      });
+    }
+  }, [visible, initialLatitude, initialLongitude]);
+
   // Escuchar mensajes en entorno Web
   useEffect(() => {
     if (Platform.OS !== 'web') return;
@@ -63,13 +72,12 @@ export const MapLocationPickerModal = ({
     return () => window.removeEventListener('message', handleWebMessage);
   }, []);
 
-
-
   // HTML con Leaflet configurado para notificar el centro cada vez que el usuario mueve el mapa
   const leafletHTML = `
     <!DOCTYPE html>
-    <html>
+    <html lang="es">
       <head>
+        <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
         <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
         <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -89,7 +97,6 @@ export const MapLocationPickerModal = ({
             maxZoom: 19
           }).addTo(map);
 
-          // Al terminar de arrastrar o hacer zoom, informamos al componente React Native
           map.on('moveend', function() {
             const center = map.getCenter();
             const payload = JSON.stringify({
@@ -98,11 +105,9 @@ export const MapLocationPickerModal = ({
               longitude: center.lng
             });
 
-            // Si corre en React Native WebView
             if (window.ReactNativeWebView) {
               window.ReactNativeWebView.postMessage(payload);
             }
-            // Si corre en iframe Web
             if (window.parent) {
               window.parent.postMessage(payload, '*');
             }
@@ -156,15 +161,34 @@ export const MapLocationPickerModal = ({
   };
 
   return (
-    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+    <Modal
+      visible={visible}
+      animationType="slide"
+      onRequestClose={onClose}
+      accessibilityViewIsModal={true}
+    >
       <SafeAreaView style={styles.safeArea}>
         {/* Cabecera del selector */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+          <TouchableOpacity
+            onPress={onClose}
+            style={styles.closeButton}
+            accessible={true}
+            accessibilityRole="button"
+            accessibilityLabel="Cerrar selector de mapa"
+            accessibilityHint="Descarta los cambios y regresa a la pantalla anterior"
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
             <Ionicons name="close" size={26} color={theme.colors.brand.navy} />
           </TouchableOpacity>
           <View style={styles.headerTextContainer}>
-            <Text style={styles.headerTitle}>Marcar en el mapa</Text>
+            <Text
+              style={styles.headerTitle}
+              accessible={true}
+              accessibilityRole="header"
+            >
+              Marcar en el mapa
+            </Text>
             <Text style={styles.headerSubtitle}>
               Mové el mapa hasta situar el pin sobre la barrera
             </Text>
@@ -172,7 +196,11 @@ export const MapLocationPickerModal = ({
         </View>
 
         {/* Contenedor del Mapa con Pin Central */}
-        <View style={styles.mapContainer}>
+        <View
+          style={styles.mapContainer}
+          accessible={true}
+          accessibilityLabel="Mapa interactivo para marcar la ubicación del reporte. Arrastra el mapa para situar el pin sobre la barrera."
+        >
           {Platform.OS === 'web' ? (
             <iframe
               srcDoc={leafletHTML}
@@ -181,6 +209,7 @@ export const MapLocationPickerModal = ({
                 height: '100%',
                 border: 'none',
               }}
+              title="Selector de ubicación en mapa"
             />
           ) : (
             <WebView
@@ -188,11 +217,18 @@ export const MapLocationPickerModal = ({
               source={{ html: leafletHTML }}
               onMessage={handleMessage}
               style={styles.webView}
+              javaScriptEnabled={true}
+              domStorageEnabled={true}
             />
           )}
 
           {/* Marcador fijo en el centro */}
-          <View pointerEvents="none" style={styles.markerFixed}>
+          <View
+            pointerEvents="none"
+            style={styles.markerFixed}
+            importantForAccessibility="no-hide-descendants"
+            accessibilityElementsHidden={true}
+          >
             <Ionicons name="location" size={42} color={theme.colors.brand.teal} />
             <View style={styles.pinShadow} />
           </View>
@@ -204,6 +240,9 @@ export const MapLocationPickerModal = ({
             title={isResolving ? 'OBTENIENDO DIRECCIÓN...' : 'CONFIRMAR ESTA UBICACIÓN'}
             onPress={handleConfirmLocation}
             disabled={isResolving}
+            loading={isResolving}
+            accessibilityLabel="Confirmar esta ubicación seleccionada"
+            accessibilityHint="Guarda las coordenadas marcadas en el centro del mapa y resuelve la dirección"
           />
         </View>
       </SafeAreaView>
@@ -227,6 +266,10 @@ const getStyles = (theme: Theme) => ({
   closeButton: {
     padding: theme.spacing.xs,
     marginRight: theme.spacing.sm,
+    minWidth: theme.metrics.minTouch - 4,
+    minHeight: theme.metrics.minTouch - 4,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
   headerTextContainer: {
     flex: 1,
@@ -251,8 +294,8 @@ const getStyles = (theme: Theme) => ({
     position: 'absolute' as const,
     top: '50%' as const,
     left: '50%' as const,
-    marginLeft: -21, // Mitad del ancho del icono (42 / 2)
-    marginTop: -42,  // Altura completa para que la punta del pin toque el centro
+    marginLeft: -21,
+    marginTop: -42,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },

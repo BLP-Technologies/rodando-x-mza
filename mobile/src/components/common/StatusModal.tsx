@@ -10,7 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useStyles, Theme } from '@/theme';
 import { PrimaryButton } from './PrimaryButton';
 
-export type StatusType = 'success' | 'error' | 'warning';
+export type StatusType = 'success' | 'error' | 'warning' | 'auth';
 
 interface StatusModalProps {
   visible: boolean;
@@ -21,6 +21,9 @@ interface StatusModalProps {
   confirmText?: string;
   onConfirm?: () => void;
   cancelText?: string;
+  secondaryText?: string;
+  onSecondary?: () => void;
+  dismissText?: string;
   layout?: 'center' | 'row'; 
   buttonDirection?: 'column' | 'row';
   showCloseButton?: boolean;
@@ -35,13 +38,18 @@ export const StatusModal = ({
   confirmText,
   onConfirm,
   cancelText,
+  secondaryText,
+  onSecondary,
+  dismissText,
   layout = 'row',
   buttonDirection = 'column',
   showCloseButton = true,
 }: StatusModalProps) => {
   const { styles, theme } = useStyles(getStyles);
 
- const getIconDetails = () => {
+  const isAuthModal = type === 'auth';
+
+  const getIconDetails = () => {
     switch (type) {
       case 'warning':
         return {
@@ -69,8 +77,7 @@ export const StatusModal = ({
   };
 
   const { color: borderColor, bgColor, iconColor, name: iconName } = getIconDetails();
-  const isRowLayout = layout === 'row';
-
+  const isRowLayout = !isAuthModal && layout === 'row';
 
   return (
     <Modal
@@ -78,32 +85,48 @@ export const StatusModal = ({
       visible={visible}
       animationType="fade"
       onRequestClose={onClose}
+      accessibilityViewIsModal={true}
     >
       <TouchableWithoutFeedback onPress={onClose}>
         <View style={styles.overlay}>
           <TouchableWithoutFeedback>
-            <View style={styles.card}>
-              {/* Botón X de cierre */}
-              {showCloseButton && (
+            <View
+              style={styles.card}
+              accessible={true}
+              accessibilityRole="alert"
+              accessibilityLabel={`${title}. ${message || ''}`}
+            >
+              {/* Botón X de cierre (oculto en modales de autenticación) */}
+              {showCloseButton && !isAuthModal && (
                 <TouchableOpacity
                   style={styles.closeButton}
                   onPress={onClose}
+                  accessible={true}
                   accessibilityRole="button"
-                  accessibilityLabel="Cerrar modal"
+                  accessibilityLabel="Cerrar ventana de alerta"
                   hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                 >
-                <Ionicons
-                  name="close"
-                  size={24}
-                  color={theme.colors.brand.navy}
-                />
-              </TouchableOpacity>
+                  <Ionicons
+                    name="close"
+                    size={24}
+                    color={theme.colors.brand.navy}
+                  />
+                </TouchableOpacity>
               )}
 
-            {/* Contenedor principal: Fila horizontal o Columna centrada */}
-              <View style={isRowLayout ? styles.rowHeader : styles.centerHeader}>
-                {/* Ícono circular */}
-                <View 
+              {/* Contenedor principal: Ícono + Textos */}
+              <View
+                style={
+                  isAuthModal
+                    ? styles.authHeader
+                    : isRowLayout
+                    ? styles.rowHeader
+                    : styles.centerHeader
+                }
+              >
+                {/* Ícono circular solo si no es modal auth */}
+                {!isAuthModal && (
+                  <View 
                     style={[
                       styles.iconCircle, 
                       { 
@@ -113,53 +136,104 @@ export const StatusModal = ({
                       isRowLayout && styles.iconCircleRow,
                     ]}
                   >
-                  <Ionicons name={iconName} size={36} color={iconColor} />
-                </View>
+                    <Ionicons name={iconName} size={36} color={iconColor} />
+                  </View>
+                )}
+
                 {/* Textos */}
-                <View style={isRowLayout ? styles.rowTextContainer : styles.centerTextContainer}>
+                <View
+                  style={
+                    isAuthModal
+                      ? styles.authTextContainer
+                      : isRowLayout
+                      ? styles.rowTextContainer
+                      : styles.centerTextContainer
+                  }
+                >
                   <Text 
                     style={[
                       styles.title,
-                      isRowLayout && styles.titleLeft,
+                      (isRowLayout || isAuthModal) && styles.titleLeft,
                     ]}
                   >
                     {title}
                   </Text>
-                {message ? (
-                  <Text 
-                    style={[
-                      styles.message,
-                      isRowLayout && styles.messageLeft,
-                    ]}  
-                  >
-                    {message}
-                  </Text>
-                ) : null}
-                  
+                  {message ? (
+                    <Text 
+                      style={[
+                        styles.message,
+                        (isRowLayout || isAuthModal) && styles.messageLeft,
+                      ]}  
+                    >
+                      {message}
+                    </Text>
+                  ) : null}
                 </View> 
               </View>  
 
+              {/* Flujo Auth (3 opciones en columna): Crear Cuenta + Iniciar Sesión + Ahora no */}
+              {isAuthModal && (
+                <View style={styles.authButtonsContainer}>
+                  {onConfirm && (
+                    <PrimaryButton
+                      title={confirmText || 'CREAR CUENTA'}
+                      variant="orange"
+                      onPress={onConfirm}
+                      accessibilityLabel={confirmText || 'CREAR CUENTA'}
+                      accessibilityHint="Abre la pantalla para registrar una cuenta nueva"
+                    />
+                  )}
 
-            {/* Botones de confirmación (si se especifican) */}
-              {onConfirm && (
-                <View style={styles.buttonGroupRow}>
+                  {onSecondary && (
+                    <PrimaryButton
+                      title={secondaryText || 'INICIAR SESIÓN'}
+                      variant="outline"
+                      onPress={onSecondary}
+                      accessibilityLabel={secondaryText || 'INICIAR SESIÓN'}
+                      accessibilityHint="Abre la pantalla de inicio de sesión"
+                    />
+                  )}
+
+                  <TouchableOpacity
+                    onPress={onClose}
+                    style={styles.dismissButton}
+                    accessible={true}
+                    accessibilityRole="button"
+                    accessibilityLabel={dismissText || 'Ahora no'}
+                    accessibilityHint="Cierra este aviso y vuelve a la pantalla previa"
+                  >
+                    <Text style={styles.dismissText}>
+                      {dismissText || 'Ahora no'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {/* Botones habituales de confirmación */}
+              {!isAuthModal && onConfirm && (
+                <View
+                  style={
+                    buttonDirection === 'row'
+                      ? styles.buttonGroupRow
+                      : styles.buttonGroupColumn
+                  }
+                >
                   <PrimaryButton
                     title={confirmText || 'CONFIRMAR'}
                     variant="orange"
                     onPress={onConfirm}
-                    style={styles.halfBtn}
+                    style={buttonDirection === 'row' ? styles.halfBtn : undefined}
                   />
-                  <PrimaryButton
-                    title={cancelText || 'CANCELAR'}
-                    variant="outline"
-                    onPress={onClose}
-                    style={styles.halfBtn}
-                  />
+                  {cancelText && (
+                    <PrimaryButton
+                      title={cancelText}
+                      variant="outline"
+                      onPress={onClose}
+                      style={buttonDirection === 'row' ? styles.halfBtn : undefined}
+                    />
+                  )}
                 </View>
               )}
-
-
-
             </View>
           </TouchableWithoutFeedback>
         </View>
@@ -183,7 +257,7 @@ const getStyles = (theme: Theme) => ({
     borderRadius: theme.metrics.radius.card,
     borderWidth: 1.5,
     borderColor: theme.colors.border.default,
-    paddingVertical: theme.spacing.xxl,
+    paddingVertical: theme.spacing.xl,
     paddingHorizontal: theme.spacing.xl,
     alignItems: 'center' as const,
     position: 'relative' as const,
@@ -192,7 +266,6 @@ const getStyles = (theme: Theme) => ({
     shadowOpacity: 0.2,
     shadowRadius: 10,
     elevation: 8,
-    
   },
   closeButton: {
     position: 'absolute' as const,
@@ -211,6 +284,10 @@ const getStyles = (theme: Theme) => ({
   },
   centerHeader: {
     alignItems: 'center' as const,
+  },
+  authHeader: {
+    width: '100%' as const,
+    alignItems: 'flex-start' as const,
   },
   iconCircle: {
     width: 64,
@@ -231,6 +308,10 @@ const getStyles = (theme: Theme) => ({
   centerTextContainer: {
     alignItems: 'center' as const,
     marginTop: theme.spacing.md,
+  },
+  authTextContainer: {
+    width: '100%' as const,
+    marginBottom: theme.spacing.lg,
   },
   title: {
     fontSize: theme.metrics.font.title.size - 2,
@@ -255,12 +336,34 @@ const getStyles = (theme: Theme) => ({
     textAlign: 'left' as const,
   },
   buttonGroupRow: {
+    flexDirection: 'row' as const,
+    width: '100%' as const,
+    marginTop: theme.spacing.md,
+    gap: theme.spacing.sm,
+  },
+  buttonGroupColumn: {
     width: '100%' as const,
     marginTop: theme.spacing.md,
     gap: theme.spacing.sm,
   },
   halfBtn: {
-    minWidth: 105,
+    flex: 1,
     minHeight: theme.metrics.minTouch,
+  },
+  authButtonsContainer: {
+    width: '100%' as const,
+    gap: theme.spacing.md,
+  },
+  dismissButton: {
+    alignSelf: 'center' as const,
+    paddingVertical: theme.spacing.xs,
+    minHeight: theme.metrics.minTouch,
+    justifyContent: 'center' as const,
+  },
+  dismissText: {
+    fontSize: theme.metrics.font.body.size,
+    fontWeight: '800' as const,
+    color: theme.colors.brand.navy,
+    textDecorationLine: 'underline' as const,
   },
 });

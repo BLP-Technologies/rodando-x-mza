@@ -8,6 +8,8 @@ import { PlaceCategory, Place } from '@/types/places';
 import { RouteStackParamList } from '@/navigation/types';
 import { useStyles, Theme } from '@/theme';
 import { placesService } from '@/services/placesService';
+import { useAuth } from '@/auth/AuthContext';
+
 import { AppHeader } from '@/components/common/AppHeader';
 import { ScreenHeader } from '@/components/common/ScreenHeader';
 import { PrimaryButton } from '@/components/common/PrimaryButton';
@@ -44,13 +46,26 @@ export const MyPlacesScreen = () => {
   const { styles } = useStyles(getStyles);
   const navigation = useNavigation<MyPlacesNavProp>();
   
+  // Consumimos la sesión global y las acciones de autenticación
+  const { isGuest, user, cerrarSesion, irAAutenticacion } = useAuth();
+
+
   const [places, setPlaces] = useState<Place[]>([]);
   const [placeToDelete, setPlaceToDelete] = useState<string | null>(null);
+  const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
 
   // Cargar y refrescar los lugares cada vez que la pantalla toma foco
   useFocusEffect(
     useCallback(() => {
       let isActive = true;
+
+      if (isGuest) {
+        setShowAuthModal(true);
+        return () => {
+          isActive = false;
+        };
+      }
+
       placesService.getAll().then((data) => {
         if (isActive) {
           setPlaces(data);
@@ -60,12 +75,12 @@ export const MyPlacesScreen = () => {
       return () => {
         isActive = false;
       };
-    }, [])
+    }, [isGuest])
   );
 
 
   const handleLogout = () => {
-    console.log('Cerrar sesión');
+    cerrarSesion();
   };
 
   //Enlace hacia la pantalla Crear Lugar
@@ -92,9 +107,23 @@ export const MyPlacesScreen = () => {
     }
   };
 
+  const handleCloseAuthModal = () => {
+    setShowAuthModal(false);
+    navigation.goBack();
+  };
+
+  const userInitial = isGuest
+    ? 'A'
+    : user?.nombre?.[0]?.toUpperCase() || 'U';
+
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <AppHeader userInitial="C" onLogout={handleLogout} />
+      <AppHeader
+        userInitial={userInitial}
+        isGuest={isGuest}
+        onLogout={handleLogout}
+      />
 
       <View style={styles.fixedHeaderContainer}> 
 
@@ -111,6 +140,8 @@ export const MyPlacesScreen = () => {
           title="AGREGAR LUGAR"
           onPress={handleAddPlace}
           style={styles.addButton}
+          accessibilityLabel="Agregar lugar"
+          accessibilityHint="Abre el formulario para guardar una nueva dirección frecuente"
         />
       </View>  
 
@@ -122,7 +153,12 @@ export const MyPlacesScreen = () => {
         bounces={true}
       >
         {/* Lista de Tarjetas Reutilizables PlaceCard */}
-        <View style={styles.placesList}>
+        <View 
+          style={styles.placesList}
+          accessible={true}
+          accessibilityRole="list"
+          accessibilityLabel="Lista de lugares frecuentes guardados"
+        >
           {places.map((place) => (
             <PlaceCard
               key={place.id}
@@ -148,6 +184,26 @@ export const MyPlacesScreen = () => {
         confirmText="Confirmar"
         onClose={() => setPlaceToDelete(null)}
         onConfirm={handleConfirmDelete}
+      />
+
+      {/* Modal restrictivo para usuarios invitados */}
+      <StatusModal
+        visible={showAuthModal}
+        type="auth"
+        title="Para administrar lugares necesitás una cuenta"
+        message="Al registrarte podés guardar tu casa, trabajo o destinos frecuentes para elegirlos con un solo toque."
+        onClose={handleCloseAuthModal}
+        confirmText="CREAR CUENTA"
+        onConfirm={() => {
+          setShowAuthModal(false);
+          irAAutenticacion();
+        }}
+        secondaryText="INICIAR SESIÓN"
+        onSecondary={() => {
+          setShowAuthModal(false);
+          irAAutenticacion();
+        }}
+        dismissText="Ahora no"
       />
 
 

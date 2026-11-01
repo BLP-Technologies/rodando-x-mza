@@ -1,5 +1,6 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { useAuth } from '@/auth/AuthContext';
+import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useStyles, Theme } from '@/theme';
@@ -14,8 +15,6 @@ import { placesService } from '@/services/placesService';
 import { Place } from '@/types/places';
 import { StatusModal, StatusType } from '@/components/common/StatusModal';
 
-
-
 interface RoutePoint {
   label: string;
   latitude: number | null;
@@ -25,6 +24,10 @@ interface RoutePoint {
 export const NewRouteScreen = () => {
   const { styles } = useStyles(getStyles);
   const navigation = useNavigation<any>();
+
+  // Consumimos el contexto global:
+    const { isGuest, user, cerrarSesion } = useAuth();
+  
 
   const [origin, setOrigin] = useState<RoutePoint>({
     label: 'Mi ubicación',
@@ -40,26 +43,27 @@ export const NewRouteScreen = () => {
 
   const [savedPlaces, setSavedPlaces] = useState<Place[]>([]);
   const [searchTarget, setSearchTarget] = useState<'origin' | 'destination' | null>(null);
-
-  // Controla cuál acordeón está desplegado: 'origin', 'destination' o null
   const [openDropdown, setOpenDropdown] = useState<'origin' | 'destination' | null>(null);
 
+  // Solo buscamos lugares guardados si el usuario NO es visitante
   useFocusEffect(
     useCallback(() => {
       let isActive = true;
-      placesService.getAll().then((data) => {
-        if (isActive) {
-          setSavedPlaces(data);
-        }
-      });
+      if (!isGuest) {
+        placesService.getAll().then((data) => {
+          if (isActive) {
+            setSavedPlaces(data);
+          }
+        });
+      } else {
+        setSavedPlaces([]);
+      }
       return () => {
         isActive = false;
       };
-    }, [])
+    }, [isGuest])
   );
 
-
-  //Estados para el modal
   const [modalConfig, setModalConfig] = useState<{
     visible: boolean;
     type: StatusType;
@@ -71,7 +75,9 @@ export const NewRouteScreen = () => {
     title: '',
   });
 
-  const handleLogout = () => console.log('Cerrar sesión');
+  const handleLogout = () => {
+    cerrarSesion();
+  };
 
   const handleSwap = () => {
     const temp = origin;
@@ -93,7 +99,6 @@ export const NewRouteScreen = () => {
     }
   };
 
-  // Selección directa desde el chip del desplegable
   const handleSelectSavedPlace = (target: 'origin' | 'destination', place: Place) => {
     const pointData: RoutePoint = {
       label: place.name,
@@ -107,63 +112,60 @@ export const NewRouteScreen = () => {
       setDestination(pointData);
     }
 
-    // Cerramos el acordeón al elegir
     setOpenDropdown(null);
   };
 
-
   const handleSearchAccessibleRoute = () => {
-  if (!destination.latitude || !destination.longitude || destination.label === 'Mi destino') {
-    setModalConfig({
-      visible: true,
-      type: 'warning',
-      title: 'Destino no válido',
-      message: 'Por favor elegí un destino para calcular el recorrido.',
+    if (!destination.latitude || !destination.longitude || destination.label === 'Mi destino') {
+      setModalConfig({
+        visible: true,
+        type: 'warning',
+        title: 'Destino no válido',
+        message: 'Por favor elegí un destino para calcular el recorrido.',
+      });
+      return;
+    }
+
+    if (!origin.latitude || !origin.longitude) {
+      setModalConfig({
+        visible: true,
+        type: 'warning',
+        title: 'Origen no válido',
+        message: 'Por favor elegí un punto de origen válido.',
+      });
+      return;
+    }
+
+    const areCoordinatesEqual =
+      origin.latitude === destination.latitude &&
+      origin.longitude === destination.longitude;
+
+    const areLabelsEqual =
+      origin.label.trim().toLowerCase() === destination.label.trim().toLowerCase();
+
+    if (areCoordinatesEqual || areLabelsEqual) {
+      setModalConfig({
+        visible: true,
+        type: 'warning',
+        title: 'Puntos coincidentes',
+        message: 'El origen y el destino no pueden ser el mismo lugar. Elegí dos puntos diferentes para trazar la ruta.',
+      });
+      return;
+    }
+
+    navigation.navigate('RouteResult', {
+      origin,
+      destination,
     });
-    return;
-  }
-
-  if (!origin.latitude || !origin.longitude) {
-    setModalConfig({
-      visible: true,
-      type: 'warning',
-      title: 'Origen no válido',
-      message: 'Por favor elegí un punto de origen válido.',
-    });
-    return;
-  }
-
-  // Validación: Origen y destino no pueden ser el mismo
-  const areCoordinatesEqual =
-    origin.latitude === destination.latitude &&
-    origin.longitude === destination.longitude;
-
-  const areLabelsEqual =
-    origin.label.trim().toLowerCase() === destination.label.trim().toLowerCase();
-
-  if (areCoordinatesEqual || areLabelsEqual) {
-    setModalConfig({
-      visible: true,
-      type: 'warning',
-      title: 'Puntos coincidentes',
-      message: 'El origen y el destino no pueden ser el mismo lugar. Elegí dos puntos diferentes para trazar la ruta.',
-    });
-    return;
-  }
-
-  // Navegación con los datos válidos
-  navigation.navigate('RouteResult', {
-    origin,
-    destination,
-  });
-};
-
-
-  
+  };
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <AppHeader userInitial="C" onLogout={handleLogout} />
+      <AppHeader
+        userInitial={isGuest ? 'A' : (user?.nombre?.[0]?.toUpperCase() || 'U')}
+        isGuest={isGuest}
+        onLogout={handleLogout}
+      />
 
       <ScrollView
         style={styles.scrollView}
@@ -183,44 +185,64 @@ export const NewRouteScreen = () => {
             label="ORIGEN"
             value={origin.label}
             isOpen={openDropdown === 'origin'}
-            onToggleOpen={() =>
-              setOpenDropdown((prev) => (prev === 'origin' ? null : 'origin'))
-            }
+            onToggleOpen={() => {
+              if (isGuest) {
+                // Si es visitante, abre directo el buscador de dirección
+                setSearchTarget('origin');
+              } else {
+                setOpenDropdown((prev) => (prev === 'origin' ? null : 'origin'));
+              }
+            }}
             onPressText={() => setSearchTarget('origin')}
             savedPlaces={savedPlaces}
             onSelectPlace={(place) => handleSelectSavedPlace('origin', place)}
           />
 
-          <SwapButton onPress={handleSwap} />
+          <View style={styles.swapButtonWrapper}>
+            <SwapButton onPress={handleSwap} />
+          </View>
 
           <RoutePointCard
             label="DESTINO"
             value={destination.label}
             isOpen={openDropdown === 'destination'}
-            onToggleOpen={() =>
-              setOpenDropdown((prev) => (prev === 'destination' ? null : 'destination'))
-            }
+            onToggleOpen={() => {
+              if (isGuest) {
+                // Si es visitante, abre directo el buscador de dirección
+                setSearchTarget('destination');
+              } else {
+                setOpenDropdown((prev) => (prev === 'destination' ? null : 'destination'));
+              }
+            }}
             onPressText={() => setSearchTarget('destination')}
             savedPlaces={savedPlaces}
             onSelectPlace={(place) => handleSelectSavedPlace('destination', place)}
           />
         </View>
 
-        {/* Botón Buscar Recorrido Accesible */}
+        {/* Botón Buscar Recorrido Accesible con rol e indicación de accesibilidad */}
         <PrimaryButton
           title="BUSCAR RECORRIDO ACCESIBLE"
+          variant="orange"
           onPress={handleSearchAccessibleRoute}
           style={styles.searchButton}
+          accessibilityLabel="Buscar recorrido accesible"
+          accessibilityHint="Calcula la ruta accesible entre el origen y el destino seleccionados"
         />
 
-        {/* Enlace Administrar mis lugares */}
-        <TouchableOpacity
-          onPress={() => navigation.navigate('MyPlaces')}
-          style={styles.managePlacesContainer}
-          accessibilityRole="link"
-        >
-          <Text style={styles.managePlacesText}>Administrar mis lugares</Text>
-        </TouchableOpacity>
+        {/* Enlace visible únicamente para usuarios registrados */}
+        {!isGuest && (
+          <TouchableOpacity
+            onPress={() => navigation.navigate('MyPlaces')}
+            style={styles.managePlacesContainer}
+            accessible={true}
+            accessibilityRole="link"
+            accessibilityLabel="Administrar mis lugares"
+            accessibilityHint="Abre la lista de lugares frecuentes guardados"
+          >
+            <Text style={styles.managePlacesText}>Administrar mis lugares</Text>
+          </TouchableOpacity>
+        )}
       </ScrollView>
 
       {/* Modal buscador manual */}
@@ -231,7 +253,7 @@ export const NewRouteScreen = () => {
         onSelect={handleSelectModalPlace}
       />
 
-      {/* Modal de advertencia/validación */}
+      {/* Modal de advertencia/validación accesible */}
       <StatusModal
         visible={modalConfig.visible}
         type={modalConfig.type}
@@ -258,15 +280,22 @@ const getStyles = (theme: Theme) => ({
     paddingBottom: 130,
   },
   routeCardGroup: {
-    marginBottom: theme.spacing.xxl,
+    marginBottom: theme.spacing.xl,
     gap: theme.spacing.sm,
   },
+  swapButtonWrapper: {
+    alignItems: 'center' as const,
+    marginVertical: -theme.spacing.sm,
+    zIndex: 10,
+  },
   searchButton: {
-    marginBottom: theme.spacing.xl,
+    marginBottom: theme.spacing.lg,
   },
   managePlacesContainer: {
     alignSelf: 'center' as const,
     paddingVertical: theme.spacing.xs,
+    minHeight: theme.metrics.minTouch,
+    justifyContent: 'center' as const,
   },
   managePlacesText: {
     fontSize: theme.metrics.font.caption.size + 1,

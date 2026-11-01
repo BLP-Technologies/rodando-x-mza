@@ -9,6 +9,7 @@ interface MenuActionCardProps {
   iconName: keyof typeof Ionicons.glyphMap;
   onPress: () => void;
   accessibilityLabel?: string;
+  accessibilityHint?: string;
 }
 
 export const MenuActionCard = ({
@@ -17,6 +18,7 @@ export const MenuActionCard = ({
   iconName,
   onPress,
   accessibilityLabel,
+  accessibilityHint,
 }: MenuActionCardProps) => {
   const { styles, theme } = useStyles(getStyles);
 
@@ -28,6 +30,7 @@ export const MenuActionCard = ({
       accessible={true}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel || `${title}, ${subtitle}`}
+      accessibilityHint={accessibilityHint}
     >
       <View style={styles.iconWrapper}>
         <Ionicons

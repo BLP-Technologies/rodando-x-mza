@@ -4,6 +4,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRoute, RouteProp } from '@react-navigation/native';
 import { useStyles, Theme } from '@/theme';
 import { TutorialsStackParamList } from '@/navigation/types';
+import { useAuth } from '@/auth/AuthContext';
+
 import { AppHeader } from '@/components/common/AppHeader';
 import { ScreenHeader } from '@/components/common/ScreenHeader';
 import { YouTubePlayerView } from '@/components/tutorials/YouTubePlayerView';
@@ -13,6 +15,9 @@ type DetailRouteProp = RouteProp<TutorialsStackParamList, 'TutorialDetail'>;
 export const TutorialDetailScreen = () => {
   const { styles } = useStyles(getStyles);
   const route = useRoute<DetailRouteProp>();
+
+  // Consumo de la sesión real
+  const { isGuest, user, cerrarSesion } = useAuth();
 
   // Parámetros o fallback con el contenido de la maqueta
   const tutorial = route.params?.tutorial || {
@@ -25,12 +30,22 @@ export const TutorialDetailScreen = () => {
     youtubeId: 'pM_s_3a0K3Y', // ID de video de técnicas en silla de ruedas
   };
 
-  const handleLogout = () => console.log('Cerrar sesión');
+ const handleLogout = () => {
+    cerrarSesion();
+  };
+
+  const userInitial = isGuest
+    ? 'A'
+    : user?.nombre?.[0]?.toUpperCase() || 'U';
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       {/* 1. Header principal de la aplicación */}
-      <AppHeader userInitial="C" onLogout={handleLogout} />
+      <AppHeader
+        userInitial={userInitial}
+        isGuest={isGuest}
+        onLogout={handleLogout}
+      />
 
       <ScrollView
         style={styles.scrollView}
@@ -58,7 +73,12 @@ export const TutorialDetailScreen = () => {
         </View>
 
         {/* 5. Descripción del tutorial */}
-        <Text style={styles.descriptionText}>
+        <Text 
+          style={styles.descriptionText}
+          accessible={true}
+          accessibilityRole="text"
+          accessibilityLabel={`Descripción: ${tutorial.description}`}
+        >
           {tutorial.description}
         </Text>
       </ScrollView>

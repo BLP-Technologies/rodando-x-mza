@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Modal,
   View,
@@ -30,9 +30,14 @@ export const AddressSearchModal = ({
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<PlaceSuggestion[]>([]);
   const [loading, setLoading] = useState(false);
+  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Para esperar 350ms antes de consultar la API
   useEffect(() => {
+    if (debounceTimer.current) {
+      clearTimeout(debounceTimer.current);
+    }
+
     if (!query.trim() || query.trim().length < 3) {
       setResults([]);
       setLoading(false);
@@ -40,25 +45,31 @@ export const AddressSearchModal = ({
     }
 
     setLoading(true);
-    const handler = setTimeout(async () => {
+    debounceTimer.current = setTimeout(async () => {
       const suggestions = await searchAddressSuggestions(query);
       setResults(suggestions);
       setLoading(false);
     }, 350);
 
-    return () => clearTimeout(handler);
+    return () => {
+      if (debounceTimer.current) {
+        clearTimeout(debounceTimer.current);
+      }
+    };
   }, [query]);
 
   const handleSelectPlace = (place: PlaceSuggestion) => {
     onSelect(place);
-    setQuery('');
-    setResults([]);
-    onClose();
+    handleResetAndClose();
   };
 
-  const handleClose = () => {
+  const handleResetAndClose = () => {
+    if (debounceTimer.current) {
+      clearTimeout(debounceTimer.current);
+    }
     setQuery('');
     setResults([]);
+    setLoading(false);
     onClose();
   };
 
@@ -66,35 +77,59 @@ export const AddressSearchModal = ({
     <Modal
       visible={visible}
       animationType="slide"
-      onRequestClose={handleClose}
+      onRequestClose={handleResetAndClose}
+      accessibilityViewIsModal={true}
     >
       <SafeAreaView style={styles.safeArea}>
         {/* Cabecera del buscador */}
         <View style={styles.header}>
           <TouchableOpacity
-            onPress={handleClose}
+            onPress={handleResetAndClose}
             style={styles.backButton}
+            accessible={true}
             accessibilityRole="button"
-            accessibilityLabel="Volver"
+            accessibilityLabel="Volver y cerrar búsqueda"
+            accessibilityHint="Cierra esta ventana emergente sin seleccionar ninguna dirección"
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             <Ionicons name="arrow-back" size={24} color={theme.colors.brand.navy} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>{title}</Text>
+          <Text 
+            style={styles.headerTitle}
+            accessible={true}
+            accessibilityRole="header"
+          >
+            {title}
+          </Text>
         </View>
 
         {/* Input de búsqueda */}
         <View style={styles.inputContainer}>
-          <Ionicons name="search" size={20} color={theme.colors.brand.teal} style={styles.searchIcon} />
+          <Ionicons 
+            name="search" 
+            size={20} 
+            color={theme.colors.brand.teal} 
+            style={styles.searchIcon} 
+          />
           <TextInput
             style={styles.input}
             placeholder="Escribí una calle, plaza o lugar..."
             placeholderTextColor={theme.colors.text.muted}
             value={query}
             onChangeText={setQuery}
-            autoFocus
+            autoFocus={true}
             clearButtonMode="while-editing"
+            accessible={true}
+            accessibilityLabel="Buscar dirección"
+            accessibilityHint="Escribe al menos tres letras para buscar calles o puntos de referencia"
           />
-          {loading && <ActivityIndicator size="small" color={theme.colors.brand.teal} />}
+          {loading && 
+            <ActivityIndicator 
+              size="small" 
+              color={theme.colors.brand.teal} 
+              accessible={true}
+              accessibilityLabel="Buscando sugerencias"
+            />}
         </View>
 
         {/* Lista de sugerencias */}
@@ -108,9 +143,17 @@ export const AddressSearchModal = ({
               style={styles.resultItem}
               onPress={() => handleSelectPlace(item)}
               activeOpacity={0.7}
+              accessible={true}
+              accessibilityRole="button"
+              accessibilityLabel={`${item.name}, ${item.fullAddress}`}
+              accessibilityHint="Selecciona este lugar como punto del recorrido"
             >
               <View style={styles.iconContainer}>
-                <Ionicons name="location-outline" size={22} color={theme.colors.brand.teal} />
+                <Ionicons 
+                  name="location-outline" 
+                  size={22} 
+                  color={theme.colors.brand.teal} 
+                />
               </View>
               <View style={styles.textContainer}>
                 <Text style={styles.placeName}>{item.name}</Text>
@@ -120,7 +163,12 @@ export const AddressSearchModal = ({
           )}
           ListEmptyComponent={
             query.length >= 3 && !loading ? (
-              <View style={styles.emptyContainer}>
+              <View 
+              style={styles.emptyContainer}
+                accessible={true}
+                accessibilityRole="text"
+                accessibilityLiveRegion="polite"
+              >
                 <Text style={styles.emptyText}>No se encontraron direcciones.</Text>
               </View>
             ) : null
