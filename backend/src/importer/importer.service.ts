@@ -18,6 +18,13 @@ export type WaySelection = {
   pedestrian: number;
   /** `highway=pedestrian` con `area=yes`: son plazas, quedan fuera del grafo. */
   pedestrianAreas: number;
+  /**
+   * Las vías que quedan fuera de la grilla pero podrían ser un brazo: las descartadas
+   * por su clase y las peatonales. El reporte las usa para explicar un brazo que falta
+   * por su clase en vez de por un error de corte (docs/11 §3.7). Las plazas no entran:
+   * una `area=yes` que toca un nodo no es un brazo.
+   */
+  outsideWays: readonly OsmWay[];
 };
 
 /**
@@ -28,6 +35,7 @@ export type WaySelection = {
  */
 export function selectGridWays(extract: OsmExtract): WaySelection {
   const ways: OsmWay[] = [];
+  const outsideWays: OsmWay[] = [];
   const skippedByClass = new Map<string, number>();
   let pedestrian = 0;
   let pedestrianAreas = 0;
@@ -36,20 +44,25 @@ export function selectGridWays(extract: OsmExtract): WaySelection {
     const highwayClass = way.tags.get('highway') ?? 'sin-clase';
 
     if (highwayClass === 'pedestrian') {
-      if (way.tags.get('area') === 'yes') pedestrianAreas += 1;
-      else pedestrian += 1;
+      if (way.tags.get('area') === 'yes') {
+        pedestrianAreas += 1;
+      } else {
+        pedestrian += 1;
+        outsideWays.push(way);
+      }
       continue;
     }
 
     if (!INCLUDED_CLASSES.has(highwayClass)) {
       skippedByClass.set(highwayClass, (skippedByClass.get(highwayClass) ?? 0) + 1);
+      outsideWays.push(way);
       continue;
     }
 
     ways.push(way);
   }
 
-  return { ways, skippedByClass, pedestrian, pedestrianAreas };
+  return { ways, skippedByClass, pedestrian, pedestrianAreas, outsideWays };
 }
 
 /**
@@ -352,4 +365,133 @@ export function buildJunctions(
   }
 
   return { junctions, warnings };
+}
+
+/** Una de las dos líneas de un tramo, como la nombra `_import_lines` (docs/11 §3.4). */
+export type TramoLine = {
+  tramoId: number;
+  /** +1 es la izquierda del sentido en que está dibujado el tramo, −1 la derecha. */
+  side: 1 | -1;
+};
+
+/** Una esquina: la intersección de dos líneas de vereda (docs/11 §3.2). */
+export type CornerPlan = {
+  /** Posición de la intersección en la lista que devolvió `buildJunctions`. */
+  junctionId: number;
+  /** `corner` es una esquina de la intersección; `boca`, un nodo del lado opuesto a la T. */
+  kind: 'corner' | 'boca';
+  first: TramoLine;
+  second: TramoLine;
+};
+
+/** El cruce de un brazo: la recta entre las dos esquinas que lo flanquean (docs/11 §3.7). */
+export type CrossingPlan = {
+  junctionId: number;
+  tramoId: number;
+  /** Posiciones en la lista de esquinas de los dos nodos que une. */
+  cornerIds: readonly [number, number];
+};
+
+/**
+ * El lado de la línea que queda a la izquierda visto **desde el nodo hacia afuera**, que
+ * es desde donde se mira qué línea de un brazo enfrenta al brazo de al lado.
+ *
+ * `_import_lines.side` es relativo al sentido en que está dibujado el tramo, y el tramo
+ * se dibuja desde su primer nodo: si la intersección es el comienzo del tramo, alejarse
+ * del nodo es avanzar por la línea y la izquierda coincide; si es el final, no.
+ */
+const leftAwaySide = (arm: JunctionArm): 1 | -1 => (arm.atStart ? 1 : -1);
+const rightAwaySide = (arm: JunctionArm): 1 | -1 => (arm.atStart ? -1 : 1);
+
+/**
+ * Arma las esquinas y los cruces de cada intersección (docs/11 §3.2 y §3.7).
+ *
+ * **Una esquina por cuadrante.** La esquina la forman los dos brazos que la bordan, y
+ * de cada uno se toma la línea que mira hacia el otro: la de la izquierda de un brazo
+ * contra la de la derecha del siguiente. No se cruzan todos los pares de líneas de la
+ * intersección: cruzar la línea que mira al brazo de al lado con la que mira al de
+ * enfrente da un punto en el cuadrante equivocado, que no es ninguna esquina y que con
+ * anchos distintos en cada cuadra queda a metros de la esquina real (docs/11 §3.4).
+ *
+ * **La boca de la T.** El hueco angular que no toca al brazo que termina tiene dos nodos
+ * en vez de una esquina: son donde aterrizan las dos líneas de ese brazo sobre la vereda
+ * de enfrente, y entre ellos va la vereda de la boca.
+ *
+ * **Los cruces.** Cada brazo tiene el suyo, entre la esquina que deja de un lado y la del
+ * otro. Con los cuatro nodos de una esquina, el brazo queda entre dos y el cruce es la
+ * recta que los une.
+ */
+export function planCorners(junctions: readonly Junction[]): {
+  corners: CornerPlan[];
+  crossings: CrossingPlan[];
+} {
+  const corners: CornerPlan[] = [];
+  const crossings: CrossingPlan[] = [];
+
+  junctions.forEach((junction, junctionId) => {
+    if (junction.kind === 'unsupported') return;
+
+    // Los brazos en orden angular. Cada par consecutivo borda un cuadrante, y el hueco
+    // abierto de una T es el que queda entre los dos brazos que pasan.
+    const arms = [...junction.arms].sort((first, second) => first.bearing - second.bearing);
+    const count = arms.length;
+    const stemIndex = arms.findIndex((arm) => arm.tramoId === junction.stemTramoId);
+    const openGap = junction.kind === 'tee' && stemIndex >= 0 ? (stemIndex + 1) % count : -1;
+
+    const add = (kind: CornerPlan['kind'], first: TramoLine, second: TramoLine): number => {
+      corners.push({ junctionId, kind, first, second });
+      return corners.length - 1;
+    };
+
+    // Qué nodo hay de cada lado de cada hueco angular: en un cuadrante normal es la misma
+    // esquina para los dos brazos; en la boca de la T, uno para cada brazo.
+    type Gap = { forArm: number; forNext: number };
+    const gaps: Gap[] = [];
+
+    for (let index = 0; index < count; index += 1) {
+      const arm = arms[index];
+      const next = arms[(index + 1) % count];
+      if (arm === undefined || next === undefined) continue;
+
+      if (index === openGap) {
+        const stem = arms[stemIndex];
+        if (stem === undefined) continue;
+
+        const left = add(
+          'boca',
+          { tramoId: stem.tramoId, side: leftAwaySide(stem) },
+          { tramoId: arm.tramoId, side: leftAwaySide(arm) },
+        );
+        const right = add(
+          'boca',
+          { tramoId: stem.tramoId, side: rightAwaySide(stem) },
+          { tramoId: next.tramoId, side: rightAwaySide(next) },
+        );
+        gaps.push({ forArm: left, forNext: right });
+        continue;
+      }
+
+      const corner = add(
+        'corner',
+        { tramoId: arm.tramoId, side: leftAwaySide(arm) },
+        { tramoId: next.tramoId, side: rightAwaySide(next) },
+      );
+      gaps.push({ forArm: corner, forNext: corner });
+    }
+
+    for (let index = 0; index < count; index += 1) {
+      const gap = gaps[index];
+      const previous = gaps[(index - 1 + count) % count];
+      const arm = arms[index];
+      if (gap === undefined || previous === undefined || arm === undefined) continue;
+
+      crossings.push({
+        junctionId,
+        tramoId: arm.tramoId,
+        cornerIds: [previous.forNext, gap.forArm],
+      });
+    }
+  });
+
+  return { corners, crossings };
 }

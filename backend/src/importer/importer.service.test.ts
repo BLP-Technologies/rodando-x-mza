@@ -3,7 +3,9 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import {
   buildJunctions,
   buildTramos,
+  planCorners,
   selectGridWays,
+  type Junction,
   type Tramo,
 } from './importer.service.js';
 import { readOsm, type OsmExtract } from './osm.reader.js';
@@ -129,5 +131,70 @@ describe('buildJunctions', () => {
     const { junctions } = buildJunctions(gridTramos(extract), extract.nodes);
 
     expect(junctions.some((junction) => junction.nodeId === 1)).toBe(false);
+  });
+});
+
+/** Las intersecciones de la grilla del fixture, en el orden en que se derivan. */
+const gridJunctions = (): Junction[] =>
+  buildJunctions(gridTramos(extract), extract.nodes).junctions;
+
+describe('planCorners', () => {
+  it('da cuatro nodos por intersección y un cruce por brazo', () => {
+    const junctions = gridJunctions();
+    const { corners, crossings } = planCorners(junctions);
+
+    // Cuatro cruces de cuatro brazos y una T: 4 nodos cada una (las dos esquinas y los dos
+    // de la boca) y tantos cruces como brazos (docs/11 §3.2 y §3.7).
+    expect(junctions).toHaveLength(5);
+    expect(corners).toHaveLength(20);
+    expect(crossings).toHaveLength(4 * 4 + 3);
+    expect(crossings.every((crossing) => crossing.cornerIds[0] !== crossing.cornerIds[1])).toBe(
+      true,
+    );
+  });
+
+  it('en una T separa las dos esquinas de los dos nodos de la boca', () => {
+    const junctions = gridJunctions();
+    const teeId = junctions.findIndex((junction) => junction.kind === 'tee');
+    const tee = junctions[teeId];
+    const { corners } = planCorners(junctions);
+
+    const own = corners.filter((corner) => corner.junctionId === teeId);
+    expect(own).toHaveLength(4);
+    expect(own.filter((corner) => corner.kind === 'corner')).toHaveLength(2);
+    expect(own.filter((corner) => corner.kind === 'boca')).toHaveLength(2);
+
+    // Los dos nodos de la boca los pone el brazo que termina, cruzado con una de las dos
+    // líneas de la calle que pasa.
+    for (const boca of own.filter((corner) => corner.kind === 'boca')) {
+      expect([boca.first.tramoId, boca.second.tramoId]).toContain(tee?.stemTramoId);
+    }
+  });
+
+  it('en un cruce cada brazo pone una línea en cada esquina que bordea', () => {
+    const junctions = gridJunctions();
+    const { corners } = planCorners(junctions);
+
+    // Es la propiedad que hace que haya una sola esquina por cuadrante: el brazo aporta
+    // una línea a la esquina de un lado y la otra a la del otro, y nunca las dos al mismo
+    // cuadrante (docs/11 §3.2).
+    const crosses = junctions
+      .map((junction, junctionId) => ({ junction, junctionId }))
+      .filter(({ junction }) => junction.kind === 'cross');
+
+    expect(crosses).toHaveLength(4);
+    for (const { junction, junctionId } of crosses) {
+      const lines = corners
+        .filter((corner) => corner.junctionId === junctionId)
+        .flatMap((corner) => [corner.first, corner.second]);
+
+      expect(lines).toHaveLength(8);
+      expect(new Set(lines.map((line) => `${line.tramoId}:${line.side}`)).size).toBe(8);
+      for (const arm of junction.arms) {
+        const own = lines.filter((line) => line.tramoId === arm.tramoId);
+        expect(own).toHaveLength(2);
+        expect(new Set(own.map((line) => line.side)).size).toBe(2);
+      }
+    }
   });
 });

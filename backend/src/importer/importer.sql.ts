@@ -1,6 +1,6 @@
 import { sql, type Transaction } from 'kysely';
 import type { DB } from '../db/types.js';
-import type { Junction, Tramo } from './importer.service.js';
+import type { CornerPlan, CrossingPlan, Junction, Tramo } from './importer.service.js';
 import type { OsmNode, OsmWay } from './osm.reader.js';
 
 /**
@@ -31,6 +31,22 @@ export type GraphInput = {
   ways: readonly OsmWay[];
   tramos: readonly PlannedTramo[];
   junctions: readonly Junction[];
+  /** Las esquinas y las bocas, dos líneas cada una (docs/11 §3.2). */
+  corners: readonly CornerPlan[];
+  /** Un cruce por brazo (docs/11 §3.7). */
+  crossings: readonly CrossingPlan[];
+};
+
+/**
+ * Lo que el reporte dice de cada intersección derivada.
+ */
+export type JunctionReport = {
+  osmNodeId: number;
+  kind: 'cross' | 'tee';
+  arms: number;
+  /** Esquinas más nodos de la boca: cuatro siempre (docs/11 §3.2). */
+  corners: number;
+  crossings: number;
 };
 
 export type GraphCounts = {
@@ -39,6 +55,8 @@ export type GraphCounts = {
   kerbsReused: number;
   sidewalksCreated: number;
   sidewalksUpdated: number;
+  crossingsCreated: number;
+  crossingsUpdated: number;
   /** Líneas de `ST_OffsetCurve` que volvieron `MultiLineString` y se recortaron. */
   linesSplit: number;
   /** Líneas que volvieron `NULL`: el offset no entraba en la curva del eje. */
@@ -47,6 +65,18 @@ export type GraphCounts = {
   bocaSidewalks: number;
   /** T que no derivaron su vereda de la boca: el lado opuesto no dio dos esquinas. */
   bocaMissingNodeIds: readonly number[];
+  /** Una fila por intersección: es lo que el reporte cuenta (docs/11 §4). */
+  junctions: readonly JunctionReport[];
+  /**
+   * Tramos con alguna línea que no produjo vereda: sus cortes no cayeron sobre la línea,
+   * así que el tramo no existe en el grafo. Se reporta y no se inventa la vereda.
+   */
+  linesWithoutSidewalk: readonly { tramoId: number; streetName: string | null }[];
+  /**
+   * Pares de vías que se cruzan a menos de ~2 m sin compartir un nodo de OSM: se reportan
+   * y no se derivan, porque inventar la intersección sería adivinar (docs/11 §3.2).
+   */
+  unsharedCrossings: readonly (readonly [number, number])[];
 };
 
 /**
@@ -67,25 +97,34 @@ export async function writeGraph(
   await deriveCorners(trx);
   await deriveLineEnds(trx);
   await deriveBocaPieces(trx);
+  await derivePieces(trx);
 
   await collectKerbPoints(trx);
   const kerbsCreated = await insertKerbNodes(trx);
   const kerbsTotal = await countKerbPoints(trx);
   await mapKerbIds(trx);
+  await mapCornerKerbIds(trx);
 
-  await derivePieces(trx);
   await deriveSidewalkRows(trx);
   const { created, updated } = await upsertSidewalks(trx);
+
+  await deriveCrossings(trx);
+  const crossings = await upsertCrossings(trx);
 
   return {
     kerbsCreated,
     kerbsReused: kerbsTotal - kerbsCreated,
     sidewalksCreated: created,
     sidewalksUpdated: updated,
+    crossingsCreated: crossings.created,
+    crossingsUpdated: crossings.updated,
     linesSplit,
     linesDropped,
     bocaSidewalks: await countBocaSidewalks(trx),
     bocaMissingNodeIds: await findTeesWithoutBoca(trx),
+    junctions: await reportJunctions(trx),
+    linesWithoutSidewalk: await findLinesWithoutSidewalk(trx),
+    unsharedCrossings: await findUnsharedCrossings(trx),
   };
 }
 
@@ -97,7 +136,7 @@ export async function writeGraph(
 texto de WKT viajando entre las dos capas.
  */
 async function stageExtract(trx: Transaction<DB>, input: GraphInput): Promise<void> {
-  const { nodes, ways, tramos, junctions } = input;
+  const { nodes, ways, tramos, junctions, corners, crossings } = input;
   const nodesById = new Map(nodes.map((node) => [node.id, node]));
 
   // Una corrida anterior en la misma sesión dejaría sus tablas temporales: se descartan
@@ -106,9 +145,10 @@ async function stageExtract(trx: Transaction<DB>, input: GraphInput): Promise<vo
     DROP TABLE IF EXISTS
       _import_nodes, _import_way_nodes, _import_ways, _import_tramo_nodes,
       _import_tramos, _import_tramo_ways, _import_junctions, _import_junction_arms,
-      _import_lines_raw, _import_lines, _import_corner_points, _import_line_end_points,
-      _import_boca_pieces, _import_kerb_points, _import_kerbs, _import_cut_points,
-      _import_pieces, _import_sidewalk_rows
+      _import_corner_pairs, _import_crossing_pairs, _import_lines_raw, _import_lines,
+      _import_corner_points, _import_line_end_points, _import_boca_pieces,
+      _import_kerb_points, _import_kerbs, _import_corner_kerbs, _import_cut_points,
+      _import_pieces, _import_sidewalk_rows, _import_crossing_rows
   `.execute(trx);
 
   await sql`
@@ -271,6 +311,54 @@ async function stageExtract(trx: Transaction<DB>, input: GraphInput): Promise<vo
       ${derived.flatMap(({ junction }) => junction.arms.map((arm) => arm.bearing))}::float8[]
     ) AS arms(junction_id, tramo_id, at_start, bearing)
   `.execute(trx);
+
+  await sql`
+    CREATE TEMP TABLE _import_corner_pairs (
+      pair_id integer PRIMARY KEY,
+      junction_id integer NOT NULL,
+      kind text NOT NULL,
+      tramo_a integer NOT NULL,
+      side_a integer NOT NULL,
+      tramo_b integer NOT NULL,
+      side_b integer NOT NULL
+    ) ON COMMIT DROP
+  `.execute(trx);
+
+  await sql`
+    INSERT INTO _import_corner_pairs (
+      pair_id, junction_id, kind, tramo_a, side_a, tramo_b, side_b)
+    SELECT pair.pair_id, pair.junction_id, pair.kind,
+           pair.tramo_a, pair.side_a, pair.tramo_b, pair.side_b
+    FROM unnest(
+      ${corners.map((_, pairId) => pairId)}::int[],
+      ${corners.map((corner) => corner.junctionId)}::int[],
+      ${corners.map((corner) => corner.kind)}::text[],
+      ${corners.map((corner) => corner.first.tramoId)}::int[],
+      ${corners.map((corner) => corner.first.side)}::int[],
+      ${corners.map((corner) => corner.second.tramoId)}::int[],
+      ${corners.map((corner) => corner.second.side)}::int[]
+    ) AS pair(pair_id, junction_id, kind, tramo_a, side_a, tramo_b, side_b)
+  `.execute(trx);
+
+  await sql`
+    CREATE TEMP TABLE _import_crossing_pairs (
+      junction_id integer NOT NULL,
+      tramo_id integer NOT NULL,
+      pair_a integer NOT NULL,
+      pair_b integer NOT NULL
+    ) ON COMMIT DROP
+  `.execute(trx);
+
+  await sql`
+    INSERT INTO _import_crossing_pairs (junction_id, tramo_id, pair_a, pair_b)
+    SELECT crossing.junction_id, crossing.tramo_id, crossing.pair_a, crossing.pair_b
+    FROM unnest(
+      ${crossings.map((crossing) => crossing.junctionId)}::int[],
+      ${crossings.map((crossing) => crossing.tramoId)}::int[],
+      ${crossings.map((crossing) => crossing.cornerIds[0])}::int[],
+      ${crossings.map((crossing) => crossing.cornerIds[1])}::int[]
+    ) AS crossing(junction_id, tramo_id, pair_a, pair_b)
+  `.execute(trx);
 }
 
 /**
@@ -357,86 +445,46 @@ async function countDroppedLines(trx: Transaction<DB>): Promise<number> {
 /**
  * Calcula las esquinas de cada intersección (docs/11 §3.2).
  *
- * La regla es la misma para un cruce y para una T: se intersecan todos los pares de
- * líneas de tramos distintos, prolongadas con `ST_LineExtend`, se descarta lo que no
- * sea un punto y lo que caiga lejos del nodo, y se deduplica por coordenada. Un cruce
- * de cuatro brazos da cuatro puntos; una T también, porque las dos líneas del brazo que
- * termina atraviesan la calle que pasa y aterrizan en la vereda del lado opuesto.
+ * Cada esquina la define un par de brazos y una línea de cada uno: la que mira hacia el
+ * otro brazo. Esas dos líneas se cruzan exactamente ahí, así que la regla no necesita
+ * tolerancias para tirar puntos sobrantes: no hay puntos sobrantes.
  *
- * Prolongar las dos líneas por los dos extremos es lo que descarta los pares que no se
- * cruzan: dos tramos colineales de la misma calle, prolongados, se solapan y su
- * intersección es una línea, no un punto. Hay que prolongar los dos extremos y no uno:
- * el brazo que termina en la intersección puede estar dibujado en cualquiera de los dos
- * sentidos, y el cruce está del lado del nodo. Como los dos tramos de una calle que pasa
- * nunca son exactamente colineales, también se descarta un punto que caiga sobre el
- * extremo de alguna de las dos líneas: una esquina está siempre a un offset del extremo,
- * nunca encima. Sin eso, la unión de los dos tramos de la misma calle deja un nodo falso
- * en el medio de la intersección.
+ * Las líneas se prolongan con `ST_LineExtend` porque en la boca de una T el nodo queda
+ * fuera de los dos segmentos: la línea del brazo que termina muere en el eje de la calle
+ * que pasa y la vereda de enfrente está del otro lado. El alcance de la prolongación va
+ * con el offset, así que se descarta el punto que aparezca más lejos que eso.
+ *
+ * El punto se redondea a 6 decimales (~10 cm) y ese es el número con el que después se
+ * corta la línea y se busca el cordón: las tres cosas usan la misma coordenada.
  */
 async function deriveCorners(trx: Transaction<DB>): Promise<void> {
   await sql`
     CREATE TEMP TABLE _import_corner_points AS
-    WITH found AS (
-      SELECT DISTINCT pairs.junction_id,
-             round(ST_X(ST_Transform(pairs.intersection, 4326))::numeric, 7) AS raw_x,
-             round(ST_Y(ST_Transform(pairs.intersection, 4326))::numeric, 7) AS raw_y
-      FROM (
-        SELECT j.junction_id,
-               ST_Transform(j.geom, 32719) AS node_32719,
-               3 * GREATEST(first.offset_m, second.offset_m) AS reach,
-               ST_Intersection(
-                 ST_LineExtend(ST_Transform(first.geom, 32719),
-                               3 * GREATEST(first.offset_m, second.offset_m),
-                               3 * GREATEST(first.offset_m, second.offset_m)),
-                 ST_LineExtend(ST_Transform(second.geom, 32719),
-                               3 * GREATEST(first.offset_m, second.offset_m),
-                               3 * GREATEST(first.offset_m, second.offset_m))
-               ) AS intersection,
-               ST_Transform(first.geom, 32719) AS first_32719,
-               ST_Transform(second.geom, 32719) AS second_32719
-        FROM _import_junctions j
-        JOIN _import_junction_arms arm_a ON arm_a.junction_id = j.junction_id
-        JOIN _import_junction_arms arm_b
-          ON arm_b.junction_id = j.junction_id AND arm_b.tramo_id > arm_a.tramo_id
-        JOIN _import_lines first ON first.tramo_id = arm_a.tramo_id
-        JOIN _import_lines second ON second.tramo_id = arm_b.tramo_id
-      ) pairs
-      WHERE ST_GeometryType(pairs.intersection) = 'ST_Point'
-        AND NOT ST_IsEmpty(pairs.intersection)
-        AND ST_Distance(pairs.intersection, pairs.node_32719) < pairs.reach
-        AND NOT ST_DWithin(pairs.intersection, ST_StartPoint(pairs.first_32719), 2)
-        AND NOT ST_DWithin(pairs.intersection, ST_EndPoint(pairs.first_32719), 2)
-        AND NOT ST_DWithin(pairs.intersection, ST_StartPoint(pairs.second_32719), 2)
-        AND NOT ST_DWithin(pairs.intersection, ST_EndPoint(pairs.second_32719), 2)
-    ),
-    points AS (
-      SELECT junction_id, raw_x, raw_y,
-             ST_SetSRID(ST_MakePoint(raw_x::float8, raw_y::float8), 4326) AS geom
-      FROM found
-    ),
-    -- Dos pares distintos pueden encontrar la misma esquina a unos centímetros: el eje
-    -- de los dos tramos de la calle que pasa no coincide exactamente en el nodo. Se
-    -- queda un solo punto por esquina, el de menor coordenada de los que están a menos
-    -- de 60 cm. Con los pares de un cruce, las esquinas están a metros entre sí, así que
-    -- el umbral no puede juntar dos esquinas distintas.
-    unique_points AS (
-      SELECT point.junction_id, point.raw_x, point.raw_y, point.geom
-      FROM points point
-      WHERE NOT EXISTS (
-        SELECT 1
-        FROM points earlier
-        WHERE earlier.junction_id = point.junction_id
-          AND (earlier.raw_x, earlier.raw_y) < (point.raw_x, point.raw_y)
-          AND ST_DWithin(ST_Transform(earlier.geom, 32719),
-                         ST_Transform(point.geom, 32719), 0.6)
-      )
-    )
-    SELECT junction_id,
-           round(raw_x, 6) AS x,
-           round(raw_y, 6) AS y,
-           ST_SetSRID(ST_MakePoint(round(raw_x, 6)::float8, round(raw_y, 6)::float8), 4326)
-             AS geom
-    FROM unique_points
+    SELECT pair.pair_id, pair.junction_id, pair.kind,
+           round(ST_X(ST_Transform(found.intersection, 4326))::numeric, 6) AS x,
+           round(ST_Y(ST_Transform(found.intersection, 4326))::numeric, 6) AS y,
+           ST_SetSRID(
+             ST_MakePoint(
+               round(ST_X(ST_Transform(found.intersection, 4326))::numeric, 6)::float8,
+               round(ST_Y(ST_Transform(found.intersection, 4326))::numeric, 6)::float8),
+             4326) AS geom
+    FROM _import_corner_pairs pair
+    JOIN _import_junctions junction ON junction.junction_id = pair.junction_id
+    JOIN _import_lines first ON first.tramo_id = pair.tramo_a AND first.side = pair.side_a
+    JOIN _import_lines second ON second.tramo_id = pair.tramo_b AND second.side = pair.side_b
+    CROSS JOIN LATERAL (
+      SELECT 3 * GREATEST(first.offset_m, second.offset_m) AS reach,
+             ST_Transform(junction.geom, 32719) AS node_32719
+    ) extent
+    CROSS JOIN LATERAL (
+      SELECT ST_Intersection(
+               ST_LineExtend(ST_Transform(first.geom, 32719), extent.reach, extent.reach),
+               ST_LineExtend(ST_Transform(second.geom, 32719), extent.reach, extent.reach)
+             ) AS intersection
+    ) found
+    WHERE ST_GeometryType(found.intersection) = 'ST_Point'
+      AND NOT ST_IsEmpty(found.intersection)
+      AND ST_Distance(found.intersection, extent.node_32719) < extent.reach
   `.execute(trx);
 }
 
@@ -524,22 +572,28 @@ async function insertKerbNodes(trx: Transaction<DB>): Promise<number> {
 }
 
 /**
- * Junta en una sola tabla todos los puntos que tienen que ser cordón, deduplicados por
- * coordenada: las esquinas de cada intersección y los extremos de borde.
+ * Junta en una sola tabla los puntos que son cordón: las esquinas, los nodos de la boca
+ * de una T y los del borde del extracto.
+ *
+ * Se toman de los extremos de las aristas y no de las esquinas calculadas: **un nodo es
+ * donde se conecta algo** (docs/11 §3.2), así que una esquina que no cayó sobre ninguna
+ * línea no es un nodo sino un defecto del recorte, y se reporta en vez de quedar como
+ * cordón suelto. Las coordenadas ya vienen normalizadas a 6 decimales del cálculo de las
+ * esquinas, así que el par de cordones se resuelve por identidad exacta.
  */
 async function collectKerbPoints(trx: Transaction<DB>): Promise<void> {
   await sql`
     CREATE TEMP TABLE _import_kerb_points AS
-    SELECT x, y, ST_SetSRID(ST_MakePoint(x::float8, y::float8), 4326) AS geom
+    SELECT DISTINCT x, y, ST_SetSRID(ST_MakePoint(x::float8, y::float8), 4326) AS geom
     FROM (
-      SELECT DISTINCT round(ST_X(geom)::numeric, 6) AS x,
-             round(ST_Y(geom)::numeric, 6) AS y
-      FROM (
-        SELECT geom FROM _import_corner_points
-        UNION ALL
-        SELECT geom FROM _import_line_end_points
-      ) candidates
-    ) rounded
+      SELECT start_x AS x, start_y AS y FROM _import_pieces
+      UNION ALL
+      SELECT end_x, end_y FROM _import_pieces
+      UNION ALL
+      SELECT x1, y1 FROM _import_boca_pieces
+      UNION ALL
+      SELECT x2, y2 FROM _import_boca_pieces
+    ) endpoints
   `.execute(trx);
 }
 
@@ -560,6 +614,21 @@ async function mapKerbIds(trx: Transaction<DB>): Promise<void> {
     JOIN kerb_nodes kerb
       ON round(ST_X(kerb.geom)::numeric, 7) = point.x
      AND round(ST_Y(kerb.geom)::numeric, 7) = point.y
+  `.execute(trx);
+}
+
+/**
+ * El cordón de cada esquina, por el par de líneas que la formó.
+ *
+ * Los cruces se arman por par de esquinas y no por coordenada: el par es lo que dice
+ * cuáles son los dos nodos que quedan enfrentados a cada lado de un brazo (docs/11 §3.7).
+ */
+async function mapCornerKerbIds(trx: Transaction<DB>): Promise<void> {
+  await sql`
+    CREATE TEMP TABLE _import_corner_kerbs AS
+    SELECT point.pair_id, point.junction_id, point.geom, kerb.id
+    FROM _import_corner_points point
+    JOIN _import_kerbs kerb ON kerb.x = point.x AND kerb.y = point.y
   `.execute(trx);
 }
 
@@ -610,7 +679,8 @@ async function derivePieces(trx: Transaction<DB>): Promise<void> {
       ) cut
       WINDOW w AS (PARTITION BY cut.line_id ORDER BY cut.loc, cut.x, cut.y)
     )
-    SELECT line.tramo_id,
+    SELECT ordered.line_id,
+           line.tramo_id,
            ordered.x AS start_x, ordered.y AS start_y,
            ordered.next_x AS end_x, ordered.next_y AS end_y,
            ST_LineSubstring(line.geom, ordered.loc, ordered.next_loc) AS geom
@@ -736,4 +806,155 @@ async function findTeesWithoutBoca(trx: Transaction<DB>): Promise<number[]> {
   `.execute(trx);
 
   return result.rows.map((row) => Number(row.osm_node_id));
+}
+
+/**
+ * Deriva los cruces: uno por brazo, la recta entre las dos esquinas que lo flanquean
+ * (docs/11 §3.7).
+ *
+ * La geometría es la recta entre los dos nodos y nada más, así que su largo sale de los
+ * offsets de la calle cruzada: no hay un ancho de calzada que inventar por separado. Si
+ * a una intersección le falta una esquina, ese brazo no tiene cruce y el reporte lo dice
+ * en vez de cruzar el brazo con el nodo que encontró.
+ */
+async function deriveCrossings(trx: Transaction<DB>): Promise<void> {
+  await sql`
+    CREATE TEMP TABLE _import_crossing_rows AS
+    SELECT DISTINCT ON (least(start_kerb, end_kerb), greatest(start_kerb, end_kerb))
+           crossing.junction_id, start_kerb, end_kerb, geom
+    FROM (
+      SELECT pair.junction_id,
+             first.id AS start_kerb,
+             second.id AS end_kerb,
+             ST_MakeLine(first.geom, second.geom) AS geom
+      FROM _import_crossing_pairs pair
+      JOIN _import_corner_kerbs first ON first.pair_id = pair.pair_a
+      JOIN _import_corner_kerbs second ON second.pair_id = pair.pair_b
+      WHERE first.id <> second.id
+    ) crossing
+    ORDER BY least(start_kerb, end_kerb), greatest(start_kerb, end_kerb), junction_id
+  `.execute(trx);
+}
+
+/**
+ * Escribe los cruces con upsert por par de nodos en orden canónico (docs/11 §4).
+ *
+ * `accessibility_level` no aparece en la lista de columnas: el nivel de un cruce se
+ * deriva del peor de sus dos esquinas al rutear ([12 §3](12-relevamiento-de-accesibilidad.md))
+ * y el importador no inventa ninguno. `is_verified` queda en su valor de import.
+ */
+async function upsertCrossings(
+  trx: Transaction<DB>,
+): Promise<{ created: number; updated: number }> {
+  const result = await sql<{ created: string; updated: string }>`
+    WITH written AS (
+      INSERT INTO crossings (start_node_id, end_node_id, geom)
+      SELECT start_kerb, end_kerb, geom
+      FROM _import_crossing_rows
+      ON CONFLICT ((least(start_node_id, end_node_id)), (greatest(start_node_id, end_node_id)))
+      DO UPDATE SET geom = EXCLUDED.geom
+      RETURNING (xmax = 0) AS inserted
+    )
+    SELECT count(*) FILTER (WHERE inserted) AS created,
+           count(*) FILTER (WHERE NOT inserted) AS updated
+    FROM written
+  `.execute(trx);
+
+  return {
+    created: Number(result.rows[0]?.created ?? 0),
+    updated: Number(result.rows[0]?.updated ?? 0),
+  };
+}
+
+/**
+ * Lo que el reporte compara de cada intersección derivada: brazos, esquinas y cruces.
+ *
+ * Las dos cuentas que tienen que cerrar son cuatro nodos por intersección —dos esquinas
+ * y dos de la boca, cuando es una T— y un cruce por brazo (docs/11 §3.2 y §3.7).
+ */
+async function reportJunctions(trx: Transaction<DB>): Promise<JunctionReport[]> {
+  const result = await sql<{
+    osm_node_id: string;
+    kind: string;
+    arms: string;
+    corners: string;
+    crossings: string;
+  }>`
+    SELECT junction.osm_node_id, junction.kind,
+           (SELECT count(*) FROM _import_junction_arms arm
+             WHERE arm.junction_id = junction.junction_id) AS arms,
+           (SELECT count(*) FROM _import_corner_points point
+             WHERE point.junction_id = junction.junction_id) AS corners,
+           (SELECT count(*) FROM _import_crossing_rows crossing
+             WHERE crossing.junction_id = junction.junction_id) AS crossings
+    FROM _import_junctions junction
+    ORDER BY junction.osm_node_id
+  `.execute(trx);
+
+  return result.rows.map((row) => ({
+    osmNodeId: Number(row.osm_node_id),
+    kind: row.kind === 'tee' ? 'tee' : 'cross',
+    arms: Number(row.arms),
+    corners: Number(row.corners),
+    crossings: Number(row.crossings),
+  }));
+}
+
+/**
+ * Los tramos con alguna línea que no produjo ninguna vereda.
+ *
+ * Pasa cuando los cortes de la línea —la esquina de cada punta y los extremos de borde—
+ * no caen sobre ella: la línea queda sin par de nodos y no hay arista que insertar. Es un
+ * error de corte y se reporta como tal, en vez de dejar la calle afuera del grafo sin
+ * decirlo (docs/11 §4).
+ */
+async function findLinesWithoutSidewalk(
+  trx: Transaction<DB>,
+): Promise<{ tramoId: number; streetName: string | null }[]> {
+  const result = await sql<{ tramo_id: number; street_name: string | null }>`
+    SELECT line.tramo_id, max(tramo.street_name) AS street_name
+    FROM _import_lines line
+    JOIN _import_tramos tramo ON tramo.tramo_id = line.tramo_id
+    WHERE NOT EXISTS (
+      SELECT 1 FROM _import_pieces piece WHERE piece.line_id = line.line_id
+    )
+    GROUP BY line.tramo_id
+    ORDER BY line.tramo_id
+  `.execute(trx);
+
+  return result.rows.map((row) => ({
+    tramoId: Number(row.tramo_id),
+    streetName: row.street_name,
+  }));
+}
+
+/**
+ * Los pares de vías que se cruzan en el mapa sin compartir un nodo de OSM (docs/11 §3.2).
+ *
+ * Es un diagnóstico y no parte del grafo: una imperfección del extracto se ve acá y no
+ * como dos calles que se tocan en el mapa y no en el grafo. El umbral de 2 m absorbe el
+ * error de dibujo de OSM sin juntar dos calles que pasan cerca, y no se inventa el nodo
+ * que falta.
+ */
+async function findUnsharedCrossings(
+  trx: Transaction<DB>,
+): Promise<readonly (readonly [number, number])[]> {
+  const result = await sql<{ way_a: string; way_b: string }>`
+    SELECT first.way_id AS way_a, second.way_id AS way_b
+    FROM _import_ways first
+    JOIN _import_ways second ON second.way_id > first.way_id
+    WHERE ST_DWithin(ST_Transform(first.geom, 32719),
+                     ST_Transform(second.geom, 32719), 2)
+      AND NOT EXISTS (
+        SELECT 1
+        FROM _import_way_nodes first_node
+        JOIN _import_way_nodes second_node
+          ON second_node.osm_node_id = first_node.osm_node_id
+        WHERE first_node.way_id = first.way_id
+          AND second_node.way_id = second.way_id
+      )
+    ORDER BY first.way_id, second.way_id
+  `.execute(trx);
+
+  return result.rows.map((row) => [Number(row.way_a), Number(row.way_b)] as const);
 }
