@@ -276,10 +276,19 @@ sus nodos y tiene su `street_name`. Su `osm_way_id` queda en `NULL`: no sale de 
 fuera de la grilla. Bartolomé Mitre es el caso que este documento describía —dos `way`
 separadas 13,4 a 14,6 m en 14 cortes a lo largo de la avenida—, y **Manuel Belgrano**
 aparece con el mismo patrón entre 19,7 y 23,6 m, también `tertiary` y en calzadas de
-sentido único dibujadas en sentidos opuestos. Con el umbral de 25 m las dos entran como
-boulevard y sus calzadas quedan fuera de la grilla hasta #34, que es lo que el umbral
-pide. Si Belgrano no es un boulevard, la corrección es una excepción por calle, como
-las de los offsets (§3.4), y no un umbral distinto para todas.
+sentido único dibujadas en sentidos opuestos.
+
+Belgrano **no está dentro del polígono del piloto**: entra sólo por el búfer de 130 m,
+y resulta ser la calle del extremo oeste del extracto. Por eso aparece en los números
+de la corrida aunque el cuadrante de las plazas termine en Perú; cualquier recuento
+sobre "la zona" tiene que decir si cuenta el búfer, porque el búfer no es el piloto
+([10 §3](10-datos-y-zona-piloto.md)).
+
+Con el umbral de 25 m las dos entran como boulevard y sus calzadas quedan fuera de la
+grilla hasta #34, que es lo que el umbral pide. Las dos están verificadas: Mitre por el
+relevamiento de este documento y Belgrano mirando el mapa. Si alguna vez aparece un
+caso dudoso, la corrección es una excepción por calle, como las de los offsets (§3.4),
+y no un umbral distinto para todas.
 
 **El umbral es una detección, no una certeza.** Dos calzadas en el mismo sentido
 separadas por una mediana no se detectan como boulevard: el importador les deriva
