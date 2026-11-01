@@ -42,6 +42,10 @@ motivo en §6. En el extracto de la zona piloto eso son 320 vías con `highway`,
 cuales entran 99: 49 `residential`, 21 `tertiary`, 19 `secondary`, 8 `primary`,
 1 `pedestrian` y 1 `living_street`.
 
+De esas 99, el importador de la grilla excluye antes las **15 calzadas de boulevard**
+(§3.6) y deja la peatonal para #34: deriva **83**. Los números de la corrida van al
+reporte (§4).
+
 Una `way` **no es una calle ni una cuadra**: puede empezar y terminar en la mitad de
 una, y dos tramos consecutivos de la misma calle pueden ser dos `way` que comparten
 un nodo. Por eso el grafo no se arma por `way` sino por **línea caminable cortada en
@@ -54,7 +58,7 @@ nodos** (§3).
 | Tag de OSM | Destino |
 | --- | --- |
 | `highway` | Qué entra (§2.1) y el offset de la vereda (§3.4) |
-| `id` de la `way` | `sidewalks.osm_way_id`, para trazabilidad. **No es único**: una `way` produce varias veredas |
+| `id` de la `way` | `sidewalks.osm_way_id`, para trazabilidad. **No es único**: una `way` produce varias veredas, y una vereda de un tramo hecho de varias `way` lleva el id de la que contiene su punto medio |
 | `name` | `sidewalks.street_name` |
 | `lanes` | Offset, cuando existe: gana sobre la clase (§3.4) |
 | `oneway` | Detección de boulevard: se buscan dos calzadas en sentidos opuestos (§3.6) |
@@ -67,7 +71,7 @@ Y lo que OSM trae en la zona y **no se lee**, con el motivo:
 | --- | --- | --- |
 | `sidewalk=both` / `sidewalk:both=separate` | 41 vías | Se derivan siempre las dos veredas (§3.4). El tag no dice dónde están ni cómo están |
 | `footway=sidewalk` | 0 | Sería la fuente de la geometría de la vereda, y no existe. Si apareciera, se ignora igual: el criterio del MVP es derivar, no depender de que OSM lo tenga dibujado |
-| `footway=crossing` | 18 vías | No alcanzan (hacen falta ~200) y mezclarlas rompe la uniformidad (§3.7) |
+| `footway=crossing` | 18 vías | No alcanzan (hacen falta 192) y mezclarlas rompe la uniformidad (§3.7) |
 | `highway=crossing` (nodo) | 128 | Ídem: marcan algunos cruces, no todos, y no tienen geometría |
 | `kerb`, `tactile_paving` | 4 nodos, todos en el búfer | Es dato de accesibilidad, y la accesibilidad la aporta el relevamiento ([12](12-relevamiento-de-accesibilidad.md)) |
 | `foot`, `access`, `sidewalk=no` | 0 | El MVP asume que en la zona piloto se camina por los dos lados de toda calle (§6) |
@@ -150,6 +154,61 @@ extracto no se deriva un cruce, porque la calle sigue y no sabemos qué hay del 
 lado. Es un artefacto conocido y aceptado, y es el motivo por el que el extracto se
 trae con búfer ([10 §3](10-datos-y-zona-piloto.md#3-fuente-y-formato)).
 
+**La T, y la vereda que sigue de largo.** En una T las dos calles que pasan son **la
+misma recta**, así que sus líneas de vereda son colineales: no se cruzan y no producen
+esquina. Pero la T igual tiene cuatro nodos, y los que faltan los pone la calle que
+termina:
+
+```
+            Calle Corta (el brazo que termina)
+                   |
+   ----------------┼----------------  calle que pasa
+      vereda   [nodo]  [nodo]   vereda
+                    ↑
+            vereda en frente de la boca
+```
+
+- **Del lado donde llega el brazo** hay dos esquinas normales, y entre ellas el cruce
+  sobre el brazo.
+- **Del lado opuesto** —el de la boca de la T— hay dos nodos que **no son
+  intersecciones de dos líneas de vereda**: son donde aterrizan los dos cruces sobre
+  la calle que pasa, y salen de prolongar las líneas del brazo que termina hasta la
+  vereda del lado opuesto.
+- Entre esos dos nodos va **una vereda más**, la que corre en frente de la boca. Es una
+  arista como cualquier otra y es lo que cierra el grafo: sin ella, la vereda del lado
+  opuesto queda partida en dos y sin conexión.
+
+**En la zona piloto la corrida encuentra nueve T.** El cuadro original de esta sección
+partía del mapa con el boulevard y la peatonal ya derivados: cuatro T, todas contra
+Plaza Independencia, que ocupa 2,2 manzanas y corta las calles que la cruzarían. Con
+las `way` de la grilla —sin las 15 calzadas de boulevard y sin la peatonal— la regla
+del grado 3 encuentra estas nueve:
+
+| T | El brazo que termina |
+| --- | --- |
+| Sarmiento × Chile | Sarmiento, calle común: **la deriva el importador de la grilla** |
+| Chile × Avenida Colón | Chile |
+| Infanta Mercedes de San Martín × Perú (dos nodos) | Infanta Mercedes de San Martín |
+| Estado de Israel × Santiago de Liniers | Estado de Israel |
+| Don Bosco, José Garibaldi y San Lorenzo × Avenida General San Martín | cada uno de los tres |
+| Los Tulipanes × una calle sin `name` | Los Tulipanes |
+
+Dos de las cuatro T del cuadro original —Mitre × Gerónimo Espejo y Mitre × Rivadavia—
+no aparecen acá porque el brazo que termina es Mitre, que es boulevard: sus calzadas
+están fuera de la grilla (§3.6) y esas T vuelven con ellas en #34. La cuarta, la
+peatonal, también es #34. Y quedan **tres nodos de tres brazos donde ninguno es el que
+termina** —una calle que se abre en Y, dos que se tocan en un punto—: ésos se reportan
+y no se derivan, porque no son ni un cruce ni una T.
+
+Una de las nueve —Chile × Avenida Colón— **no deriva su vereda de la boca**: la calle
+que pasa cambia de ancho en el nodo, así que el lado opuesto tiene cuatro esquinas en
+lugar de dos y no hay un segmento que cierre la boca sin decidir algo nuevo. La corrida
+lo reporta con el nodo y el grafo queda con las dos veredas del lado opuesto sueltas.
+
+Un brazo que termina y es un boulevard, o una peatonal, tiene más o menos líneas que
+dos: el lado opuesto recibe entonces más de dos nodos y más de una vereda de la boca.
+Eso se resuelve en #34, junto con esas vías.
+
 ### 3.3 El corte en tramos
 
 Cada línea caminable se corta **en cada nodo que cae sobre ella**. El resultado es el
@@ -211,8 +270,25 @@ real.
 
 La mediana es una vereda más: arranca con `accessibility_level` en `NULL`, se corta en
 sus nodos y tiene su `street_name`. Su `osm_way_id` queda en `NULL`: no sale de una
-`way` sino de las dos. En la zona, el caso es **Bartolomé Mitre** (dos `way` separadas
-13-16 m, consistente en 14 cortes a lo largo de la avenida).
+`way` sino de las dos.
+
+**La primera corrida detecta dos boulevards, no uno:** 13 pares de calzadas y 15 vías
+fuera de la grilla. Bartolomé Mitre es el caso que este documento describía —dos `way`
+separadas 13,4 a 14,6 m en 14 cortes a lo largo de la avenida—, y **Manuel Belgrano**
+aparece con el mismo patrón entre 19,7 y 23,6 m, también `tertiary` y en calzadas de
+sentido único dibujadas en sentidos opuestos.
+
+Belgrano **no está dentro del polígono del piloto**: entra sólo por el búfer de 130 m,
+y resulta ser la calle del extremo oeste del extracto. Por eso aparece en los números
+de la corrida aunque el cuadrante de las plazas termine en Perú; cualquier recuento
+sobre "la zona" tiene que decir si cuenta el búfer, porque el búfer no es el piloto
+([10 §3](10-datos-y-zona-piloto.md)).
+
+Con el umbral de 25 m las dos entran como boulevard y sus calzadas quedan fuera de la
+grilla hasta #34, que es lo que el umbral pide. Las dos están verificadas: Mitre por el
+relevamiento de este documento y Belgrano mirando el mapa. Si alguna vez aparece un
+caso dudoso, la corrección es una excepción por calle, como las de los offsets (§3.4),
+y no un umbral distinto para todas.
 
 **El umbral es una detección, no una certeza.** Dos calzadas en el mismo sentido
 separadas por una mediana no se detectan como boulevard: el importador les deriva
@@ -223,8 +299,10 @@ calle, como los offsets.
 
 Un cruce es una arista que atraviesa una calzada y une **dos esquinas enfrentadas**.
 Se deriva **uno por brazo** de la intersección: cuatro en un cruce de cuatro brazos,
-tres en uno de tres. En la zona piloto salen del orden de **200**, contra los 18 que
-trae OSM.
+tres en una T. En la zona piloto son **267**: 60 intersecciones de cuatro brazos por
+cuatro cruces, más las 9 T por tres. Contra los 18 que trae OSM, es otra cosa. (El
+recuento anterior de 192 salía de estimar 45 cruces y 4 T mirando el mapa; con las
+`way` de la grilla y la regla del grado 3 son 69 intersecciones.)
 
 Su geometría es la **recta entre los dos nodos**, así que su largo sale de los del
 offset de la calle cruzada: no hay un ancho de calzada que inventar por separado, y
@@ -264,6 +342,14 @@ salen manzanas: `M001` no se genera, se tipea.
 | `kerb_nodes` | La coordenada, normalizada a **7 decimales** (~1 cm, la precisión del extracto): índice único sobre `ST_X` y `ST_Y` |
 | `sidewalks` y `crossings` | El par de nodos en **orden canónico** (`least`/`greatest`): caminar es no dirigido, y A→B es la misma arista que B→A |
 
+Las coordenadas que el importador **deriva** —esquinas y extremos de línea— se normalizan
+además a **6 decimales** (~10 cm) antes de buscar su fila. La misma esquina calculada
+desde dos pares de líneas distintos puede diferir en centímetros, porque el eje de los
+dos tramos de la calle que pasa no coincide exactamente en el nodo: sin esa
+normalización, la misma esquina entra como dos cordones a un centímetro de distancia y
+la vereda de la boca de una T no encuentra sus dos nodos. Las coordenadas del extracto
+no se tocan: ésas ya vienen con su precisión.
+
 No hace falta una columna `key`. El par de nodos ya está en la tabla, y un hash
 guardado sería un dato derivado que hay que recalcular y que depende de la función de
 hash, no del grafo. La restricción que lo vuelve clave está en
@@ -301,6 +387,31 @@ Las tres protecciones que acompañan al upsert:
 
 **El test es barato:** importar dos veces sobre la misma base y comprobar que los ids
 no cambiaron, que no hay filas nuevas y que los obstáculos conservan sus vínculos.
+
+### 4.1 Cómo se corre
+
+El importador es un comando del backend, y todo lo que escribe va en una sola
+transacción:
+
+```bash
+cd backend
+cp .env.example .env                      # DATABASE_URL, NODE_ENV, PORT
+pnpm migrate                              # las migraciones del grafo y sus índices
+pnpm import:osm [ruta]                    # por defecto ../data/pilot-zone.osm
+```
+
+La base es la del `docker compose -f infra/docker-compose.yml up -d db`, que ya trae
+PostGIS y pgRouting. El extracto **no se versiona** (10 §4): se genera con
+`node scripts/fetch-pilot-zone-osm.mjs`. Si la ruta no existe o el archivo no trae
+vías, el comando falla con un mensaje que dice eso, y no deja nada escrito.
+
+El **reporte de la corrida** sale por la salida estándar con el logger del backend, y
+es lo que hay que leer antes de mirar el grafo: vías leídas, incluidas y descartadas por
+clase, calzadas de boulevard fuera de la grilla, tramos, intersecciones por tipo,
+cordones y veredas creados y reusados, líneas que `ST_OffsetCurve` devolvió partidas o
+vacías, y una advertencia por cada intersección que no se derivó o T que quedó sin su
+vereda de la boca. Correrlo dos veces seguidas tiene que dar `created: 0` en cordones y
+veredas, y es lo que hace el test de integración con el extracto de prueba.
 
 ## 5. El grafo para pgRouting
 
