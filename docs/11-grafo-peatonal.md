@@ -482,22 +482,103 @@ y el grafo tiene dos tablas de aristas cuyos `id` se pisan. La vista
 | `id` | **Sintético y determinista**: `2 × id` para una vereda, `2 × id + 1` para un cruce |
 | `source`, `target` | `start_node_id` y `end_node_id` |
 | `cost` | La fórmula de [09 §4.7](09-modelo-de-datos.md#47-el-costo-de-las-aristas-se-calcula-no-se-guarda) |
+| `meters` | `ST_Length(geom::geography)`: el largo real, sin castigos |
+| `level` | El nivel que se cobró, con la regla de la esquina del cruce ya aplicada |
 | `geom` | La geometría de la arista, para reconstruir el recorrido |
 | `element_kind`, `element_id` | Qué fila de qué tabla es, para volver de la arista al elemento |
+
+`meters` y `level` no son adorno: `cost` es un número que no se explica solo, y C003
+tiene que poder marcar **qué tramos del camino quedaron comprometidos**.
+
+**El `id` no colisiona y no se renumera.** El número par separa una tabla del impar de la
+otra, y dos filas de la misma tabla nunca dan el mismo par. Escala igual cuando el
+extracto crece: las filas nuevas siguen la secuencia de identidad de su tabla y las que
+ya estaban conservan la suya. Lo único que obligaría a cambiar la fórmula es una
+**tercera** tabla de aristas, y hasta eso es barato: el `id` se calcula en la vista, así
+que no hay nada guardado que migrar.
 
 Dos consecuencias:
 
 - **La topología ya está resuelta por el modelo.** `pgr_createTopology` existe para
 deducir `source` y `target` de una tabla de geometrías sueltas; acá los nodos son
-filas y las aristas los referencian por FK. Construirla y validarla con una consulta
-es #13, y el resultado esperado es que no haya nada que deducir.
+filas y las aristas los referencian por FK, así que no hay nada que deducir.
 - **Caminar es no dirigido.** Alcanza con `cost` y `directed => false`: no hace falta
   `reverse_cost`. Una vereda `NONE` no se filtra con un `WHERE`, se cobra `-1`
   ([09 §4.7](09-modelo-de-datos.md#47-el-costo-de-las-aristas-se-calcula-no-se-guarda)).
 
-El identificador sintético no colisiona y no depende de una secuencia: la misma base
-importada dos veces da los mismos ids, y una consulta guardada en un log se puede
-volver a leer.
+**Al reimportar no hay nada que reconstruir.** No hay tabla de topología ni un
+`pgr_createTopology` que correr: `source` y `target` son columnas con FK, el `id` de la
+vista es aritmético y el importador es upsert por clave geométrica, así que los `id` de
+las tablas no cambian entre corridas. Una vereda nueva aparece sola en la vista, y un
+obstáculo que apunta a una fila que sigue existiendo sigue apuntando. La única condición
+es no renumerar, y nada en el esquema renumera: las claves son `IDENTITY` que sólo crecen.
+
+### 5.1 La validación
+
+La prueba de que el grafo quedó armado es de componentes conectados, no de aristas: una
+vereda suelta no rompe nada, pero un grafo partido en islas por manzana no rutea.
+
+```sql
+SELECT count(DISTINCT component) AS componentes
+FROM pgr_connectedComponents(
+  'SELECT id, source, target, cost FROM walkable_edges');
+```
+
+En el extracto da **10 componentes**, y eso no es un error: **dentro del polígono del
+piloto es una sola**, con los 110 nodos que caen adentro. Las otras nueve son de 2 a 10
+nodos y están todas en el búfer: retazos que mueren en el borde del extracto y veredas que
+hoy sólo se conectarían por una calzada de Belgrano, que entra con #34.
+
+### 5.2 La consulta de una ruta
+
+Entre dos coordenadas conocidas: se busca el cordón más cercano a cada una y se pide el
+camino.
+
+```sql
+WITH puntos AS (
+  SELECT ST_SetSRID(ST_MakePoint(-68.84719, -32.88470), 4326) AS desde,  -- Las Heras y 25 de Mayo
+         ST_SetSRID(ST_MakePoint(-68.84207, -32.89363), 4326) AS hasta   -- al sur del piloto
+), extremos AS (
+  SELECT (SELECT k.id FROM kerb_nodes k, puntos p ORDER BY k.geom <-> p.desde LIMIT 1) AS desde,
+         (SELECT k.id FROM kerb_nodes k, puntos p ORDER BY k.geom <-> p.hasta LIMIT 1) AS hasta
+)
+SELECT path.seq, path.node, edge.element_kind, edge.element_id, path.cost, edge.geom
+FROM extremos,
+     LATERAL pgr_dijkstra('SELECT id, source, target, cost FROM walkable_edges',
+                          extremos.desde, extremos.hasta, directed := false) path
+LEFT JOIN walkable_edges edge ON edge.id = path.edge
+ORDER BY path.seq;
+```
+
+Dos detalles de esa consulta:
+
+- **`LEFT JOIN` y no `JOIN`.** La última fila de `pgr_dijkstra` es el nodo de llegada y
+  trae `edge = -1`: con un `JOIN` común esa fila se cae y el camino parece terminar una
+  arista antes. Con `LEFT JOIN` queda, y `ST_Collect` ignora el `NULL`.
+- **`directed := false`.** Para el peatón toda calle se camina en los dos sentidos.
+
+En la zona piloto esa consulta devuelve **21 aristas, 10 cruces y 1.570 m** de recorrido
+por **3.140 m-equivalentes**: exactamente el doble, porque todas las veredas están sin
+relevar y `NULL` se cobra como `PARTIAL`.
+
+Y el resumen del camino, que es lo que necesita una respuesta de API:
+
+```sql
+WITH puntos AS (
+  SELECT ST_SetSRID(ST_MakePoint(-68.84719, -32.88470), 4326) AS desde,
+         ST_SetSRID(ST_MakePoint(-68.84207, -32.89363), 4326) AS hasta
+), extremos AS (
+  SELECT (SELECT k.id FROM kerb_nodes k, puntos p ORDER BY k.geom <-> p.desde LIMIT 1) AS desde,
+         (SELECT k.id FROM kerb_nodes k, puntos p ORDER BY k.geom <-> p.hasta LIMIT 1) AS hasta
+)
+SELECT count(*) FILTER (WHERE edge.element_kind = 'crossing') AS cruces,
+       sum(edge.meters) AS metros,
+       sum(edge.cost)   AS costo
+FROM extremos,
+     LATERAL pgr_dijkstra('SELECT id, source, target, cost FROM walkable_edges',
+                          extremos.desde, extremos.hasta, directed := false) path
+JOIN walkable_edges edge ON edge.id = path.edge;
+```
 
 ## 6. Lo que OSM no puede modelar
 
@@ -523,15 +604,14 @@ disparador para revisarla, y el disparador más frecuente es el relevamiento.
 - **El importador.** El código que aplica §2 a §4, y su forma: script por lotes,
   transacción, reporte. Son #12 (la grilla), #33 (los cruces) y #34 (el boulevard y la
   peatonal).
-- **La construcción y validación de la topología.** Que las aristas queden
-  efectivamente conectadas y que una consulta devuelva un recorrido entre dos puntos
-  conocidos: #13.
 - **Los índices únicos** de §4 ya existen; #12 los usa para el upsert.
 - **El valor de los offsets** (§3.4) y del umbral de boulevard (§3.6). Son puntos de
   partida, y se ajustan mirando el mapa de la zona piloto.
 - **La fórmula del costo.** Vive en [09 §4.7](09-modelo-de-datos.md#47-el-costo-de-las-aristas-se-calcula-no-se-guarda).
 - **La normalización de nombres** de calle: es del emparejamiento con el relevamiento
   ([12 §8](12-relevamiento-de-accesibilidad.md)).
+- **La API del ruteo.** §5 deja la vista y las consultas de validación y de camino; el
+  caso de uso C003, con sus parámetros y su respuesta, es otro documento.
 
 ## 8. Documentos relacionados
 

@@ -341,7 +341,10 @@ costo(e) = metros(e) × factor_nivel(e) + Σ penalización(obstáculos activos d
 **Una vista no es una copia.** `CREATE VIEW` guarda solo el texto de la consulta: cada vez
 que se consulta, PostgreSQL lo expande y calcula el costo en ese momento. No ocupa espacio,
 no hay nada que mantener actualizado y no puede desincronizarse con las tablas. La que
-guarda datos es la vista *materializada*, y es justamente la que no se quiere.
+guarda datos es la vista *materializada*, y es justamente la que no se quiere. La vista
+existe en `infra/migrations/1793500666032_create-walkable-edges-view.sql` y expone también
+`metros` y `level` —el nivel que efectivamente se cobró— porque un costo que no se puede
+descomponer no se puede explicar ni revisar ([11 §5](11-grafo-peatonal.md)).
 
 **`metros`** es `ST_Length(geom::geography)`, en metros reales y no en grados. No es un
 detalle: `pgr_dijkstra` minimiza la suma de los costos, así que las aristas tienen que estar
@@ -369,7 +372,10 @@ los tramos comprometidos.
 sólo tiene valor si alguien miró ese cruce puntual; el importador no lo escribe, porque
 dónde termina el asfalto no dice cómo se entra. Así que el valor que entra en
 `factor_nivel` es el del cruce si lo tiene, y si no, **el peor de sus dos esquinas**
-([12 §3](12-relevamiento-de-accesibilidad.md)).
+([12 §3](12-relevamiento-de-accesibilidad.md)). **El peor**, con el orden del enum
+(`FULL < PARTIAL < NONE`), y una esquina sin dato cuenta como `PARTIAL` antes de comparar:
+un cruce con una esquina sin relevar y la otra `FULL` se cobra como `PARTIAL`, no como
+`FULL`. Si no, la esquina que nadie miró abarataría el cruce.
 
 Eso cierra un hueco del modelo: un nodo no tiene costo, así que una esquina `NONE` no
 bloqueaba nada. Con el derivado, una esquina sin rampa deja en `NONE` los cruces que

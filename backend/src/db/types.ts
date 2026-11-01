@@ -148,6 +148,18 @@ export interface UserTutorials {
   user_id: number;
 }
 
+export interface WalkableEdges {
+  cost: number | null;
+  element_id: number | null;
+  element_kind: string | null;
+  geom: string | null;
+  id: Int8 | null;
+  level: AccessibilityLevel | null;
+  meters: number | null;
+  source: number | null;
+  target: number | null;
+}
+
 export interface DB {
   crossings: Crossings;
   kerb_nodes: KerbNodes;
@@ -161,4 +173,5 @@ export interface DB {
   user_places: UserPlaces;
   user_tutorials: UserTutorials;
   users: Users;
+  walkable_edges: WalkableEdges;
 }
