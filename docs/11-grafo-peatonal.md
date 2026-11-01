@@ -42,9 +42,10 @@ motivo en §6. En el extracto de la zona piloto eso son 320 vías con `highway`,
 cuales entran 99: 49 `residential`, 21 `tertiary`, 19 `secondary`, 8 `primary`,
 1 `pedestrian` y 1 `living_street`.
 
-De esas 99, el importador de la grilla excluye antes las **15 calzadas de boulevard**
-(§3.6) y deja la peatonal para #34: deriva **83**. Los números de la corrida van al
-reporte (§4).
+De esas 99 entran **las 99** al grafo: las **15 calzadas de boulevard** aportan una sola
+vereda cada una —su exterior— más la mediana de la avenida (§3.6), y la peatonal aporta
+una línea sobre su eje (§3.5). La corrida deriva **236 tramos** y **436 líneas caminables**,
+de las cuales 2 son medianas. Los números de la corrida van al reporte (§4).
 
 Una `way` **no es una calle ni una cuadra**: puede empezar y terminar en la mitad de
 una, y dos tramos consecutivos de la misma calle pueden ser dos `way` que comparten
@@ -127,6 +128,16 @@ ninguna línea, el reporte lo dice (§4).
 | Fin de calle en el borde del extracto | 1 por línea: la vereda termina donde termina el extracto | 1 |
 | La misma calle doblada, sin otra que la cruce | **Ninguno**: el quiebre es geometría de la línea, no un nodo | — |
 
+**El brazo de un boulevard no cambia la cuenta, sí el reparto.** Un brazo de calzada aporta
+dos líneas, su vereda exterior y la mediana, una de cada lado (§3.6), así que en el lado de
+la mediana el nodo del cuadrante **es** el nodo de mediana: la esquina de ese lado no la
+forman dos veredas, la forma la mediana contra la vereda de la calle que pasa. Es la regla
+del párrafo anterior aplicada al brazo, y es lo que deja los cuatro nodos iguales: dos
+esquinas y dos nodos de mediana. La vereda exterior de **la otra** calzada no entra en este
+brazo: es del brazo de esa calzada, y su esquina se deriva en su nodo. Cuando las dos
+calzadas se tomaban juntas, el del lado de la mediana emparejaba esa vereda lejana y la
+esquina real quedaba a 15–25 m, fuera de la vereda que la tenía que cortar.
+
 **Una esquina, una vez.** La esquina la forman los **dos brazos que la bordan**, y de
 cada uno se toma la línea que mira hacia el otro: la de la izquierda de un brazo contra
 la de la derecha del siguiente, en orden angular. Nada más hace falta. En particular, no
@@ -197,41 +208,42 @@ termina:
   arista como cualquier otra y es lo que cierra el grafo: sin ella, la vereda del lado
   opuesto queda partida en dos y sin conexión.
 
-Las nueve T de la zona piloto se derivan enteras, con sus cuatro nodos y su vereda de
-la boca. Cuando una boca no se puede cerrar —el lado opuesto no da exactamente dos
-nodos— la corrida lo reporta con el nodo y no inventa la vereda.
+Las T de la zona piloto se derivan enteras, con sus nodos y su vereda de la boca. Cuando
+una boca no se puede cerrar —el lado opuesto no da exactamente dos nodos— la corrida lo
+reporta con el nodo y no inventa la vereda.
 
-**En la zona piloto la corrida encuentra nueve T.** El cuadro original de esta sección
-partía del mapa con el boulevard y la peatonal ya derivados: cuatro T, todas contra
-Plaza Independencia, que ocupa 2,2 manzanas y corta las calles que la cruzarían. Con
-las `way` de la grilla —sin las 15 calzadas de boulevard y sin la peatonal— la regla
-del grado 3 encuentra estas nueve:
+**En la zona piloto la corrida encuentra veinte T y ninguna intersección sin derivar.**
+Son más que las nueve del cuadro original porque ahora entran las quince calzadas de
+boulevard y la peatonal, y cada una trae sus T: Mitre × Gerónimo Espejo y Mitre ×
+Rivadavia terminan contra la avenida, la peatonal contra la calle que la cruza, y cada
+calle que se corta en una calzada agrega la suya, con la avenida siguiendo de largo del
+otro lado (§3.6). Las nueve que ya estaban son éstas:
 
 | T | El brazo que termina |
 | --- | --- |
-| Sarmiento × Chile | Sarmiento, calle común: **la deriva el importador de la grilla** |
+| Sarmiento × Chile | Sarmiento, calle común |
 | Chile × Avenida Colón | Chile |
 | Infanta Mercedes de San Martín × Perú (dos nodos) | Infanta Mercedes de San Martín |
 | Estado de Israel × Santiago de Liniers | Estado de Israel |
 | Don Bosco, José Garibaldi y San Lorenzo × Avenida General San Martín | cada uno de los tres |
 | Los Tulipanes × una calle sin `name` | Los Tulipanes |
 
-Dos de las cuatro T del cuadro original —Mitre × Gerónimo Espejo y Mitre × Rivadavia—
-no aparecen acá porque el brazo que termina es Mitre, que es boulevard: sus calzadas
-están fuera de la grilla (§3.6) y esas T vuelven con ellas en #34. La cuarta, la
-peatonal, también es #34. Y quedan **tres nodos de tres brazos donde ninguno es el que
-termina** —una calle que se abre en Y, dos que se tocan en un punto—: ésos se reportan
-y no se derivan, porque no son ni un cruce ni una T.
+**Los tres nodos en Y no existían.** El cuadro anterior daba por sentados **tres nodos de
+tres brazos donde ninguno es el que termina** —una calle que se abre en Y— y los reportaba
+sin derivar. No eran eso: eran tres T que el cálculo del ángulo entre rumbos rechazaba,
+porque el módulo de JavaScript conserva el signo del dividendo y el ángulo salía 271° en
+lugar de 89°. Con el ángulo bien, las tres son T, se derivan enteras, y la corrida no deja
+ninguna intersección sin soporte.
 
-Un brazo que termina y es un boulevard, o una peatonal, tiene más o menos líneas que
-dos: el lado opuesto recibe entonces más de dos nodos y más de una vereda de la boca.
-Eso se resuelve en #34, junto con esas vías.
+Un brazo que termina y es una calzada de boulevard aporta una sola línea, así que el lado
+opuesto da un nodo y no hay vereda de boca que cerrar: la vereda de enfrente pasa por ese
+nodo sin cortarse. Es la misma regla que la peatonal (§3.5), y es lo que la corrida cuenta
+como T de una línea.
 
 **Los tramos que desembocan en una intersección no soportada** quedan sin cortar en esa
-punta, así que no producen vereda de ese lado. En la zona piloto son los nueve brazos de
-los tres nodos en Y, y se reportan una sola vez, por el nodo. Cualquier otro tramo que
-quede sin vereda es un error de corte y el reporte lo dice con el número de tramo y la
-calle (§4).
+punta, así que no producen vereda de ese lado, y se reportan una sola vez, por el nodo. En
+la zona piloto no hay ninguno. Cualquier otro tramo que quede sin vereda es un error de
+corte y el reporte lo dice con el número de tramo y la calle (§4).
 
 ### 3.3 El corte en tramos
 
@@ -286,6 +298,12 @@ peatonal y no en su borde. El cruce sobre esa calle mide el ancho de la calzada
 cruzada, como corresponde, y las dos esquinas quedan ~1,5 m más adentro de lo real.
 Se acepta: es más chico que el error del offset.
 
+**Cruzar la peatonal no genera arista de cruce.** Un cruce es una arista que atraviesa
+una calzada y une dos esquinas enfrentadas (§3.7), y la peatonal no tiene calzada: sus
+dos esquinas son el mismo nodo, el del eje, y la regla del párrafo anterior ya lo
+descarta por repetido. Lo que sí queda es la vereda de la calle que la corta, partida
+en ese nodo, y la peatonal se camina de largo como una vereda más.
+
 ### 3.6 El boulevard
 
 Cuando dos calzadas de la misma vía corren paralelas a **menos de 25 m**, en sentidos
@@ -295,20 +313,36 @@ opuestos (`oneway`) y con el **mismo `name`**, son un boulevard:
   se deriva como vereda: la ocupa la mediana.
 - La mediana es **una sola franja caminable**, sobre la línea equidistante entre las
 dos calzadas. No son dos veredas pegadas: modelarla como una sola arista es lo que
-hace que caminar a lo largo cuente una vez.
-- Cada brazo de la intersección tiene **dos cruces, uno por calzada**, que se encuentran
-en un nodo de mediana. Cruzar el boulevard cuesta dos cruces y la mediana, que es lo
-real.
+hace que caminar a lo largo cuente una vez. Sale de los **puntos medios** entre las dos
+cadenas, uno cada 10 m: no se dibuja a mano ni se promedia un ancho, se mide dónde
+está el medio en cada estación.
+- Cruzar el boulevard cuesta **dos cruces y la mediana**, que es lo real. Cada uno sale
+del nodo de la calzada que atraviesa: en el nodo de la calzada oeste el cruce va de la
+vereda exterior a la mediana, y en el de la este, de la mediana a la vereda del otro
+lado. Los dos nodos de mediana de una misma calle que cruza caen en **la misma
+coordenada**, así que el cordón es uno y la mediana queda cortada en los dos lados.
+
+**El brazo de una calzada aporta dos líneas, no tres.** Su vereda exterior y la
+mediana, una de cada lado. La exterior de la *otra* calzada no entra: es del brazo de
+esa calzada, y su esquina se deriva en **su** nodo, que es donde la calle que cruza la
+corta de verdad. Tenerla en los dos brazos fue un error de la primera versión: del lado
+de la mediana la esquina se armaba con esa vereda lejana, a 15–25 m, y la esquina real
+—la de la vereda de este lado— no se calculaba nunca, así que el tramo quedaba sin
+vereda en el grafo (§3.2). La forma del brazo es la que el reporte muestra por
+intersección (§4).
 
 La mediana es una vereda más: arranca con `accessibility_level` en `NULL`, se corta en
 sus nodos y tiene su `street_name`. Su `osm_way_id` queda en `NULL`: no sale de una
 `way` sino de las dos.
 
-**La primera corrida detecta dos boulevards, no uno:** 13 pares de calzadas y 15 vías
-fuera de la grilla. Bartolomé Mitre es el caso que este documento describía —dos `way`
-separadas 13,4 a 14,6 m en 14 cortes a lo largo de la avenida—, y **Manuel Belgrano**
-aparece con el mismo patrón entre 19,7 y 23,6 m, también `tertiary` y en calzadas de
-sentido único dibujadas en sentidos opuestos.
+**La corrida detecta dos boulevards, no uno:** 13 pares de calzadas, agrupados en **2
+grupos** —una avenida cada uno— y **15 calzadas**. Bartolomé Mitre es el caso que este
+documento describía —dos `way` separadas 13,4 a 14,6 m en 14 cortes a lo largo de la
+avenida—, y **Manuel Belgrano** aparece con el mismo patrón entre 19,7 y 23,6 m, también
+`tertiary` y en calzadas de sentido único dibujadas en sentidos opuestos. Un par suelto
+no es una avenida: Mitre se dibuja en varias `way` por lado, así que la mediana se deriva
+una vez por **grupo**, no por par, y es lo que hace que Mitre tenga una sola mediana
+corrida y no una por cuadra.
 
 Belgrano **no está dentro del polígono del piloto**: entra sólo por el búfer de 130 m,
 y resulta ser la calle del extremo oeste del extracto. Por eso aparece en los números
@@ -316,8 +350,8 @@ de la corrida aunque el cuadrante de las plazas termine en Perú; cualquier recu
 sobre "la zona" tiene que decir si cuenta el búfer, porque el búfer no es el piloto
 ([10 §3](10-datos-y-zona-piloto.md)).
 
-Con el umbral de 25 m las dos entran como boulevard y sus calzadas quedan fuera de la
-grilla hasta #34, que es lo que el umbral pide. Las dos están verificadas: Mitre por el
+Con el umbral de 25 m las dos entran como boulevard, y sus calzadas **entran a la grilla
+con una sola vereda cada una**: ya no quedan afuera. Las dos están verificadas: Mitre por el
 relevamiento de este documento y Belgrano mirando el mapa. Si alguna vez aparece un
 caso dudoso, la corrección es una excepción por calle, como las de los offsets (§3.4),
 y no un umbral distinto para todas.
@@ -331,10 +365,19 @@ calle, como los offsets.
 
 Un cruce es una arista que atraviesa una calzada y une **dos esquinas enfrentadas**.
 Se deriva **uno por brazo** de la intersección: cuatro en un cruce de cuatro brazos,
-tres en una T. En la zona piloto son **267**: 60 intersecciones de cuatro brazos por
-cuatro cruces, más las 9 T por tres. Contra los 18 que trae OSM, es otra cosa. (El
-recuento anterior de 192 salía de estimar 45 cruces y 4 T mirando el mapa; con las
-`way` de la grilla y la regla del grado 3 son 69 intersecciones.)
+tres en una T. En la zona piloto son **390**: 89 intersecciones de cuatro brazos y 20 T
+dan 416 pares brazo-esquina, y quedan 390 aristas porque el cruce sobre la mediana a veces
+es **el mismo par de nodos** que sale del brazo de la calle que la cruza, y la escritura
+deduplica por par de nodos. Contra los 18 cruces que trae OSM, es otra cosa.
+
+**Cuando el brazo es una avenida, el cruce se parte una vez por calzada.** El brazo de una
+calzada de boulevard aporta dos líneas —su vereda y la mediana—, así que en el cruce sobre
+ese brazo hay **un nodo de mediana en el medio**: el cruce sobre la calzada va de la vereda
+exterior al nodo de mediana, y el de la otra calzada sale de **su** nodo y llega al mismo
+nodo de mediana (§3.6). De los 390 cruces, **17** son la pieza de mediana que atraviesa la
+calle que la corta: es asfalto, no vereda, y se reconoce por geometría —cruza el eje de
+otra calle—. Esos 17 no sobran: la mediana se corta a los dos lados de cada calle y la
+pieza del medio es exactamente el cruce.
 
 **Cómo se saben las dos esquinas de un brazo.** Cada brazo queda entre dos de los cuatro
 nodos de la intersección: los dos que bordean sus costados. El cruce los une y nada más,
@@ -450,18 +493,26 @@ vías, el comando falla con un mensaje que dice eso, y no deja nada escrito.
 
 El **reporte de la corrida** sale por la salida estándar con el logger del backend, y
 es lo que hay que leer antes de mirar el grafo: vías leídas, incluidas y descartadas por
-clase, calzadas de boulevard fuera de la grilla, tramos, intersecciones por tipo,
-cordones y veredas creados y reusados, cruces creados y actualizados, líneas que
-`ST_OffsetCurve` devolvió partidas o vacías, y las advertencias. Cada advertencia dice
-qué pasó y dónde:
+clase, boulevards detectados —avenidas, pares y calzadas—, tramos, líneas caminables con
+sus medianas, intersecciones por tipo, cordones y veredas creados y reusados, cruces
+creados y actualizados, líneas que `ST_OffsetCurve` devolvió partidas o vacías, y las
+advertencias. Cada advertencia dice qué pasó y dónde:
 
 - una intersección que no se derivó, con su nodo;
-- una intersección cuyo número de esquinas o de cruces no cierra, con el nodo, los brazos
+- una intersección con menos de dos nodos o **sin ningún cruce**, con el nodo y los brazos,
   y —si en ese nodo desemboca una vía fuera de la grilla— de qué clase: un brazo de
   `service` y un error de corte dan el mismo síntoma y no son el mismo problema;
 - una T que no cerró su vereda de la boca;
 - un tramo con una línea que no llegó a vereda;
 - dos vías que se cruzan sin compartir un nodo.
+
+**El reporte muestra la forma de cada intersección, no una cuenta fija.** No hay un número
+de nodos ni de cruces que exigir: con el boulevard y la peatonal los brazos aportan una o
+dos líneas y el cruce sobre una avenida se parte en dos, así que dos intersecciones de
+cuatro brazos pueden tener 4 y 6 cruces sin que ninguna esté mal. Por eso el reporte trae,
+por nodo, **cuántos brazos, cuántas líneas aporta cada uno en orden angular, cuántos nodos
+y cuántos cruces**, y las advertencias quedan para lo que no puede cerrar de ninguna
+manera. Es lo que permite auditar una esquina rara a ojo.
 
 Correrlo dos veces seguidas tiene que dar `created: 0` en cordones, veredas y cruces, y
 es lo que hace el test de integración con el extracto de prueba. Como no borra filas,
@@ -531,10 +582,12 @@ FROM pgr_connectedComponents(
   'SELECT id, source, target, cost FROM walkable_edges');
 ```
 
-En el extracto da **10 componentes**, y eso no es un error: **dentro del polígono del
-piloto es una sola**, con los 110 nodos que caen adentro. Las otras nueve son de 2 a 10
-nodos y están todas en el búfer: retazos que mueren en el borde del extracto y veredas que
-hoy sólo se conectarían por una calzada de Belgrano, que entra con #34.
+En el extracto da **2 componentes**, y eso es lo que hay que mirar: el grafo de la zona
+es uno solo, con las dos calzadas de cada avenida, sus medianas y la peatonal adentro. La
+segunda es un retazo chico del búfer que muere en el borde del extracto. Antes de que las
+calzadas de boulevard entraran a la grilla eran 10 componentes: nueve islas del búfer que
+sólo se hubieran conectado cruzando una avenida, y ese cruce es justamente lo que el
+importador no puede inventar.
 
 ### 5.2 La consulta de una ruta
 

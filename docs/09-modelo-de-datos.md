@@ -259,6 +259,13 @@ Dos consecuencias que se desprenden de esos dibujos y que conviene tener present
   una vereda": tiene que cortar la way en cada nodo, incluidos los que crea un cruce a
   mitad de cuadra. Si no, la topología queda desconectada en esos puntos.
 
+**Una avenida con boulevard.** La misma cuadra en una avenida de dos calzadas tiene
+**cuatro nodos, pero dos son de esquina y dos de mediana**: la vereda exterior de cada
+calzada da una esquina por lado, y la mediana —una sola franja caminable en el medio— da
+los otros dos. Cruzar la avenida cuesta **dos aristas de cruce y la mediana en el medio**,
+que es lo que se camina de verdad. El modelo de la mediana está en
+[11 §3.6](11-grafo-peatonal.md#36-el-boulevard).
+
 ### 4.5 Reporte y obstáculo
 
 Son dos tablas distintas porque son dos cosas distintas, y comparten dos columnas con

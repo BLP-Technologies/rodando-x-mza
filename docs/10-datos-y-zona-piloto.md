@@ -95,7 +95,7 @@ piloto tiene que poder hacerse, y uno que arranca en otra provincia no.
 Los dos márgenes no coinciden a propósito. Las intersecciones del búfer, como **Las Heras y
 Perú**, quedan afuera de la búsqueda: el extracto las trae para que el grafo no muera en el
 borde, pero una consulta que empieza ahí está a 124 m de la zona y se rechaza. Hoy el
-perímetro deja adentro 156 de los 373 cordones del grafo.
+perímetro deja adentro 199 de los 505 cordones del grafo.
 
 El polígono vive en la tabla `service_areas`
 ([09 §4.8](09-modelo-de-datos.md#48-las-áreas-de-servicio)) y no en una variable de
