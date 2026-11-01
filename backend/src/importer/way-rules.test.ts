@@ -38,6 +38,10 @@ describe('sidewalkOffset', () => {
     expect(sidewalkOffset(way({ highway: 'tertiary', lanes: '1;2' }))).toBe(7.5);
   });
 
+  it('una peatonal no tiene offset: se camina en todo el ancho (docs/11 §3.5)', () => {
+    expect(sidewalkOffset(way({ highway: 'pedestrian' }))).toBe(0);
+  });
+
   it('falla si la clase no tiene offset: esa vía no debía llegar acá', () => {
     expect(() => sidewalkOffset(way({ highway: 'service' }))).toThrow(/highway=service/);
   });

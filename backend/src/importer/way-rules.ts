@@ -23,9 +23,14 @@ const CURB_M = 1.5;
  *
  * `lanes` gana sobre la clase: `lanes × 3 m / 2 + 1,5 m`, que es media calzada más el
  * cordón. Sin `lanes` manda la tabla por clase. Una clase sin offset es un error del
- * llamador, no un dato que falte: `selectGridWays` sólo deja pasar las que están acá.
+ * llamador, no un dato que falte: `selectGridWays` sólo deja pasar las que están acá y
+ * la peatonal, que va sobre el eje.
  */
 export function sidewalkOffset(way: OsmWay): number {
+  // Una peatonal no tiene calzada: se camina en todo el ancho, así que su línea va
+  // sobre el eje y no hay dos lados que correr (docs/11 §3.5).
+  if (way.tags.get('highway') === 'pedestrian') return 0;
+
   const lanes = Number(way.tags.get('lanes') ?? '');
   if (Number.isInteger(lanes) && lanes > 0) {
     return (lanes * LANE_WIDTH_M) / 2 + CURB_M;

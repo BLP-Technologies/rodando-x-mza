@@ -42,9 +42,9 @@ motivo en §6. En el extracto de la zona piloto eso son 320 vías con `highway`,
 cuales entran 99: 49 `residential`, 21 `tertiary`, 19 `secondary`, 8 `primary`,
 1 `pedestrian` y 1 `living_street`.
 
-De esas 99, el importador de la grilla excluye antes las **15 calzadas de boulevard**
-(§3.6) y deja la peatonal para #34: deriva **83**. Los números de la corrida van al
-reporte (§4).
+De esas 99, el importador excluye antes las **15 calzadas de boulevard**, que siguen
+pendientes en #34 (§3.6), y deriva el resto, peatonal incluida (§3.5). Los números de
+la corrida van al reporte (§4).
 
 Una `way` **no es una calle ni una cuadra**: puede empezar y terminar en la mitad de
 una, y dos tramos consecutivos de la misma calle pueden ser dos `way` que comparten
@@ -197,15 +197,15 @@ termina:
   arista como cualquier otra y es lo que cierra el grafo: sin ella, la vereda del lado
   opuesto queda partida en dos y sin conexión.
 
-Las nueve T de la zona piloto se derivan enteras, con sus cuatro nodos y su vereda de
-la boca. Cuando una boca no se puede cerrar —el lado opuesto no da exactamente dos
+Las T de la zona piloto se derivan enteras, con sus cuatro nodos y su vereda de la
+boca. Cuando una boca no se puede cerrar —el lado opuesto no da exactamente dos
 nodos— la corrida lo reporta con el nodo y no inventa la vereda.
 
-**En la zona piloto la corrida encuentra nueve T.** El cuadro original de esta sección
-partía del mapa con el boulevard y la peatonal ya derivados: cuatro T, todas contra
-Plaza Independencia, que ocupa 2,2 manzanas y corta las calles que la cruzarían. Con
-las `way` de la grilla —sin las 15 calzadas de boulevard y sin la peatonal— la regla
-del grado 3 encuentra estas nueve:
+**En la zona piloto la corrida las encuentra en estos cruces.** El cuadro original de
+esta sección partía del mapa con el boulevard y la peatonal ya derivados: cuatro T,
+todas contra Plaza Independencia, que ocupa 2,2 manzanas y corta las calles que la
+cruzarían. Con las `way` de la grilla —sin las 15 calzadas de boulevard, que son #34—
+la regla del grado 3 encuentra estas:
 
 | T | El brazo que termina |
 | --- | --- |
@@ -219,13 +219,14 @@ del grado 3 encuentra estas nueve:
 Dos de las cuatro T del cuadro original —Mitre × Gerónimo Espejo y Mitre × Rivadavia—
 no aparecen acá porque el brazo que termina es Mitre, que es boulevard: sus calzadas
 están fuera de la grilla (§3.6) y esas T vuelven con ellas en #34. La cuarta, la
-peatonal, también es #34. Y quedan **tres nodos de tres brazos donde ninguno es el que
-termina** —una calle que se abre en Y, dos que se tocan en un punto—: ésos se reportan
-y no se derivan, porque no son ni un cruce ni una T.
+peatonal, ya entra: sus dos puntas son T cuyo brazo que termina es ella y se derivan
+como tales, sin vereda de la boca (§3.5). Y quedan **tres nodos de tres brazos donde
+ninguno es el que termina** —una calle que se abre en Y, dos que se tocan en un
+punto—: ésos se reportan y no se derivan, porque no son ni un cruce ni una T.
 
-Un brazo que termina y es un boulevard, o una peatonal, tiene más o menos líneas que
-dos: el lado opuesto recibe entonces más de dos nodos y más de una vereda de la boca.
-Eso se resuelve en #34, junto con esas vías.
+Un brazo que termina y es un boulevard tiene más líneas que dos: el lado opuesto
+recibe entonces más de dos nodos y más de una vereda de la boca. Eso se resuelve en
+#34, junto con esas vías.
 
 **Los tramos que desembocan en una intersección no soportada** quedan sin cortar en esa
 punta, así que no producen vereda de ese lado. En la zona piloto son los nueve brazos de
@@ -281,10 +282,26 @@ central**, sin offset: no hay calzada en el medio, así que derivar dos lados cr
 dos aristas paralelas donde se camina en todo el ancho, y un cruce falso entre ellas.
 
 La consecuencia en un cruce: en el eje de la peatonal hay **una línea** en lugar de
-dos, así que las veredas de la calle que la corta terminan en el **eje** de la
-peatonal y no en su borde. El cruce sobre esa calle mide el ancho de la calzada
-cruzada, como corresponde, y las dos esquinas quedan ~1,5 m más adentro de lo real.
-Se acepta: es más chico que el error del offset.
+dos, así que las veredas de la calle que la corta se **cortan en ese eje** y no en el
+borde de la peatonal. El cruce sobre esa calle mide el ancho de la calzada cruzada,
+como corresponde, y la arista peatonal queda ~1,5 m más adentro de lo real de cada
+lado. Se acepta: es más chico que el error del offset.
+
+**Cómo lo deriva el importador.** La peatonal es un tramo más, con offset 0: las dos
+líneas que corre salen encima del eje y el recorte por par de cordones deja una sola
+arista (§2.2). De ahí sale el resto sin reglas nuevas:
+
+- **En cada calle que la cruza** quedan los dos cordones de esa calle —uno por vereda,
+  sobre el eje de la peatonal— y **un cruce sobre la calzada** que los une. Cada uno de
+  esos dos cordones tiene las dos veredas de la calle quebradas en él más la peatonal y
+  el cruce: ahí se puede seguir por la vereda, entrar a la peatonal o cruzar.
+- **En una T** con la peatonal como brazo que termina, los dos nodos del lado opuesto
+  caen en el mismo punto, así que **no hay vereda de la boca**: la T aporta los dos
+  cordones de la calle que la recibe y su cruce, y el importador no tiende una arista
+  de largo cero.
+- **La cuenta de un cruce por brazo** (§4) no se pide en estos nodos: el brazo peatonal
+  no tiene calzada que cruzar y los dos brazos de la calle que la cruza comparten el par
+  de esquinas. Se pide que haya al menos uno, que es lo que mantiene el nodo conectado.
 
 ### 3.6 El boulevard
 

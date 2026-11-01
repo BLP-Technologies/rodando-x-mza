@@ -14,15 +14,15 @@ export type WaySelection = {
   ways: readonly OsmWay[];
   /** Vías descartadas por su clase, contadas por la clase que traen. */
   skippedByClass: ReadonlyMap<string, number>;
-  /** Peatonales sin `area=yes`: son calle, pero las deriva #34. */
+  /** Peatonales sin `area=yes`: entran como una sola línea sobre el eje (docs/11 §3.5). */
   pedestrian: number;
   /** `highway=pedestrian` con `area=yes`: son plazas, quedan fuera del grafo. */
   pedestrianAreas: number;
   /**
-   * Las vías que quedan fuera de la grilla pero podrían ser un brazo: las descartadas
-   * por su clase y las peatonales. El reporte las usa para explicar un brazo que falta
-   * por su clase en vez de por un error de corte (docs/11 §3.7). Las plazas no entran:
-   * una `area=yes` que toca un nodo no es un brazo.
+   * Las vías que quedan fuera del grafo pero podrían ser un brazo: las descartadas por
+   * su clase. El reporte las usa para explicar un brazo que falta por su clase en vez
+   * de por un error de corte (docs/11 §3.7). Las plazas no entran: una `area=yes` que
+   * toca un nodo no es un brazo, y la peatonal tampoco: ya está adentro.
    */
   outsideWays: readonly OsmWay[];
 };
@@ -30,8 +30,9 @@ export type WaySelection = {
 /**
  * Aplica el filtro por clase de docs/11 §2.1.
  *
- * Las peatonales y las plazas se cuentan aparte y se dejan afuera: su derivación es
- * #34, y acá se reportan para que el número no desaparezca sin explicación.
+ * La peatonal sin `area=yes` es calle y entra: una sola línea sobre su eje. Lo que se
+ * cuenta aparte son las plazas, que quedan afuera, y las peatonales que entraron, para
+ * que el número se vea en el reporte de la corrida.
  */
 export function selectGridWays(extract: OsmExtract): WaySelection {
   const ways: OsmWay[] = [];
@@ -48,7 +49,7 @@ export function selectGridWays(extract: OsmExtract): WaySelection {
         pedestrianAreas += 1;
       } else {
         pedestrian += 1;
-        outsideWays.push(way);
+        ways.push(way);
       }
       continue;
     }

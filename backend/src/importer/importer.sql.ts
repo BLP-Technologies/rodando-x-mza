@@ -47,6 +47,8 @@ export type JunctionReport = {
   /** Esquinas más nodos de la boca: cuatro siempre (docs/11 §3.2). */
   corners: number;
   crossings: number;
+  /** Brazos que aportan una sola línea (las peatonales): no llevan cruce sobre sí. */
+  singleLineArms: number;
 };
 
 export type GraphCounts = {
@@ -374,6 +376,11 @@ async function stageExtract(trx: Transaction<DB>, input: GraphInput): Promise<vo
  * `MultiLineString` (la línea se cruza consigo misma) se recorta a su pieza más larga
  * y un `NULL` (el offset no entra en la curva) descarta la línea.
  *
+ * Un tramo peatonal llega con offset 0 —no hay calzada, se camina en todo el ancho— y
+ * `ST_OffsetCurve` con distancia 0 devuelve la línea tal cual: las dos líneas del
+ * tramo coinciden sobre el eje, que es lo que §3.5 pide. Que no queden dos aristas
+ * encima lo resuelve el recorte por par de cordones de `deriveSidewalkRows`.
+ *
  * Devuelve cuántas líneas hubo que recortar por haber vuelto `MultiLineString`.
  */
 async function deriveLines(trx: Transaction<DB>): Promise<number> {
@@ -548,8 +555,11 @@ async function deriveBocaPieces(trx: Transaction<DB>): Promise<void> {
     WHERE along < 0
     GROUP BY junction_id, stem_tramo_id
     -- Sólo cuando la regla de las esquinas dio exactamente dos del lado opuesto: con
-    -- otra cantidad la geometría no es la T que describe docs/11 y no se inventa.
-    HAVING count(*) = 2
+    -- otra cantidad la geometría no es la T que describe docs/11 y no se inventa. Y los
+    -- dos tienen que ser puntos distintos: si el brazo que termina es una peatonal, que
+    -- aporta una sola línea, sus dos nodos caen en el mismo punto del eje de la calle
+    -- que pasa y no hay vereda que tender entre ellos (docs/11 §3.5).
+    HAVING count(*) = 2 AND count(DISTINCT (x, y)) = 2
   `.execute(trx);
 }
 
@@ -793,12 +803,18 @@ async function countBocaSidewalks(trx: Transaction<DB>): Promise<number> {
  * opuesto. Cuando no, la geometría no es la T de docs/11 §3.2 —por ejemplo, la calle que
  * pasa cambia de ancho en el nodo y el lado opuesto tiene cuatro— y se reporta en vez de
  * inventar un cierre que el modelo no define.
+ *
+ * La T cuyo brazo que termina es una peatonal no entra: ese brazo aporta una sola línea,
+ * así que los dos nodos del lado opuesto caen en el mismo punto y no hay vereda de la
+ * boca que tender (docs/11 §3.5).
  */
 async function findTeesWithoutBoca(trx: Transaction<DB>): Promise<number[]> {
   const result = await sql<{ osm_node_id: string }>`
     SELECT j.osm_node_id
     FROM _import_junctions j
+    JOIN _import_tramos stem ON stem.tramo_id = j.stem_tramo_id
     WHERE j.kind = 'tee'
+      AND stem.offset_m <> 0
       AND NOT EXISTS (
         SELECT 1 FROM _import_boca_pieces boca WHERE boca.junction_id = j.junction_id
       )
@@ -871,6 +887,10 @@ async function upsertCrossings(
  *
  * Las dos cuentas que tienen que cerrar son cuatro nodos por intersección —dos esquinas
  * y dos de la boca, cuando es una T— y un cruce por brazo (docs/11 §3.2 y §3.7).
+ *
+ * Se cuentan aparte los brazos de una sola línea —las peatonales—: el brazo peatonal no
+ * tiene calzada que cruzar y los dos brazos de la calle que la cruza comparten el par de
+ * esquinas, así que ahí la cuenta fuerte es otra (docs/11 §3.5).
  */
 async function reportJunctions(trx: Transaction<DB>): Promise<JunctionReport[]> {
   const result = await sql<{
@@ -879,6 +899,7 @@ async function reportJunctions(trx: Transaction<DB>): Promise<JunctionReport[]> 
     arms: string;
     corners: string;
     crossings: string;
+    single_line_arms: string;
   }>`
     SELECT junction.osm_node_id, junction.kind,
            (SELECT count(*) FROM _import_junction_arms arm
@@ -886,7 +907,12 @@ async function reportJunctions(trx: Transaction<DB>): Promise<JunctionReport[]> 
            (SELECT count(*) FROM _import_corner_points point
              WHERE point.junction_id = junction.junction_id) AS corners,
            (SELECT count(*) FROM _import_crossing_rows crossing
-             WHERE crossing.junction_id = junction.junction_id) AS crossings
+             WHERE crossing.junction_id = junction.junction_id) AS crossings,
+           (SELECT count(*)
+              FROM _import_junction_arms arm
+              JOIN _import_tramos tramo ON tramo.tramo_id = arm.tramo_id
+             WHERE arm.junction_id = junction.junction_id
+               AND tramo.offset_m = 0) AS single_line_arms
     FROM _import_junctions junction
     ORDER BY junction.osm_node_id
   `.execute(trx);
@@ -897,6 +923,7 @@ async function reportJunctions(trx: Transaction<DB>): Promise<JunctionReport[]> 
     arms: Number(row.arms),
     corners: Number(row.corners),
     crossings: Number(row.crossings),
+    singleLineArms: Number(row.single_line_arms),
   }));
 }
 
