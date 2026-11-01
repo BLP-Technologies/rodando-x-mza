@@ -1,6 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Route, CreateRouteInput, UpdateRouteInput, RouteSchema } from '@/types/routes';
+import { USE_MOCK, apiFetch } from '@/services/apiClient';
 import initialRoutesData from '@/data/mockRoutes.json';
+
 
 const ROUTES_STORAGE_KEY = '@rodando_mza_routes_v1';
 
@@ -8,8 +10,15 @@ const simulateNetworkDelay = (ms = 250) =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
 export const routesService = {
-  // GET /api/routes
+  
+  // GET /api/routes (SAVED_ROUTES)
   async getAll(): Promise<Route[]> {
+
+    if (!USE_MOCK) {
+      const res = await apiFetch('/api/saved-routes');
+      return res.json();
+    }  
+
     await simulateNetworkDelay();
     try {
       const stored = await AsyncStorage.getItem(ROUTES_STORAGE_KEY);
@@ -27,6 +36,11 @@ export const routesService = {
 
   // GET /api/routes/:id
   async getById(id: string): Promise<Route | null> {
+
+    if (!USE_MOCK) {
+      const res = await apiFetch(`/api/saved-routes/${id}`);
+      return res.ok ? res.json() : null;
+    }
     await simulateNetworkDelay();
     const routes = await this.getAll();
     return routes.find((r) => r.id === id) || null;
@@ -34,6 +48,32 @@ export const routesService = {
 
   // POST /api/routes
   async create(routeInput: CreateRouteInput): Promise<Route> {
+    if (!USE_MOCK) {
+      // Formato compatible con SAVED_ROUTES en PostgreSQL / PostGIS
+      const payload = {
+        name: routeInput.name,
+        start_point: {
+          latitude: routeInput.origin.latitude,
+          longitude: routeInput.origin.longitude,
+          name: routeInput.origin.name,
+        },
+        end_point: {
+          latitude: routeInput.destination.latitude,
+          longitude: routeInput.destination.longitude,
+          name: routeInput.destination.name,
+        },
+        distanceMeters: routeInput.distanceMeters,
+        durationMinutes: routeInput.durationMinutes,
+        coordinates: routeInput.coordinates,
+      };
+
+      const res = await apiFetch('/api/saved-routes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      return res.json();
+    }
     await simulateNetworkDelay();
     const routes = await this.getAll();
 
@@ -54,6 +94,15 @@ export const routesService = {
 
   // PUT /api/routes/:id
   async update(id: string, updateData: UpdateRouteInput): Promise<Route> {
+    
+    if (!USE_MOCK) {
+      const res = await apiFetch(`/api/saved-routes/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updateData),
+      });
+      return res.json();
+    }
     await simulateNetworkDelay();
     const routes = await this.getAll();
     const index = routes.findIndex((r) => r.id === id);
@@ -77,6 +126,11 @@ export const routesService = {
 
   // DELETE /api/routes/:id
   async delete(id: string): Promise<void> {
+
+    if (!USE_MOCK) {
+      await apiFetch(`/api/saved-routes/${id}`, { method: 'DELETE' });
+      return;
+    }
     await simulateNetworkDelay();
     const routes = await this.getAll();
     const filtered = routes.filter((r) => r.id !== id);

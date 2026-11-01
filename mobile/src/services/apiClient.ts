@@ -16,7 +16,7 @@ const BASE_URL = Platform.select({
 
 export const apiFetch = async (endpoint: string, options: RequestInit = {}) => {
   if (USE_MOCK) {
-    // Si estás usando json-server local:
+    // Con json-server local:
     return fetch(`${BASE_URL}${endpoint}`, options);
   }
 

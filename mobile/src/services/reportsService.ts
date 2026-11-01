@@ -5,6 +5,7 @@ import {
   ObstacleType,
   ObstacleSeverity,
 } from '@/types/reports';
+import { USE_MOCK, apiFetch } from '@/services/apiClient';
 
 const OBSTACLES_STORAGE_KEY = '@rodando_mza:obstacles_reports';
 
@@ -25,9 +26,15 @@ export const resolveDefaultSeverity = (type: ObstacleType): ObstacleSeverity => 
   }
 };
 
-//getAll
+
 export const reportsService = {
+  
+  // GET /api/reports
   async getAll(): Promise<ObstacleReport[]> {
+    if (!USE_MOCK) {
+      const res = await apiFetch('/api/reports');
+      return res.json();
+    }
     try {
       const data = await AsyncStorage.getItem(OBSTACLES_STORAGE_KEY);
       if (!data) return [];
@@ -38,21 +45,47 @@ export const reportsService = {
     }
   },
 
-  //create
+  //POST /api/reports
   async create(input: CreateObstacleInput): Promise<ObstacleReport> {
+    const severity = input.severity || resolveDefaultSeverity(input.type);
+
+    if (!USE_MOCK) {
+      // Estructura que espera la tabla REPORTS en el backend
+      const payload = {
+        type_code: input.type,
+        severity,
+        description: input.description,
+        address: input.address,
+        latitude: input.latitude,
+        longitude: input.longitude,
+        image_url: input.photoUri,
+        sidewalk_id: input.sidewalk_id ?? null,
+      };
+
+      const res = await apiFetch('/api/reports', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      return res.json();
+    }
+    
+    //Modo local / Mock con AsyncStorage
     try {
       const existing = await this.getAll();
       const now = new Date().toISOString();
 
       const newObstacle: ObstacleReport = {
         id: Date.now(),
+        user_id: null,
         sidewalk_id: input.sidewalk_id ?? null,
         geom: {
           type: 'Point',
           coordinates: [input.longitude, input.latitude],
         },
         type: input.type,
-        severity: input.severity || resolveDefaultSeverity(input.type),
+        severity,
+        status: 'PENDING',
         is_resolved: false,
         created_at: now,
         updated_at: now,
@@ -60,6 +93,7 @@ export const reportsService = {
         address: input.address,
         description: input.description,
         photoUri: input.photoUri,
+        image_url: input.photoUri,
       };
 
       const updated = [newObstacle, ...existing];
@@ -70,8 +104,14 @@ export const reportsService = {
       throw error;
     }
   },
-//delete
+
+  // DELETE /api/reports/:id
   async delete(id: string | number): Promise<void> {
+
+    if (!USE_MOCK) {
+      await apiFetch(`/api/reports/${id}`, { method: 'DELETE' });
+      return;
+    }
     try {
       const existing = await this.getAll();
       const updated = existing.filter((item) => item.id !== id);
@@ -82,7 +122,7 @@ export const reportsService = {
     }
   },
 
-  //clearAll
+  //clearAll: Reset / Limpieza local
   async clearAll(): Promise<void> {
     try {
       await AsyncStorage.removeItem(OBSTACLES_STORAGE_KEY);

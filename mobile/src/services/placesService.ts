@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Place } from '@/types/places';
+import { Place, CreatePlaceInput, UpdatePlaceInput } from '@/types/places';
+import { USE_MOCK, apiFetch } from '@/services/apiClient';
 import initialPlacesData from '@/data/mockPlaces.json';
 
 const STORAGE_KEY = '@rodando_mza_places_v1';
@@ -11,6 +12,11 @@ const simulateNetworkDelay = (ms = 250) =>
 export const placesService = {
   // GET /api/places
   async getAll(): Promise<Place[]> {
+    if (!USE_MOCK) {
+      const res = await apiFetch('/api/places');
+      return res.json();
+    }
+
     await simulateNetworkDelay();
     try {
       const stored = await AsyncStorage.getItem(STORAGE_KEY);
@@ -29,6 +35,11 @@ export const placesService = {
 
   // GET /api/places/:id
   async getById(id: string): Promise<Place | null> {
+
+    if (!USE_MOCK) {
+      const res = await apiFetch(`/api/places/${id}`);
+      return res.ok ? res.json() : null;
+    }
     await simulateNetworkDelay();
     const places = await this.getAll();
     return places.find((p) => p.id === id) || null;
@@ -36,6 +47,22 @@ export const placesService = {
 
   // POST /api/places
   async create(placeData: Omit<Place, 'id'>): Promise<Place> {
+    
+    if (!USE_MOCK) {
+      const res = await apiFetch('/api/places', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: placeData.name,
+          description: placeData.address,
+          latitude: placeData.latitude,
+          longitude: placeData.longitude,
+          category: placeData.category,
+        }),
+      });
+      return res.json();
+    }
+    
     await simulateNetworkDelay();
     const places = await this.getAll();
     
@@ -51,6 +78,15 @@ export const placesService = {
 
   // PUT /api/places/:id
   async update(id: string, placeData: Partial<Place>): Promise<Place> {
+    if (!USE_MOCK) {
+      const res = await apiFetch(`/api/places/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(placeData),
+      });
+      return res.json();
+    }
+    
     await simulateNetworkDelay();
     const places = await this.getAll();
     const index = places.findIndex((p) => p.id === id);
@@ -71,6 +107,12 @@ export const placesService = {
 
   // DELETE /api/places/:id
   async delete(id: string): Promise<void> {
+    
+    if (!USE_MOCK) {
+      await apiFetch(`/api/places/${id}`, { method: 'DELETE' });
+      return;
+    }
+    
     await simulateNetworkDelay();
     const places = await this.getAll();
     const filtered = places.filter((p) => p.id !== id);

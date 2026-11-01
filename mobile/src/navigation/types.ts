@@ -1,6 +1,8 @@
 import type { NavigatorScreenParams, CompositeNavigationProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import { TutorialItem } from '@/components/tutorials/TutorialCard';
+
 
 
 
@@ -12,15 +14,6 @@ export type RoutePointParam = {
   longitude: number;
 };
 
-//2. Para la pantalla Tutoriales
-export type TutorialParams = {
-  id: string;
-  title: string;
-  category: string;
-  duration: string;
-  description: string;
-  youtubeId?: string;
-};
 
 //3. Para pantalla Detalle recorrido
 export type RouteStepStatus =
@@ -74,7 +67,9 @@ export type ReportStackParamList = {
 // 3. Tutoriales
 export type TutorialsStackParamList = {
   TutorialsList: undefined;
-  TutorialDetail: { tutorial: TutorialParams };
+  TutorialDetail: {
+    tutorial: TutorialItem;
+  };
 };
 
 //_______________________________________________________________________
