@@ -13,7 +13,7 @@
 
 Este documento responde:
 
-- **Qué área** es la zona piloto y por qué ese recorte (§2).
+- **Qué área** es la zona piloto y por qué ese recorte, y hasta dónde se acepta una consulta (§2).
 - **De dónde y en qué formato** salen los datos crudos (§3).
 - **Qué se versiona** y qué no (§4).
 - **Qué contiene** el extracto, medido (§5).
@@ -71,6 +71,36 @@ avenida con boulevard (Bartolomé Mitre) y una calle peatonal (Sarmiento).
 **Los nombres, como están en OSM.** `Perú` y `9 de Julio` figuran sin "Avenida", y `9 de
 Julio` está clasificada como `residential`. Cualquier filtro por "Avenida Perú" no
 encuentra nada.
+
+### 2.1 La red de seguridad del piloto
+
+La zona que se acaba de definir es el recorte; **la red de seguridad es el perímetro de
+búsqueda**: hasta dónde se aceptan las coordenadas de una consulta de ruteo. Son dos cosas
+distintas y conviene no confundirlas.
+
+Es la zona piloto corrida **50 m hacia afuera, con las esquinas en ángulo recto**
+(`join=mitre`): los lados quedan a 50 m y las esquinas se estiran ~71 m en diagonal. La
+esquina recta mantiene la forma de la zona —cuatro lados y cuatro vértices— en lugar de
+cambiar los vértices por arcos, y deja llegar un poco más lejos por las diagonales
+(688.617 m² contra 686.419 m² de la versión redondeada).
+
+**Por qué existe.** El extracto ([§3](#3-fuente-y-formato)) usa un búfer de 130 m sobre las
+cuatro calles del perímetro, y eso es para otra cosa: el búfer trae vías completas para que
+las veredas del lado de afuera existan y el grafo no quede cortado en el borde. La red de
+seguridad responde otra pregunta: **qué lejos del piloto se acepta un pedido**. Sin ella, el
+ruteo pega cualquier coordenada del mundo al cordón más cercano y devuelve un camino que
+empieza en el borde del grafo, como si fuera válido. Un pedido que arranca en un borde del
+piloto tiene que poder hacerse, y uno que arranca en otra provincia no.
+
+Los dos márgenes no coinciden a propósito. Las intersecciones del búfer, como **Las Heras y
+Perú**, quedan afuera de la búsqueda: el extracto las trae para que el grafo no muera en el
+borde, pero una consulta que empieza ahí está a 124 m de la zona y se rechaza. Hoy el
+perímetro deja adentro 156 de los 373 cordones del grafo.
+
+El polígono vive en la tabla `service_areas`
+([09 §4.8](09-modelo-de-datos.md#48-las-áreas-de-servicio)) y no en una variable de
+configuración, porque cuando el piloto crezca el área no va a ser un rectángulo corrido:
+va a ser la unión de varias zonas, con forma irregular, y agregar una es un `INSERT`.
 
 ## 3. Fuente y formato
 

@@ -9,7 +9,11 @@ erDiagram
     %% Lo que el diagrama no puede mostrar, y conviene tener a mano:
     %%   - Unicos: obstacle_types.code y tutorial_categories.code; users.email,
     %%     unico por lower(email) y solo entre los no borrados; user_tutorials
-    %%     (user_id, tutorial_id), para no guardar dos veces el mismo tutorial.
+    %%     (user_id, tutorial_id), para no guardar dos veces el mismo tutorial; y
+    %%     service_areas.name, que identifica el area en el codigo.
+    %%   - Indices GiST: las geometrias puntuales de lugares, rutas guardadas,
+    %%     obstaculos y reportes, y el poligono de service_areas, que se consulta
+    %%     con ST_Covers en cada pedido de ruta.
     %%   - CHECK: en veredas y cruces start_node_id <> end_node_id (sin bucles);
     %%     en obstaculos num_nonnulls(sidewalk_id, kerb_node_id, crossing_id) <= 1.
     %%   - Defaults con significado: is_active de los catalogos en true; is_moderator,
@@ -45,6 +49,17 @@ erDiagram
         varchar(100) name "ej: Ir al trabajo"
         geometry(Point,4326) start_point "Punto A (Origen)"
         geometry(Point,4326) end_point "Punto B (Destino)"
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    %% Perimetro de busqueda de una consulta de ruteo: no tiene FK, es dato de
+    %% operacion (docs/09 §4.8) %%
+    SERVICE_AREAS {
+        int id PK
+        varchar(100) name "Unico; identifica el area en el codigo"
+        geometry(Polygon,4326) geom "Perimetro de busqueda"
+        boolean is_active "Baja logica de la fila"
         timestamptz created_at
         timestamptz updated_at
     }

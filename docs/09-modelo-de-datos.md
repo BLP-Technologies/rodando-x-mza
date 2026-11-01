@@ -18,6 +18,7 @@ Este documento responde:
 - **Qué** forma tiene cada campo cerrado del modelo, y qué relación hay entre
   reportes y obstáculos (§4).
 - **Dónde** vive el costo de ruteo de las aristas y con qué se combina (§4.7).
+- **Cuál** es el perímetro dentro del que se aceptan las puntas de una consulta (§4.8).
 - **Cómo** se administra un enum: orden, agregar, renombrar y quitar valores (§5).
 - **Qué** forma tiene un catálogo y cómo se da de baja una fila (§6).
 - **Cómo** se escribe una migración: formato, nombres, marcas de tiempo y
@@ -496,6 +497,56 @@ sorpresiva.
   [11 §5](11-grafo-peatonal.md).
 - **El semáforo no entra.** `crossings.has_traffic_light` se elimina (§4.3): el costo de un
   cruce no depende por ahora de nada más que su accesibilidad y sus obstáculos.
+
+### 4.8 Las áreas de servicio
+
+`service_areas` guarda **los perímetros dentro de los que se aceptan las puntas de una
+consulta de ruteo**. Resuelve una red de seguridad que antes no existía: el ruteo pegaba
+cualquier coordenada del mundo al cordón más cercano, así que un punto en otra provincia
+devolvía un camino que empezaba en el borde del grafo y parecía válido.
+
+| Columna | Tipo | Para qué |
+| --- | --- | --- |
+| `id` | `int` PK | Nunca se expone: las filas se identifican por `name` |
+| `name` | `varchar(100)` único | Identifica el área en el código y en la operación |
+| `geom` | `geometry(Polygon, 4326)` | El perímetro de búsqueda |
+| `is_active` | `boolean` | Baja lógica de la fila |
+| `created_at`, `updated_at` | `timestamptz` | Marcas de tiempo |
+
+El único de `name` existe para que el área nombrada en el código sea una sola fila, y el
+índice GiST sobre `geom` porque la validación es una consulta espacial por cada punta de
+cada pedido de ruta.
+
+**Es una tabla y no una columna de configuración.** La geometría de un polígono es un dato,
+no un parámetro: no tiene forma de `varchar` ni de `numeric`, y guardarla en una variable de
+entorno obliga a que el proceso la parsee y a que no haya índice espacial que usar. Una
+variable de entorno tampoco tiene historia: no se ve qué perímetro estaba activo ayer ni
+queda registrado quién lo cambió.
+
+**Una fila por área, y no una sola fila.** Agregar una zona —el resto de la Ciudad de
+Mendoza, un segundo piloto— es un `INSERT`, no una migración. Con una columna en una tabla
+de configuración habría que cambiar el esquema para pasar de una zona a varias, y con un
+`varchar` habría que inventar un formato para dos geometrías.
+
+**`is_active` permite reemplazar un polígono sin cortar el servicio.** Un perímetro que crece
+se reemplaza en una transacción: se desactiva el viejo y se activa el nuevo, y no existe un
+instante en que la aplicación no sepa contra qué validar. `deleted_at` no serviría: no hay
+baja lógica que conservar, la fila vieja se descarta.
+
+**La geometría se deriva, no se dibuja a mano.** La fila que existe hoy es `Zona piloto Fase
+1`, el polígono de [10](10-datos-y-zona-piloto.md) corrido **50 m hacia afuera con las
+esquinas en ángulo recto** (`ST_Buffer(...::geography, 50, 'join=mitre')`). El método y el
+WKT quedan en la migración `1793503685017_create-service-areas.sql`, que es donde se puede
+reproducir.
+
+**No está en el camino del ruteo.** El área limita **las puntas** de una consulta, no el
+recorrido: el camino sigue siendo todo el grafo, y por eso no hay ninguna arista que se
+recorte por caer afuera (ver [11 §5](11-grafo-peatonal.md)). El endpoint que la usa y el
+código de error con el que rechaza no son parte de este esquema.
+
+**Alternativas descartadas.** Un enum no aplica: no es un vocabulario cerrado y tiene
+atributos propios (la geometría, el nombre, el estado). Un `CHECK` tampoco: el perímetro
+cambia con el piloto, y un `CHECK` con coordenadas obliga a una migración cada vez.
 
 ## 5. Administrar un enum
 
