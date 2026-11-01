@@ -180,7 +180,8 @@ Se usa **Kysely + migraciones SQL** (`node-pg-migrate`), no un ORM como Prisma.
 
 Casi toda entidad del modelo tiene una columna `geometry` (ver
 [`01-DER.mmd`](diagrams/01-DER.mmd)): `user_places`, `saved_routes`, `kerb_nodes`,
-`sidewalks`, `crossings`, `obstacles`, `reports`. Prisma no soporta PostGIS de forma
+`sidewalks`, `crossings`, `obstacles`, `reports`, `service_areas`. Prisma no soporta PostGIS
+de forma
 nativa y esas columnas quedan como `Unsupported("geometry")`:
 
 - Las columnas `Unsupported` **no aparecen en el cliente generado**, así que no se

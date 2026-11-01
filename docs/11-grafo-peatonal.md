@@ -513,6 +513,13 @@ las tablas no cambian entre corridas. Una vereda nueva aparece sola en la vista,
 obstáculo que apunta a una fila que sigue existiendo sigue apuntando. La única condición
 es no renumerar, y nada en el esquema renumera: las claves son `IDENTITY` que sólo crecen.
 
+**Las puntas de una consulta no se validan contra el grafo.** Que haya un cordón cerca no
+significa que el pedido tenga sentido: la validación es contra `service_areas`
+([09 §4.8](09-modelo-de-datos.md#48-las-áreas-de-servicio)), que guarda el perímetro donde
+se aceptan, y el punto se valida **tal como se pidió**, no el nodo al que se pega. Esa
+validación no recorta el camino, sólo los extremos. El endpoint que la aplica y el código
+`OUTSIDE_SERVICE_AREA` son de C003, no de este capítulo.
+
 ### 5.1 La validación
 
 La prueba de que el grafo quedó armado es de componentes conectados, no de aristas: una
@@ -556,6 +563,12 @@ Dos detalles de esa consulta:
   trae `edge = -1`: con un `JOIN` común esa fila se cae y el camino parece terminar una
   arista antes. Con `LEFT JOIN` queda, y `ST_Collect` ignora el `NULL`.
 - **`directed := false`.** Para el peatón toda calle se camina en los dos sentidos.
+
+**El ejemplo arranca fuera de la red de seguridad.** El punto de partida es Las Heras y 25
+de Mayo, que está en el búfer del extracto pero afuera del perímetro donde se aceptan las
+consultas ([10 §2.1](10-datos-y-zona-piloto.md#21-la-red-de-seguridad-del-piloto)). Como
+medida del grafo la consulta sirve; como pedido de la API ese extremo se rechazaría, y es
+el caso que conviene tener a mano para probarlo.
 
 En la zona piloto esa consulta devuelve **21 aristas, 10 cruces y 1.570 m** de recorrido
 por **3.140 m-equivalentes**: exactamente el doble, porque todas las veredas están sin

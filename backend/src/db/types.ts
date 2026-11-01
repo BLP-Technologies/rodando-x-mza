@@ -87,6 +87,15 @@ export interface SavedRoutes {
   user_id: number;
 }
 
+export interface ServiceAreas {
+  created_at: Generated<Timestamp>;
+  geom: string;
+  id: Generated<number>;
+  is_active: Generated<boolean>;
+  name: string;
+  updated_at: Generated<Timestamp>;
+}
+
 export interface Sidewalks {
   accessibility_level: AccessibilityLevel | null;
   created_at: Generated<Timestamp>;
@@ -167,6 +176,7 @@ export interface DB {
   obstacles: Obstacles;
   reports: Reports;
   saved_routes: SavedRoutes;
+  service_areas: ServiceAreas;
   sidewalks: Sidewalks;
   tutorial_categories: TutorialCategories;
   tutorials: Tutorials;
