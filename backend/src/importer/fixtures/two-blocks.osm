@@ -11,8 +11,9 @@
     - una T de tres brazos (Calle Corta termina en Calle Uno),
     - una calle con `lanes` (Avenida Ancha, primary con lanes=4),
     - una calle sin `name` (la de lat -32.8890),
+    - una plaza (`highway=pedestrian` con `area=yes`), que queda afuera. La peatonal
+      que sí entra, y por lo tanto cruza calles, está en `pedestrian-street.osm`,
     - un `service` y un `footway` sueltos, que no entran,
-    - dos peatonales, una con `area=yes` (plaza) y otra sin,
     - dos calzadas opuestas a 15 m con el mismo nombre, que son un boulevard: van
 dibujadas en el mismo sentido y `oneway=-1` invierte una, que es como OSM lo escribe.
 
@@ -56,8 +57,6 @@ dibujadas en el mismo sentido y `oneway=-1` invierte una, que es como OSM lo esc
   <node id="19" lat="-32.8878" lon="-68.8472"/>
   <node id="20" lat="-32.8893" lon="-68.8470"/>
   <node id="21" lat="-32.8893" lon="-68.8472"/>
-  <node id="22" lat="-32.8873" lon="-68.8447"/>
-  <node id="23" lat="-32.8881" lon="-68.8447"/>
   <node id="24" lat="-32.8873" lon="-68.8443"/>
   <node id="25" lat="-32.8881" lon="-68.8443"/>
 
@@ -146,12 +145,6 @@ dibujadas en el mismo sentido y `oneway=-1` invierte una, que es como OSM lo esc
     <nd ref="20"/>
     <nd ref="21"/>
     <tag k="highway" v="footway"/>
-  </way>
-  <way id="112">
-    <nd ref="22"/>
-    <nd ref="23"/>
-    <tag k="highway" v="pedestrian"/>
-    <tag k="name" v="Peatonal Abierta"/>
   </way>
   <way id="113">
     <nd ref="24"/>

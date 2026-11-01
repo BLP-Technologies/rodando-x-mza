@@ -7,6 +7,9 @@ import { importOsm } from './importer.run.js';
 import { readOsm, type OsmExtract } from './osm.reader.js';
 
 const FIXTURE = fileURLToPath(new URL('./fixtures/two-blocks.osm', import.meta.url));
+const PEDESTRIAN_FIXTURE = fileURLToPath(
+  new URL('./fixtures/pedestrian-street.osm', import.meta.url),
+);
 
 /**
  * Señal para que la transacción de la prueba se deshaga: Kysely no tiene un "rollback"
@@ -221,6 +224,92 @@ describe.skipIf(!process.env.DATABASE_URL)('importOsm contra la base', () => {
     expect(outcome.stranded).toBe('0');
     // El fixture se deriva entero: toda intersección con sus cuatro nodos y un cruce por
     // brazo, sin esquinas de más ni calles afuera (docs/11 §3.2 y §3.7).
+    expect(outcome.report.warnings).toEqual([]);
+  });
+
+  it('deriva la peatonal como una línea sobre el eje y un cruce por calle que cruza', async () => {
+    const extract = await readOsm(PEDESTRIAN_FIXTURE);
+
+    const outcome = await inRolledBackTransaction(async (trx) => {
+      const report = await importOsm(PEDESTRIAN_FIXTURE, trx);
+
+      // Las esquinas del cruce del medio: dos, una por vereda de Calle Media, y cada una
+      // con cuatro aristas —las dos veredas de la calle, la peatonal y el cruce sobre la
+      // calzada—, que es lo que deja seguir por la vereda, tomar la peatonal o cruzar.
+      const middle = await sql<{ kerbs: string; degrees: string }>`
+        WITH cross_kerb AS (
+          SELECT id FROM kerb_nodes
+          WHERE ST_DWithin(ST_Transform(geom, 32719),
+                           ST_Transform(ST_SetSRID(ST_MakePoint(-68.8460, -32.8880),
+                                                   4326), 32719),
+                           10)
+        ),
+        edge AS (
+          SELECT start_node_id AS a, end_node_id AS b FROM sidewalks
+          UNION ALL
+          SELECT start_node_id, end_node_id FROM crossings
+        ),
+        degrees AS (
+          SELECT kerb.id, count(edge.b) AS degree
+          FROM cross_kerb kerb
+          LEFT JOIN edge ON kerb.id IN (edge.a, edge.b)
+          GROUP BY kerb.id
+        )
+        SELECT count(*) AS kerbs,
+               min(degree) || '-' || max(degree) AS degrees
+        FROM degrees
+      `.execute(trx);
+
+      // Los tres cruces del fixture miden la calzada de una `residential`: 13 m. Se acota
+      // a los cordones del fixture porque la base de desarrollo tiene el grafo de la zona
+      // piloto sobre el mismo recuadro.
+      const crossings = await sql<{ count: string; min: string; max: string }>`
+        WITH fixture_node AS (
+          SELECT start_node_id AS id FROM sidewalks WHERE osm_way_id BETWEEN 201 AND 204
+          UNION
+          SELECT end_node_id FROM sidewalks WHERE osm_way_id BETWEEN 201 AND 204
+        )
+        SELECT count(*) AS count,
+               min(ST_Length(ST_Transform(c.geom, 32719))) AS min,
+               max(ST_Length(ST_Transform(c.geom, 32719))) AS max
+        FROM crossings c
+        WHERE c.start_node_id IN (SELECT id FROM fixture_node)
+          AND c.end_node_id IN (SELECT id FROM fixture_node)
+      `.execute(trx);
+
+      // Ninguna vereda de largo cero: la boca de una T con la peatonal como brazo que
+      // termina no existe, y no puede quedar como arista que une un nodo consigo mismo.
+      const shortest = await sql<{ length: string }>`
+        SELECT min(ST_Length(ST_Transform(geom, 32719))) AS length
+        FROM sidewalks
+        WHERE osm_way_id BETWEEN 201 AND 204
+      `.execute(trx);
+
+      return {
+        report,
+        kerbs: Number(middle.rows[0]?.kerbs),
+        degrees: middle.rows[0]?.degrees,
+        crossings: Number(crossings.rows[0]?.count),
+        crossingMin: Number(crossings.rows[0]?.min),
+        crossingMax: Number(crossings.rows[0]?.max),
+        shortest: Number(shortest.rows[0]?.length),
+        axis: await offsetsFromAxis(trx, axisOf(extract, 204), 204),
+      };
+    });
+
+    // Una sola línea por tramo peatonal, sobre el eje, y en cada intersección los dos
+    // cordones de la calle que la cruza unidos por un cruce (docs/11 §3.5).
+    expect(outcome.report.junctions).toEqual({ cross: 1, tee: 2, unsupported: 0 });
+    expect(outcome.report.pedestrianWays).toBe(1);
+    expect(outcome.report.sidewalks.boca).toBe(0);
+    expect(outcome.kerbs).toBe(2);
+    expect(outcome.degrees).toBe('4-4');
+    expect(outcome.crossings).toBe(3);
+    expect(outcome.crossingMin).toBeCloseTo(13, 0);
+    expect(outcome.crossingMax).toBeCloseTo(13, 0);
+    expect(outcome.shortest).toBeGreaterThan(1);
+    expect(outcome.axis.min).toBeCloseTo(0, 1);
+    expect(outcome.axis.max).toBeCloseTo(0, 1);
     expect(outcome.report.warnings).toEqual([]);
   });
 

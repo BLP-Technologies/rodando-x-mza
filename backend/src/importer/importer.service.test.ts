@@ -12,6 +12,9 @@ import { readOsm, type OsmExtract } from './osm.reader.js';
 import { detectBoulevards } from './way-rules.js';
 
 const FIXTURE = fileURLToPath(new URL('./fixtures/two-blocks.osm', import.meta.url));
+const PEDESTRIAN_FIXTURE = fileURLToPath(
+  new URL('./fixtures/pedestrian-street.osm', import.meta.url),
+);
 
 /** El tramo como texto, para comparar la lista entera de una vez. */
 const describeTramo = (tramo: Tramo): string =>
@@ -26,9 +29,11 @@ const gridTramos = (extract: OsmExtract): Tramo[] => {
 };
 
 let extract: OsmExtract;
+let pedestrianExtract: OsmExtract;
 
 beforeAll(async () => {
   extract = await readOsm(FIXTURE);
+  pedestrianExtract = await readOsm(PEDESTRIAN_FIXTURE);
 });
 
 describe('selectGridWays', () => {
@@ -36,7 +41,7 @@ describe('selectGridWays', () => {
     const selection = selectGridWays(extract);
 
     // 101 a 109 más la 114: las cuatro de Calle A, Ancha, Uno, Corta, la sin nombre y
-    // las dos del boulevard. Las peatonales y el area de plaza se cuentan aparte.
+    // las dos del boulevard. La plaza se cuenta aparte, porque queda afuera.
     expect(selection.ways.map((way) => way.id)).toEqual([
       101, 102, 103, 104, 105, 106, 114, 107, 108, 109,
     ]);
@@ -44,8 +49,22 @@ describe('selectGridWays', () => {
       ['service', 1],
       ['footway', 1],
     ]);
-    expect(selection.pedestrian).toBe(1);
+    expect(selection.pedestrian).toBe(0);
     expect(selection.pedestrianAreas).toBe(1);
+    // Lo que queda afuera son sólo las clases descartadas: una peatonal no está ahí.
+    expect(selection.outsideWays.map((way) => way.tags.get('highway'))).toEqual([
+      'service',
+      'footway',
+    ]);
+  });
+
+  it('deja pasar la peatonal sin area y no la plaza', () => {
+    const selection = selectGridWays(pedestrianExtract);
+
+    expect(selection.ways.map((way) => way.id)).toEqual([201, 202, 203, 204]);
+    expect(selection.pedestrian).toBe(1);
+    expect(selection.pedestrianAreas).toBe(0);
+    expect(selection.outsideWays).toEqual([]);
   });
 });
 
@@ -96,12 +115,23 @@ describe('buildTramos', () => {
 
     const { tramos } = buildTramos(ways);
 
+    // Los dieciséis de la grilla, con el boulevard todavía como dos líneas sueltas.
     expect(tramos).toHaveLength(16);
     const doble = tramos.filter((tramo) => tramo.streetName === 'Avenida Doble');
     expect(doble.map(describeTramo).sort()).toEqual([
       '108 14-15 boundary|boundary',
       '109 16-17 boundary|boundary',
     ]);
+  });
+
+  it('corta la peatonal en cada calle que la cruza', () => {
+    const { tramos } = buildTramos(selectGridWays(pedestrianExtract).ways);
+
+    // Dos tramos de peatonal —antes y después de Calle Media— y las tres calles
+    // cortadas en su cruce con ella.
+    expect(
+      tramos.filter((tramo) => tramo.streetName === 'Peatonal Centro').map(describeTramo).sort(),
+    ).toEqual(['204 2-5 junction|junction', '204 5-8 junction|junction']);
   });
 });
 
@@ -131,6 +161,19 @@ describe('buildJunctions', () => {
     const { junctions } = buildJunctions(gridTramos(extract), extract.nodes);
 
     expect(junctions.some((junction) => junction.nodeId === 1)).toBe(false);
+  });
+
+  it('en la T con la peatonal como brazo que termina, el brazo es la peatonal', () => {
+    const tramos = buildTramos(selectGridWays(pedestrianExtract).ways).tramos;
+    const { junctions, warnings } = buildJunctions(tramos, pedestrianExtract.nodes);
+
+    expect(warnings).toEqual([]);
+    expect(
+      junctions.map((junction) => `${junction.nodeId}:${junction.kind}`).sort(),
+    ).toEqual(['2:tee', '5:cross', '8:tee']);
+
+    const tee = junctions.find((junction) => junction.nodeId === 2);
+    expect(tramos[tee?.stemTramoId ?? -1]?.streetName).toBe('Peatonal Centro');
   });
 });
 

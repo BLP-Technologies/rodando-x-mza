@@ -27,7 +27,7 @@ export type ImportReport = {
   /** Calzadas de boulevard: se detectaron y se dejan para #34 (docs/11 §3.6). */
   waysExcludedByBoulevard: number;
   boulevards: number;
-  /** Peatonales sin `area=yes`: son calle, las deriva #34. */
+  /** Peatonales sin `area=yes`: entran como una sola línea sobre el eje (docs/11 §3.5). */
   pedestrianWays: number;
   /** `highway=pedestrian` con `area=yes`: plazas, fuera del grafo. */
   pedestrianAreas: number;
@@ -197,6 +197,11 @@ function outsideClassesByNode(ways: readonly OsmWay[]): ReadonlyMap<number, stri
  * Un cruce por brazo y cuatro nodos por intersección son las dos cuentas de docs/11 §3.2
  * y §3.7. Cuando no cierran se reporta el nodo, y si ahí desemboca una vía fuera de la
  * grilla se dice cuál: los dos síntomas son iguales y los problemas no.
+ *
+ * La intersección con un brazo de una sola línea —una peatonal— no puede cerrar la
+ * cuenta de un cruce por brazo: ese brazo no tiene calzada que cruzar y los dos de la
+ * calle que la cruza comparten el par de esquinas, así que el cruce legítimo es uno. Ahí
+ * se pide que haya al menos uno, que es lo que mantiene el nodo conectado.
  */
 function junctionCountWarnings(
   junctions: readonly JunctionReport[],
@@ -215,7 +220,11 @@ function junctionCountWarnings(
       );
     }
 
-    if (junction.crossings !== junction.arms) {
+    const crossingsExpected =
+      junction.singleLineArms > 0
+        ? junction.crossings >= 1
+        : junction.crossings === junction.arms;
+    if (!crossingsExpected) {
       warnings.push(
         `node ${junction.osmNodeId}: ${junction.crossings} crossings for ${junction.arms} arms${note}`,
       );
