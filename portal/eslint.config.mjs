@@ -12,6 +12,11 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Código generado desde `/api/openapi.json` por `pnpm api:types`. No se
+    // escribe a mano (ver docs/16-el-portal.md): las reglas de lint no aplican a
+    // una salida de herramienta y el CI corre `pnpm lint`, así que tiene que
+    // quedar afuera acá y no editando el archivo.
+    "src/api/schema.d.ts",
   ]),
 ]);
 
