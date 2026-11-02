@@ -170,8 +170,12 @@ Esto evita mantener a mano la forma de la API en tres lugares. Cuando cambia un
 esquema, cambia el OpenAPI y los clientes se regeneran.
 
 El documento se publica en **`GET /api/openapi.json`**, generado al arrancar desde los
-esquemas registrados; hoy lo alimenta el contrato de ruteo
-([13](13-api-de-ruteo.md)).
+esquemas registrados; hoy lo alimentan los contratos de ruteo ([13](13-api-de-ruteo.md)) y
+de lectura del grafo ([14](14-la-api-del-grafo.md)).
+
+Para leerlo a ojo, el mismo documento se publica como página navegable en
+**`GET /api/docs`**: la página pide el documento al backend, que también le sirve la UI,
+así que no hay copia ni CDN de por medio.
 
 Los **errores** también son parte del contrato, y se describen en
 [04-errores-y-mensajes.md](04-errores-y-mensajes.md).

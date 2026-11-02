@@ -1,4 +1,7 @@
 allowBuilds:
+  # `swagger-ui-dist` arrastra este script de telemetría; la página de docs no lo
+  # necesita y no se lo deja correr.
+  '@scarf/scarf': false
   # esbuild necesita su script de postinstall para bajar el binario nativo.
   esbuild: true
 minimumReleaseAgeExclude:
