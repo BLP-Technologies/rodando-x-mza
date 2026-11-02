@@ -94,9 +94,10 @@ describe.skipIf(!process.env.DATABASE_URL)('calculateRoute contra la base', () =
     expect(leg?.level).toBeNull();
     expect(leg?.is_verified).toBe(false);
 
-    // `NULL` se cobra como `PARTIAL`, o sea al doble de los metros (docs/09 §4.7).
+    // `NULL` se cobra como `PARTIAL`, o sea al doble de los metros (docs/09 §4.7). Los dos
+    // números están redondeados a una décima, así que la diferencia puede llegar a 0,15.
     expect(route.summary.meters).toBe(leg?.meters);
-    expect(route.summary.cost).toBeCloseTo(route.summary.meters * 2, 1);
+    expect(route.summary.cost).toBeCloseTo(route.summary.meters * 2, 0);
     expect(route.summary.crossings).toBe(0);
     expect(route.summary.unverified_meters).toBe(route.summary.meters);
 
