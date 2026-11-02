@@ -169,6 +169,10 @@ backend**. De ahí salen dos consumidores:
 Esto evita mantener a mano la forma de la API en tres lugares. Cuando cambia un
 esquema, cambia el OpenAPI y los clientes se regeneran.
 
+El documento se publica en **`GET /api/openapi.json`**, generado al arrancar desde los
+esquemas registrados; hoy lo alimenta el contrato de ruteo
+([13](13-api-de-ruteo.md)).
+
 Los **errores** también son parte del contrato, y se describen en
 [04-errores-y-mensajes.md](04-errores-y-mensajes.md).
 

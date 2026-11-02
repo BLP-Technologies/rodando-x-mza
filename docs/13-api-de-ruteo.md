@@ -51,6 +51,9 @@ Antes del contrato, tres límites que explican casi todas las decisiones de abaj
 
 `POST /api/routes/calculate`
 
+El contrato se publica generado desde los esquemas Zod en `GET /api/openapi.json`
+([02 §6](02-stack-y-estructura.md)): el Zod es la fuente y el documento es su lectura.
+
 ```json
 {
   "origin": { "lat": -32.889727, "lon": -68.844499 },
@@ -122,6 +125,13 @@ Tres detalles que el código tiene que respetar y que la documentación ya fija:
   de la tabla del elemento: en un cruce puede venir de las esquinas, y mostrar el de
   `crossings.accessibility_level` —casi siempre `NULL`— sería mostrar otro dato.
 
+**Medido.** Con el grafo de la zona piloto (329 veredas, 270 cruces, cero obstáculos) la
+consulta de un recorrido de ~400 m tarda **~30 ms** `EXPLAIN ANALYZE` adentro y ~16 ms de
+punta a punta por HTTP en caliente. Es el costo aceptado de derivar el precio en cada
+consulta ([09 §4.7](09-modelo-de-datos.md)); si algún día molesta, la salida es la vista
+materializada, no los índices parciales de obstáculos, que hoy no tendrían nada que
+indexar.
+
 ## 6. Cuando no hay recorrido
 
 **No es un error: es una respuesta.** El pedido está bien formado, las dos puntas están
@@ -133,10 +143,11 @@ puede quedar inalcanzable sin que haya nada raro en el pedido. Con el relevamien
 se suma el caso legítimo: dos puntos que sólo se conectan cruzando una esquina `NONE`
 (§2).
 
-**Cómo se detecta, sin adivinar.** Se corre `pgr_connectedComponents` sobre
-`walkable_edges` con `cost <> -1` y se compara el componente del origen con el del
-destino. Es una clasificación exacta y barata: si no comparten componente, no hay
-recorrido, y no hay que distinguir "no hay camino" de "el algoritmo falló".
+**Cómo se detecta.** No hace falta una consulta aparte: `pgr_dijkstra` devuelve **cero
+filas** cuando el destino no es alcanzable, y eso ya es la respuesta. `pgr_connectedComponents`
+([11 §5.1](11-grafo-peatonal.md)) queda como la herramienta para diagnosticar *por qué* un
+grafo quedó partido —es una consulta de validación, no de cada pedido— porque correrla en
+cada consulta paga el grafo entero para responder lo que el ruteo ya contestó.
 
 **Lo que no se hace:** volver a rutear las aristas `NONE` con un costo alto para "dar la
 mejor ruta disponible", y decir cuál obstáculo corta el paso. Lo primero se descartó por
@@ -152,23 +163,35 @@ pueda vincular obstáculos a tramos.
 {
   "found": true,
   "origin": {
-    "node": { "id": 12, "lat": -32.88969, "lon": -68.84445 },
-    "distance_m": 8.4
+    "node": { "id": 68, "lat": -32.889941, "lon": -68.843276 },
+    "distance_m": 116.9
   },
   "destination": {
-    "node": { "id": 87, "lat": -32.89296, "lon": -68.84203 },
-    "distance_m": 2.1
+    "node": { "id": 59, "lat": -32.892419, "lon": -68.842447 },
+    "distance_m": 71.7
   },
-  "summary": { "meters": 1570.2, "cost": 3140.4, "crossings": 10 },
+  "summary": { "meters": 136.3, "cost": 272.6, "crossings": 1, "unverified_meters": 121.3 },
   "legs": [
     {
       "element_kind": "sidewalk",
       "element_id": 42,
-      "level": "PARTIAL",
+      "level": null,
+      "is_verified": false,
       "meters": 121.3,
       "geometry": {
         "type": "LineString",
         "coordinates": [[-68.84441, -32.88971], [-68.84439, -32.88980]]
+      }
+    },
+    {
+      "element_kind": "crossing",
+      "element_id": 88,
+      "level": "PARTIAL",
+      "is_verified": true,
+      "meters": 15.0,
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [[-68.84439, -32.88980], [-68.84440, -32.88993]]
       }
     }
   ]
@@ -192,12 +215,14 @@ pueda vincular obstáculos a tramos.
 | `summary.meters` | La suma de los metros de los tramos: lo que la persona camina |
 | `summary.cost` | La suma de los costos, en **metros equivalentes**: el número con el que el motor eligió este camino ([09 §4.7](09-modelo-de-datos.md)) |
 | `summary.crossings` | Cuántos cruces tiene el recorrido |
+| `summary.unverified_meters` | Los metros del recorrido que se apoyan en elementos que **nadie miró**. Es el número con el que el cliente avisa que el recorrido está sin relevar |
 | `legs[].element_kind`, `element_id` | De qué elemento del grafo es cada tramo, para poder volver a la ficha. El `id` es el único identificador que tiene un elemento derivado ([11 §4](11-grafo-peatonal.md)), así que es lo que se expone |
 | `legs[].level` | El nivel que se cobró: `FULL`, `PARTIAL` o `NULL` (sin dato, cobrado como `PARTIAL`). Un tramo `NONE` no puede aparecer |
+| `legs[].is_verified` | Si alguien miró lo que decidió ese nivel. En un cruce, vale también cuando las **dos esquinas** de las que sale su nivel están relevadas, porque el valor derivado se apoya en dato relevado ([09 §4.7](09-modelo-de-datos.md)) |
 | `legs[].meters` | El largo de ese tramo |
 | `legs[].geometry` | La geometría del tramo, en GeoJSON, orden `[lon, lat]` |
 
-Cuatro decisiones detrás de esa forma:
+Cinco decisiones detrás de esa forma:
 
 - **`legs` viene en orden de recorrido**, pero cada `LineString` conserva la dirección en
   que está guardada en la base. Orientarlas es trabajo del cliente y no agrega
@@ -208,9 +233,12 @@ Cuatro decisiones detrás de esa forma:
 - **`cost` se expone junto a `meters`.** Un recorrido que no se puede descomponer no se
   puede explicar ni revisar: "este camino de 1.570 m costó 3.140 metros equivalentes" es
   la frase que hace visible que todo el grafo está sin relevar ([09 §4.7](09-modelo-de-datos.md)).
-- **No hay un campo `warnings` ni un tiempo estimado.** El aviso que la app necesita sale
-  de los tramos: un `PARTIAL` o un `NULL` es un tramo con el que hay que tener cuidado. El
-  tiempo se calcula en el cliente con una velocidad peatonal, si alguna vez hace falta.
+- **El aviso de "sin relevar" es un dato, no un campo de advertencias.** Sale de los
+  tramos: `is_verified` dice cuáles se apoyan en una suposición y su `geometry` permite
+  resaltarlos en el mapa; `unverified_meters` lo resume para el cartel. Hoy el grafo entero
+  está en `NULL`, así que el número es igual a los metros totales y el aviso se enciende
+  solo. Lo que no hay —y no hace falta— es un tiempo estimado: si el cliente quiere
+  minutos, son metros por una velocidad peatonal.
 
 **Dos puntas que se pegan al mismo cordón** devuelven `found: true` con `legs` vacío y
 `summary` en cero. No es un error: el pedido es válido y el recorrido es de cero metros.
@@ -219,10 +247,14 @@ Cuatro decisiones detrás de esa forma:
 
 | Situación | Status | Respuesta |
 | --- | --- | --- |
-| Falta una punta, coordenada mal formada o fuera de rango | 400 | `VALIDATION_ERROR` con `details: [{ field, code }]` |
+| Falta un campo del pedido | 400 | `VALIDATION_ERROR` con `details: [{ field, code: "REQUIRED" }]` |
+| Un valor presente pero inválido (tipo o rango) | 400 | `VALIDATION_ERROR` con `details: [{ field, code: "INVALID" }]` |
 | Una punta está fuera de la red de seguridad | 400 | `VALIDATION_ERROR` con `details: [{ field, code: "OUTSIDE_SERVICE_AREA" }]` |
 | No hay perímetro activo en `service_areas` | 500 | `INTERNAL_ERROR`: es una base mal inicializada, no un pedido inválido |
 | Cualquier fallo del ruteo | 500 | `INTERNAL_ERROR`, sin detalles ([04 §5](04-errores-y-mensajes.md)) |
+
+`field` es la ruta del campo en el cuerpo (`origin`, `origin.lat`, `destination`), y puede
+haber más de un `detail` en el mismo error: dos puntas fuera de zona son un solo 400.
 
 Todo eso sigue [04](04-errores-y-mensajes.md): el backend no manda texto, manda códigos.
 
