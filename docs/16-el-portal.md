@@ -32,8 +32,8 @@ El portal es una aplicación **aparte del backend**, en `portal/`: Next.js 16,
 React 19, Tailwind 4 y TypeScript (`package.json`). Se sirve en el puerto 3000 y
 habla con la API por HTTP, igual que va a hacerlo la app mobile.
 
-Hoy resuelve la primera pregunta del moderador —**qué hay y cómo está** en la
-zona piloto— con tres cosas:
+Hoy resuelve las dos primeras preguntas del moderador en la zona piloto —**qué hay y
+cómo está**, y **corregir el nivel**— con estas cosas:
 
 - **Dibuja el grafo** que devuelve `GET /api/graph`: veredas y cruces como
   líneas, cordones como puntos, y el nivel de accesibilidad como color (§5.3).
@@ -42,10 +42,12 @@ zona piloto— con tres cosas:
   panel al costado. Todo viene en la respuesta del grafo: el panel no pide nada
   más, porque todavía no hay endpoint de detalle
   ([14 §7](14-la-api-del-grafo.md)).
+- **Edita el nivel** de un elemento desde la ficha: `FULL`, `PARTIAL`, `NONE` o "sin
+dato", con un `PATCH` que escribe una sola columna y deja el elemento verificado (§5.6).
 - **Avisa** cuando la API recortó la respuesta por el tope de 2000 (§5.4) y
   cuando no responde.
 
-Lo que **no** hace todavía: editar un elemento (C012–C014), listar o resolver
+Lo que **no** hace todavía: crear ni resolver obstáculos (C012–C013), listar ni resolver
 reportes, buscar una calle y autenticar personas (la sesión es simulada, §4).
 
 **Por qué el mapa y no una tabla.** La unidad de trabajo del portal es el área,
@@ -253,6 +255,33 @@ de Leaflet, alimentado por el `attribution` de la capa de tiles, y además como
 leyenda al pie. No es cortesía: los datos son ODbL 1.0 y la atribución es
 obligatoria ([10 §3](10-datos-y-zona-piloto.md), [15 §7](15-integracion-con-el-cliente.md)).
 
+### 5.6 La ficha y la edición del nivel
+
+El panel del elemento (`map/feature-details.tsx`) muestra las propiedades que ya vienen
+en la respuesta del grafo y, debajo, el formulario del nivel (`map/level-form.tsx`):
+cuatro opciones —`FULL`, `PARTIAL`, `NONE` y "sin dato"— y un botón que se habilita sólo
+si el valor cambió.
+
+- **Escribe con un `PATCH`** a `/api/graph/elements/<kind>/<id>`
+  ([14 §7](14-la-api-del-grafo.md)), con la identidad que ya está en las propiedades del
+elemento: el formulario no arma ni adivina ninguna clave.
+- **`is_verified` no se manda.** Lo decide el servidor como `level IS NOT NULL`, así que
+guardar un nivel verifica el elemento y "sin dato" lo desvirefica
+  ([12 §8.2](12-relevamiento-de-accesibilidad.md)). El formulario lo dice cuando se elige
+"sin dato": *queda sin verificar, el relevamiento lo va a poder completar*.
+- **Después de guardar se invalida el grafo** (`invalidateQueries` sobre el prefijo
+`['graph']`): sólo el área que está en pantalla se vuelve a pedir, la arista se repinta
+con su color nuevo y la ficha muestra el `is_verified` que puso el servidor. No hace
+falta tocar la selección: se resuelve por `element_kind:element_id`, así que sobrevive al
+refetch.
+- **Mientras guarda** el botón dice "Guardando…" y el formulario queda deshabilitado; si
+falla, el texto sale del mismo mapeo `código → español`, con los mensajes de guardado
+separados de los de lectura ([15 §6](15-integracion-con-el-cliente.md)).
+- **No hay campos para `street_name` ni geometría**: no están decididos y no se editan
+([14 §8](14-la-api-del-grafo.md)). Tampoco hay confirmación aparte por pisar dato
+relevado: la edición **es** el forzado explícito
+([12 §8.2](12-relevamiento-de-accesibilidad.md)).
+
 ## 6. El cliente HTTP y el contrato
 
 - **Los tipos no se escriben a mano.** `openapi-typescript` es una dependencia de
@@ -300,8 +329,9 @@ están en [05 §4](05-desarrollo.md); los del portal solo, en
   [03](03-despliegue-y-operacion.md) §7).
 - **El auth real.** Cómo se registra, se guarda y se valida una sesión es la Fase
   3 ([07](07-plan-de-trabajo.md)); acá sólo queda la costura donde va a entrar.
-- **La edición de un elemento.** Es C012–C014, y trae su propio contrato
-  (`GET`/`PATCH` del elemento, [14 §7](14-la-api-del-grafo.md)).
+- **La edición de otra cosa que el nivel.** Los obstáculos son C012–C013 y traen su
+  propio contrato; `street_name` y la geometría no se editan
+  ([14 §8](14-la-api-del-grafo.md)).
 - **El texto de los errores.** El portal traduce los códigos, pero el catálogo es
   de [04](04-errores-y-mensajes.md).
 - **La puesta en marcha completa.** Es de [05](05-desarrollo.md).

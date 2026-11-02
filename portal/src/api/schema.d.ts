@@ -64,6 +64,79 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/graph/elements/{kind}/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Cambiar el nivel de accesibilidad de un elemento
+         * @description Escribe `accessibility_level` de una vereda, un cruce o un cordón, y devuelve el elemento como quedó, con la misma forma que una feature de GET /api/graph. `is_verified` no se manda: queda en true si hay nivel y en false si se vuelve a "sin dato" (`level: null`). El costo del ruteo no se recalcula: se deriva de la vista, así que cambia en la próxima consulta. Ver docs/14-la-api-del-grafo.md §7.
+         */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    kind: components["schemas"]["GraphElementKind"];
+                    id: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["UpdateGraphElementRequest"];
+                };
+            };
+            responses: {
+                /** @description El elemento con el nivel ya escrito. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["GraphElement"];
+                    };
+                };
+                /** @description La clase o el `id` de la ruta no cumplen el contrato, o el cuerpo no trae `level`, lo trae fuera del enum o con un campo de más. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description No hay ningún elemento de esa clase con ese id. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description Error no esperado. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        trace?: never;
+    };
     "/api/routes/calculate": {
         parameters: {
             query?: never;
@@ -133,65 +206,66 @@ export interface components {
             /** @enum {string} */
             type: "FeatureCollection";
             truncated: boolean;
-            features: ({
+            features: components["schemas"]["GraphElement"][];
+        };
+        GraphElement: {
+            /** @enum {string} */
+            type: "Feature";
+            geometry: {
                 /** @enum {string} */
-                type: "Feature";
-                geometry: {
-                    /** @enum {string} */
-                    type: "LineString";
-                    coordinates: [
-                        number,
-                        number
-                    ][];
-                };
-                properties: {
-                    /** @enum {string} */
-                    element_kind: "sidewalk";
-                    element_id: number;
-                    /** @enum {string|null} */
-                    level: "FULL" | "PARTIAL" | "NONE" | null;
-                    is_verified: boolean;
-                    street_name: string | null;
-                };
-            } | {
+                type: "LineString";
+                coordinates: [
+                    number,
+                    number
+                ][];
+            };
+            properties: {
                 /** @enum {string} */
-                type: "Feature";
-                geometry: {
-                    /** @enum {string} */
-                    type: "LineString";
-                    coordinates: [
-                        number,
-                        number
-                    ][];
-                };
-                properties: {
-                    /** @enum {string} */
-                    element_kind: "crossing";
-                    element_id: number;
-                    /** @enum {string|null} */
-                    level: "FULL" | "PARTIAL" | "NONE" | null;
-                    is_verified: boolean;
-                };
-            } | {
+                element_kind: "sidewalk";
+                element_id: number;
+                /** @enum {string|null} */
+                level: "FULL" | "PARTIAL" | "NONE" | null;
+                is_verified: boolean;
+                street_name: string | null;
+            };
+        } | {
+            /** @enum {string} */
+            type: "Feature";
+            geometry: {
                 /** @enum {string} */
-                type: "Feature";
-                geometry: {
-                    /** @enum {string} */
-                    type: "Point";
-                    coordinates: [
-                        number,
-                        number
-                    ];
-                };
-                properties: {
-                    /** @enum {string} */
-                    element_kind: "kerb";
-                    element_id: number;
-                    /** @enum {string|null} */
-                    level: "FULL" | "PARTIAL" | "NONE" | null;
-                    is_verified: boolean;
-                };
-            })[];
+                type: "LineString";
+                coordinates: [
+                    number,
+                    number
+                ][];
+            };
+            properties: {
+                /** @enum {string} */
+                element_kind: "crossing";
+                element_id: number;
+                /** @enum {string|null} */
+                level: "FULL" | "PARTIAL" | "NONE" | null;
+                is_verified: boolean;
+            };
+        } | {
+            /** @enum {string} */
+            type: "Feature";
+            geometry: {
+                /** @enum {string} */
+                type: "Point";
+                coordinates: [
+                    number,
+                    number
+                ];
+            };
+            properties: {
+                /** @enum {string} */
+                element_kind: "kerb";
+                element_id: number;
+                /** @enum {string|null} */
+                level: "FULL" | "PARTIAL" | "NONE" | null;
+                is_verified: boolean;
+            };
         };
         ErrorResponse: {
             error: {
@@ -207,6 +281,12 @@ export interface components {
          * @example -68.8472,-32.8937,-68.8420,-32.8897
          */
         GraphBBox: string;
+        /** @enum {string} */
+        GraphElementKind: "sidewalk" | "crossing" | "kerb";
+        UpdateGraphElementRequest: {
+            /** @enum {string|null} */
+            level: "FULL" | "PARTIAL" | "NONE" | null;
+        };
         RouteResponse: {
             /** @enum {boolean} */
             found: true;

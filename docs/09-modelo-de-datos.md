@@ -112,8 +112,15 @@ carga del relevamiento no pisa un elemento verificado salvo que se fuerce, y la 
 del portal lo pisa porque es el forzado explícito: la regla lee esta columna y no otra
 ([12 §8.2](12-relevamiento-de-accesibilidad.md)). El MVP no agrega una columna de
 procedencia ni de autor: lo que pisó una carga forzada queda en el reporte de la corrida.
-Si el portal tiene que mostrar autoría, son `verified_at` y `verified_by`, y se deciden
-con #49.
+
+**En el MVP `is_verified` se deriva de `level`.** La edición del portal escribe
+`is_verified` como `level IS NOT NULL`: un nivel guardado es un nivel que alguien miró, y
+"sin dato" no es un valor confirmado, así que devuelve el elemento al estado de recién
+importado ([14 §7](14-la-api-del-grafo.md)). Hoy no hay ninguna fuente que produzca un
+nivel sin verificar, así que las dos columnas no se contradicen nunca; el día que exista
+(si alguna vez se importa un nivel de OSM, por ejemplo), vuelven a ser dos ejes
+genuinamente separados. El precio de no guardar autor está aceptado por el MVP
+([12 §8.3](12-relevamiento-de-accesibilidad.md)).
 
 **`report_status` no incluye la baja.** La baja de un reporte es `deleted_at`, no un
 estado: si `DELETED` fuera un valor del enum, habría dos fuentes de verdad para "este

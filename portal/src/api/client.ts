@@ -68,3 +68,29 @@ export async function apiGet<T>(path: string): Promise<T> {
 
   return (await response.json()) as T;
 }
+
+/**
+ * El `PATCH` de un recurso, con el cuerpo ya parseado como `T`.
+ *
+ * Mismo contrato de error que `apiGet`: un `texto` que no es JSON del catálogo cae en
+ * `UNKNOWN_ERROR` y no rompe el render (15 §6).
+ */
+export async function apiPatch<T>(path: string, body: unknown): Promise<T> {
+  let response: Response;
+
+  try {
+    response = await fetch(new URL(path, API_URL), {
+      method: 'PATCH',
+      headers: { accept: 'application/json', 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    throw new ApiError(NETWORK_ERROR);
+  }
+
+  if (!response.ok) {
+    throw await errorFromResponse(response);
+  }
+
+  return (await response.json()) as T;
+}

@@ -8,12 +8,18 @@
  */
 
 import type { BBox } from '@/config';
-import { apiGet } from './client';
+import { apiGet, apiPatch } from './client';
 import type { components } from './schema';
 
 export type GraphFeatureCollection = components['schemas']['GraphFeatureCollection'];
 
 export type GraphFeature = GraphFeatureCollection['features'][number];
+
+/** Un elemento suelto: la respuesta del `PATCH` y la misma forma que una feature. */
+export type GraphElement = components['schemas']['GraphElement'];
+
+/** La clase del elemento, tal como viaja en la ruta del `PATCH`. */
+export type ElementKind = GraphElement['properties']['element_kind'];
 
 /**
  * El nivel de accesibilidad tal como se guardó: `null` es "nadie lo relevó"
@@ -43,12 +49,24 @@ export function roundBBox(bbox: BBox): BBox {
 }
 
 /**
- * La clave de la query del grafo. Es un prefijo (`['graph']`) más las cuatro
- * coordenadas, así que invalidar `['graph']` invalida todas las áreas de una vez
- * ([16 §5.4](../../docs/16-el-portal.md)).
+ * El prefijo de todas las claves del grafo. Invalidarlo invalida todas las áreas, que
+ * es lo que hace falta después de escribir: sólo la que está en pantalla se vuelve a
+ * pedir, las demás quedan marcadas ([16 §5.4](../../docs/16-el-portal.md)).
+ */
+export const GRAPH_QUERY_PREFIX = ['graph'] as const;
+
+/**
+ * La clave de la query del grafo. Es el prefijo más las cuatro coordenadas, así que
+ * cada área tiene su entrada y dos paneos iguales comparten la misma.
  */
 export function graphQueryKey(bbox: BBox) {
-  return ['graph', bbox.minLon, bbox.minLat, bbox.maxLon, bbox.maxLat] as const;
+  return [
+    ...GRAPH_QUERY_PREFIX,
+    bbox.minLon,
+    bbox.minLat,
+    bbox.maxLon,
+    bbox.maxLat,
+  ] as const;
 }
 
 /**
@@ -60,4 +78,18 @@ export function graphQueryKey(bbox: BBox) {
 export async function readGraph(bbox: BBox): Promise<GraphFeatureCollection> {
   const query = new URLSearchParams({ bbox: formatBBox(bbox) });
   return apiGet<GraphFeatureCollection>(`/api/graph?${query.toString()}`);
+}
+
+/**
+ * Cambia el nivel de un elemento y devuelve cómo quedó ([14 §7](../../docs/14-la-api-del-grafo.md)).
+ *
+ * `null` es "sin dato", y es una escritura como cualquier otra: el servidor baja el
+ * nivel y desmarca la verificación en la misma escritura. `is_verified` no se manda.
+ */
+export async function updateElementLevel(
+  kind: ElementKind,
+  id: number,
+  level: GraphLevel,
+): Promise<GraphElement> {
+  return apiPatch<GraphElement>(`/api/graph/elements/${kind}/${id}`, { level });
 }

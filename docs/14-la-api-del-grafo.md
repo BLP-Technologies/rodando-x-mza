@@ -1,12 +1,12 @@
 # La API del grafo
 
-> Documento temático. Define el contrato de `GET /api/graph`: qué área recibe, cómo la
-> valida, qué devuelve y qué no hace. Es el estado vivo de esa decisión: se edita en su
-> lugar cuando cambia. Se complementa con [09-modelo-de-datos.md](09-modelo-de-datos.md),
-> que define los enums de accesibilidad, con
-> [11-grafo-peatonal.md](11-grafo-peatonal.md), que define las tablas y la vista del grafo,
-> y con [04-errores-y-mensajes.md](04-errores-y-mensajes.md), que define la forma del
-> error.
+> Documento temático. Define el contrato de la API del grafo: qué área recibe la lectura,
+> cómo la valida, qué devuelve, cómo se escribe el nivel de un elemento y qué no hace.
+> Es el estado vivo de esas decisiones: se edita en su lugar cuando cambian. Se
+> complementa con [09-modelo-de-datos.md](09-modelo-de-datos.md), que define los enums de
+> accesibilidad, con [11-grafo-peatonal.md](11-grafo-peatonal.md), que define las tablas y
+> la vista del grafo, y con [04-errores-y-mensajes.md](04-errores-y-mensajes.md), que
+> define la forma del error.
 
 ## 1. Alcance
 
@@ -16,14 +16,16 @@ Este documento responde:
 - **Qué significa "interseca"** en el filtro (§4).
 - **Qué devuelve**, campo por campo, y cómo avisa que recortó (§5).
 - **Cómo se rechaza** un pedido (§6).
+- **Cómo se escribe** el nivel de un elemento, y qué queda verificado (§7).
 
 No decide la forma del grafo —es de [11](11-grafo-peatonal.md)—, ni qué significa cada
 nivel —es de [09 §4.1](09-modelo-de-datos.md)—, ni el catálogo de errores, que es de
 [04](04-errores-y-mensajes.md).
 
-**El endpoint no escribe nada.** No hay caché, ni tiles, ni una tabla intermedia: es una
+**La lectura no escribe nada.** No hay caché, ni tiles, ni una tabla intermedia: es una
 lectura del grafo del momento, y por eso dos pedidos iguales devuelven lo mismo mientras
-el dato no cambie.
+el dato no cambie. La única escritura de la API es el `PATCH` de §7, y escribe una sola
+columna en una sola tabla.
 
 ## 2. Los dos límites que ordenan el diseño
 
@@ -133,7 +135,7 @@ consultas que el servicio tenga que juntar.
 | `truncated` | Si la respuesta trae **todas** las features del área o sólo las primeras (§5.1). No es parte de GeoJSON |
 | `features[].geometry` | La geometría guardada, vía `ST_AsGeoJSON`, en orden `[lon, lat]`: `LineString` en veredas y cruces, `Point` en cordones |
 | `features[].properties.element_kind` | De qué clase es el elemento: `sidewalk`, `crossing` o `kerb` |
-| `features[].properties.element_id` | El `id` de su fila. Es la clave con la que el portal va a poder pedir o editar el elemento cuando exista esa funcionalidad (§7) |
+| `features[].properties.element_id` | El `id` de su fila. Es la clave con la que el portal pide o edita el elemento: junto con `element_kind` identifica un elemento del grafo (§7) |
 | `features[].properties.level` | El nivel **guardado** del elemento: `FULL`, `PARTIAL`, `NONE`, o `null` si nadie lo relevó ([09 §4.1](09-modelo-de-datos.md)) |
 | `features[].properties.is_verified` | Si alguien miró lo que decidió ese nivel ([09 §4.1](09-modelo-de-datos.md)) |
 | `features[].properties.street_name` | El nombre de la calle. **Sólo en veredas**, y puede ser `null`: hay filas del import sin nombre |
@@ -204,11 +206,68 @@ cambien nada. `REQUIRED` sí es aparte: no es un bbox malformado, es uno que no 
 
 Todo eso sigue [04](04-errores-y-mensajes.md): el backend no manda texto, manda códigos.
 
-## 7. Lo que este documento no decide
+## 7. La edición del nivel
 
-- **El detalle o la edición de un elemento.** No hay `GET /api/graph/:kind/:id` ni `PATCH`.
-  Se agrega cuando el portal abra una ficha, y entonces el `element_id` que ya devuelve
-  esta respuesta es la clave para pedirla.
+`PATCH /api/graph/elements/<kind>/<id>`
+
+Escribe `accessibility_level` de un elemento y devuelve **el elemento**, con la misma
+forma que una feature de la lectura (§5). Es la edición manual de C014, desde la ficha
+del portal.
+
+`kind` es `sidewalk`, `crossing` o `kerb`, y `id` el de su tabla: juntos son la
+identidad de un elemento del grafo, la misma que ya viaja en `element_kind` y
+`element_id`. Una clase fuera del enum, un `id` que no es entero positivo o un cuerpo que
+no cumple el contrato son `VALIDATION_ERROR`; un `id` que no existe es `NOT_FOUND`, sin
+importar que ese número exista en otra tabla.
+
+**El cuerpo tiene un solo campo, y es obligatorio:**
+
+```json
+{ "level": "FULL" }
+```
+
+| `level` | Qué escribe |
+| --- | --- |
+| `FULL`, `PARTIAL`, `NONE` | El nivel, y el elemento queda **verificado** |
+| `null` | "Sin dato": el nivel vuelve a `NULL` y el elemento queda **sin verificar** |
+
+Tres decisiones detrás de esa forma:
+
+- **`level` es obligatorio y nullable, y no `optional`.** El cuerpo tiene un campo solo,
+así que no hay manera de distinguir "no lo mandé" de "lo mando en `null`" — y esa
+distinción no puede quedar librada a una omisión, porque `null` borra el nivel. Omitirlo
+es `400` con `field: "level"`, no un "no toques nada".
+- **`is_verified` no viaja.** La escribe el servidor en la misma escritura, como
+`level IS NOT NULL`: un nivel guardado es un nivel que alguien miró, y "sin dato" no es
+un valor confirmado ([09 §4.1](09-modelo-de-datos.md),
+[12 §8.2](12-relevamiento-de-accesibilidad.md)). El cuerpo es estricto, así que mandarlo
+no se ignora en silencio: es `400` y el `details` nombra la clave.
+- **Devuelve el elemento y no `204`.** El servidor decide la verificación, así que el
+cliente necesita ver qué quedó guardado; devolver la feature con la misma forma de la
+lectura le permite repintarla sin traducir nada.
+
+**No recalcula nada.** El costo del ruteo se deriva de la vista
+([09 §4.7](09-modelo-de-datos.md)), así que la próxima consulta de un recorrido ya cobra
+el nivel nuevo, sin invalidar caché ni recalcular una tabla. Lo que sí cambia es
+`updated_at`, que mueve el trigger de la tabla.
+
+**El endpoint todavía no pide autenticación** (Fase 3, [07 §3](07-plan-de-trabajo.md)):
+cualquiera que llegue a la API puede escribir el nivel. Es coherente con el resto del MVP
+y queda dicho acá para que no se descubra después; cuando exista el auth, el permiso se
+valida en este mismo endpoint.
+
+## 8. Lo que este documento no decide
+
+- **El detalle de un elemento.** No hay `GET /api/graph/:kind/:id`: el mapa pide el área
+y la ficha se arma con la feature que ya llegó (§5). Se agrega cuando haya un cliente que
+necesite una ficha sin mapa.
+- **La edición de otra cosa que el nivel.** `street_name` y la geometría no se editan
+([16 §5.6](16-el-portal.md)); si alguna vez se edita la geometría, es otra tarea y otro
+contrato.
+- **La concurrencia.** Dos moderadores que guardan el mismo elemento: gana el último. No
+hay versión ni `If-Match`, y agregarlos no es del MVP.
+- **La auditoría de quién escribió.** El MVP no guarda autor
+  ([09 §4.1](09-modelo-de-datos.md)).
 - **La paginación, los tiles y la caché.** Hoy el tope avisa y el cliente parte el área
   si le importa (§5.1). Se revisa cuando aparezca un caso medido: el piloto entero entra
   en una respuesta.
@@ -223,7 +282,7 @@ Todo eso sigue [04](04-errores-y-mensajes.md): el backend no manda texto, manda 
 - **El texto que ve el moderador.** Lo escribe el portal a partir de los códigos y de los
   elementos ([04 §6](04-errores-y-mensajes.md)).
 
-## 8. Documentos relacionados
+## 9. Documentos relacionados
 
 - [09-modelo-de-datos.md](09-modelo-de-datos.md): los enums de accesibilidad y el costo de
   las aristas.

@@ -5,8 +5,10 @@ import { getDb } from '../db/index.js';
 import { inRolledBackTransaction } from '../db/test-transaction.js';
 import type { DB } from '../db/types.js';
 import { importOsm } from '../importer/importer.run.js';
+import { calculateRoute } from '../routing/routing.service.js';
+import type { RouteRequest } from '../routing/routing.schemas.js';
 import type { BBox, GraphFeature } from './graph.schemas.js';
-import { readGraph } from './graph.service.js';
+import { readGraph, updateGraphElement } from './graph.service.js';
 
 const FIXTURE = fileURLToPath(new URL('../importer/fixtures/two-blocks.osm', import.meta.url));
 
@@ -88,6 +90,44 @@ async function firstSidewalkArea(
       minLat: row.min_lat,
       maxLon: row.max_lon,
       maxLat: row.max_lat,
+    },
+  };
+}
+
+/**
+ * La primera vereda con sus dos esquinas en coordenadas, para rutear sobre ella.
+ *
+ * Es la evidencia del costo: el nivel se escribe sobre la arista y el ruteo entre sus
+ * dos cordones lo cobra en la consulta siguiente ([09 §4.7](../../../docs/09-modelo-de-datos.md)).
+ */
+async function firstSidewalkToRoute(
+  trx: Transaction<DB>,
+): Promise<{ id: number; request: RouteRequest }> {
+  const result = await sql<{
+    id: number;
+    start_lon: number;
+    start_lat: number;
+    end_lon: number;
+    end_lat: number;
+  }>`
+    SELECT sidewalk.id,
+           ST_X(start_node.geom) AS start_lon, ST_Y(start_node.geom) AS start_lat,
+           ST_X(end_node.geom) AS end_lon, ST_Y(end_node.geom) AS end_lat
+    FROM sidewalks sidewalk
+    JOIN kerb_nodes start_node ON start_node.id = sidewalk.start_node_id
+    JOIN kerb_nodes end_node ON end_node.id = sidewalk.end_node_id
+    ORDER BY sidewalk.id
+    LIMIT 1
+  `.execute(trx);
+
+  const row = result.rows[0];
+  if (row === undefined) throw new Error('the fixture derived no sidewalk to route over');
+
+  return {
+    id: row.id,
+    request: {
+      origin: { lon: row.start_lon, lat: row.start_lat },
+      destination: { lon: row.end_lon, lat: row.end_lat },
     },
   };
 }
@@ -181,5 +221,118 @@ describe.skipIf(!process.env.DATABASE_URL)('readGraph contra la base', () => {
     expect(graph.features).toHaveLength(2000);
     expect(graph.truncated).toBe(true);
     expect(kindsOf(graph.features)).toEqual(['kerb']);
+  });
+
+  it('escribe el nivel y deja el elemento verificado', async () => {
+    const outcome = await inRolledBackTransaction(async (trx) => {
+      await importOsm(FIXTURE, trx);
+
+      const area = await firstSidewalkArea(trx);
+      const updated = await updateGraphElement(trx, 'sidewalk', area.id, 'PARTIAL');
+      const graph = await readGraph(trx, area.bbox);
+
+      return { area, updated, graph };
+    });
+
+    // La respuesta alcanza para repintar la feature sin volver a pedir el área.
+    expect(outcome.updated.properties.element_kind).toBe('sidewalk');
+    expect(outcome.updated.properties.element_id).toBe(outcome.area.id);
+    expect(outcome.updated.properties.level).toBe('PARTIAL');
+    expect(outcome.updated.properties.is_verified).toBe(true);
+
+    // Y la lectura siguiente lo dice lo mismo: el `RETURNING` y la vista coinciden.
+    const feature = outcome.graph.features.find(
+      (candidate) =>
+        candidate.properties.element_kind === 'sidewalk' &&
+        candidate.properties.element_id === outcome.area.id,
+    );
+    expect(feature?.properties.level).toBe('PARTIAL');
+    expect(feature?.properties.is_verified).toBe(true);
+  });
+
+  it('vuelve a "sin dato" y desmarca la verificación', async () => {
+    const updated = await inRolledBackTransaction(async (trx) => {
+      await importOsm(FIXTURE, trx);
+
+      const area = await firstSidewalkArea(trx);
+      await updateGraphElement(trx, 'sidewalk', area.id, 'NONE');
+
+      return updateGraphElement(trx, 'sidewalk', area.id, null);
+    });
+
+    // `null` es "sin dato", y sin nivel no hay valor confirmado: el elemento queda
+    // como recién importado y el relevamiento lo puede completar (docs/12 §8.2).
+    expect(updated.properties.level).toBeNull();
+    expect(updated.properties.is_verified).toBe(false);
+  });
+
+  it('cambia el costo de la arista en la siguiente consulta, sin recalcular nada', async () => {
+    const outcome = await inRolledBackTransaction(async (trx) => {
+      await importOsm(FIXTURE, trx);
+
+      const sidewalk = await firstSidewalkToRoute(trx);
+      const sinRelevar = await calculateRoute(trx, sidewalk.request);
+
+      await updateGraphElement(trx, 'sidewalk', sidewalk.id, 'FULL');
+      const accesible = await calculateRoute(trx, sidewalk.request);
+
+      await updateGraphElement(trx, 'sidewalk', sidewalk.id, 'NONE');
+      const bloqueada = await calculateRoute(trx, sidewalk.request);
+
+      return { sidewalk, sinRelevar, accesible, bloqueada };
+    });
+
+    const { sidewalk, sinRelevar, accesible, bloqueada } = outcome;
+    if (!sinRelevar.found || !accesible.found) {
+      throw new Error('the route between two adjacent kerbs must exist');
+    }
+
+    // `NULL` se cobra como `PARTIAL`: al doble de los metros (docs/09 §4.7).
+    expect(sinRelevar.summary.cost).toBeCloseTo(sinRelevar.summary.meters * 2, 0);
+    expect(sinRelevar.legs[0]?.is_verified).toBe(false);
+
+    // `FULL` se cobra uno a uno, y el tramo queda verificado por la misma escritura.
+    expect(accesible.summary.cost).toBeCloseTo(accesible.summary.meters, 0);
+    expect(accesible.legs[0]?.is_verified).toBe(true);
+    expect(accesible.legs[0]?.level).toBe('FULL');
+
+    // `NONE` saca la arista del grafo: el recorrido puede existir bordeándola, pero
+    // nunca pasa por ella.
+    expect(
+      bloqueada.found
+        ? bloqueada.legs.every(
+            (leg) =>
+              !(leg.element_kind === 'sidewalk' && leg.element_id === sidewalk.id),
+          )
+        : true,
+    ).toBe(true);
+  });
+
+  it('responde NOT_FOUND para un elemento que no existe', async () => {
+    const error = await inRolledBackTransaction(async (trx) => {
+      await importOsm(FIXTURE, trx);
+
+      return updateGraphElement(trx, 'kerb', 999999, 'FULL').catch(
+        (thrown: unknown) => thrown,
+      );
+    });
+
+    expect(error).toMatchObject({ status: 404, code: 'NOT_FOUND' });
+  });
+
+  it('responde NOT_FOUND cuando el id existe en otra clase de elemento', async () => {
+    const error = await inRolledBackTransaction(async (trx) => {
+      await importOsm(FIXTURE, trx);
+
+      const area = await firstSidewalkArea(trx);
+
+      // Ese id es de una vereda: como cordón no existe, y para quien pregunta el
+      // elemento tampoco.
+      return updateGraphElement(trx, 'kerb', area.id, 'FULL').catch(
+        (thrown: unknown) => thrown,
+      );
+    });
+
+    expect(error).toMatchObject({ status: 404, code: 'NOT_FOUND' });
   });
 });

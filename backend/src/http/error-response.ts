@@ -33,9 +33,24 @@ export function validationDetails(
   body: unknown,
 ): { field: string; code: string }[] {
   return error.issues.map((issue) => ({
-    field: issue.path.length === 0 ? 'body' : issue.path.map(String).join('.'),
+    field: fieldOf(issue),
     code: valueAt(body, issue.path) === undefined ? 'REQUIRED' : 'INVALID',
   }));
+}
+
+/**
+ * El campo que reporta Zod.
+ *
+ * Un campo de más (`strictObject`) llega con el path vacío y el nombre en
+ * `issue.keys`: decir "body" ahí sería perder el único dato útil para el cliente, que es
+ * cuál de sus campos no existe en el contrato.
+ */
+function fieldOf(issue: z.core.$ZodIssue): string {
+  if (issue.code === 'unrecognized_keys' && issue.keys.length === 1) {
+    return String(issue.keys[0]);
+  }
+
+  return issue.path.length === 0 ? 'body' : issue.path.map(String).join('.');
 }
 
 /** El valor del cuerpo en la ruta que reportó Zod, para saber si falta. */

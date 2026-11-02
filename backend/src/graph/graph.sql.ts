@@ -1,6 +1,6 @@
 import { sql, type Kysely } from 'kysely';
 import type { AccessibilityLevel, DB } from '../db/types.js';
-import type { BBox } from './graph.schemas.js';
+import type { BBox, ElementKind } from './graph.schemas.js';
 
 /**
  * La consulta del grafo: una sola por pedido.
@@ -79,4 +79,71 @@ export async function findGraphFeatures(
     streetName: row.street_name,
     geometry: row.geometry,
   }));
+}
+
+/**
+ * La tabla de cada clase de elemento y la única columna que no comparten: el nombre de
+ * la calle, que sólo existe en la vereda ([14 §5](../../../docs/14-la-api-del-grafo.md)).
+ *
+ * El nombre de tabla nunca se interpola en el texto del SQL: `sql.table()` lo pasa como
+ * referencia y Kysely lo escapa, y además el valor viene de una unión cerrada validada
+ * por Zod. No hay construcción dinámica de consultas.
+ */
+const ELEMENT_TABLES = {
+  sidewalk: { table: 'sidewalks', streetName: sql<string | null>`street_name` },
+  crossing: { table: 'crossings', streetName: sql<string | null>`NULL::varchar(100)` },
+  kerb: { table: 'kerb_nodes', streetName: sql<string | null>`NULL::varchar(100)` },
+} as const;
+
+/**
+ * Escribe el nivel de un elemento y devuelve la fila como quedó, o `null` si no existe.
+ *
+ * Tres decisiones (ver [14 §7](../../../docs/14-la-api-del-grafo.md)):
+ *
+ * - **`is_verified` no es un parámetro**: se deriva del nivel en la misma escritura, así
+ *   que no hay forma de guardar un nivel sin verificar ni de verificar sin nivel. Un
+ *   elemento vuelve a "sin dato" queda como recién importado y el relevamiento lo puede
+ *   completar ([12 §8.2](../../../docs/12-relevamiento-de-accesibilidad.md)).
+ * - **Un solo viaje**: el `RETURNING` devuelve la fila o ninguna, así que el 404 no
+ *   necesita un `SELECT` previo ni tiene la carrera entre chequear y escribir.
+ * - **`::accessibility_level` explícito** en el parámetro: sin el cast, Postgres no puede
+ *   tipar un parámetro que en un caso es un enum y en el otro `NULL`.
+ */
+export async function updateElementLevel(
+  db: Kysely<DB>,
+  kind: ElementKind,
+  id: number,
+  level: AccessibilityLevel | null,
+): Promise<GraphFeatureRow | null> {
+  const target = ELEMENT_TABLES[kind];
+
+  const result = await sql<{
+    element_id: number;
+    level: AccessibilityLevel | null;
+    is_verified: boolean;
+    street_name: string | null;
+    geometry: string;
+  }>`
+    UPDATE ${sql.table(target.table)}
+    SET accessibility_level = ${level}::accessibility_level,
+        is_verified = (${level}::accessibility_level IS NOT NULL)
+    WHERE id = ${id}
+    RETURNING id AS element_id,
+              accessibility_level AS level,
+              is_verified,
+              ${target.streetName} AS street_name,
+              ST_AsGeoJSON(geom) AS geometry
+  `.execute(db);
+
+  const row = result.rows[0];
+  if (row === undefined) return null;
+
+  return {
+    elementKind: kind,
+    elementId: row.element_id,
+    level: row.level,
+    isVerified: row.is_verified,
+    streetName: row.street_name,
+    geometry: row.geometry,
+  };
 }
