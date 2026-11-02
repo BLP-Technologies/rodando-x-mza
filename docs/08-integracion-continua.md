@@ -196,6 +196,10 @@ Una corrida del job del backend dura del orden de **30 a 40 segundos**. La base 
 servicio y el paso de migraciones suman unos 13 s sobre la preparación del entorno: la
 medición de referencia es 34 s en el job completo (run `41136603246`).
 
+El job del portal no tiene base de servicio ni migraciones, pero instala su propio
+`node_modules` y compila: **32 s** en la primera corrida (run `41506145365`), del mismo
+orden que el del backend.
+
 ## 6. Las reglas que protegen `main`
 
 El workflow por sí solo **informa**; no impide mergear. Lo que impide mergear es el
