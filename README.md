@@ -26,3 +26,4 @@ Vive en [`docs/`](docs/):
 - [10 — Datos y zona piloto](docs/10-datos-y-zona-piloto.md)
 - [11 — El grafo peatonal](docs/11-grafo-peatonal.md)
 - [12 — El relevamiento de accesibilidad](docs/12-relevamiento-de-accesibilidad.md)
+- [13 — La API de ruteo](docs/13-api-de-ruteo.md)

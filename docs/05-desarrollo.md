@@ -166,6 +166,41 @@ curl http://localhost:3001/api/health/ready  # {"status":"ok","db":"up"}
 - `/api/health/ready` (readiness): **además** la base responde. Es el que confirma
   que está todo bien.
 
+### Probar un recorrido
+
+Con la base importada, el backend arriba y el contrato de
+[13](13-api-de-ruteo.md) delante. Plaza Independencia → Plaza España, las dos puntas
+adentro del perímetro de búsqueda:
+
+```sh
+curl -sS -X POST http://localhost:3001/api/routes/calculate \
+  -H 'content-type: application/json' \
+  -d '{"origin":{"lat":-32.889727,"lon":-68.844499},"destination":{"lat":-32.892960,"lon":-68.842028}}'
+```
+
+Esperado: `200` con `found: true`, unos 400 m de recorrido, y `unverified_meters` igual a
+`meters` —mientras nadie haya relevado, todos los tramos se apoyan en una suposición—. Los
+`distance_m` de origen y destino no son cero: el pin está en el interior de la plaza y el
+recorrido arranca en el cordón más cercano, que es lo que el cliente tiene que mostrar.
+
+Una punta fuera de la red de seguridad, con cordones cerca pero afuera del perímetro:
+
+```sh
+curl -sS -i -X POST http://localhost:3001/api/routes/calculate \
+  -H 'content-type: application/json' \
+  -d '{"origin":{"lat":-32.884697,"lon":-68.84719},"destination":{"lat":-32.889727,"lon":-68.844499}}'
+```
+
+Esperado: `400` con
+`{"error":{"code":"VALIDATION_ERROR","details":[{"field":"origin","code":"OUTSIDE_SERVICE_AREA"}]}}`.
+
+Con `-sS` y no con `-s`: si el backend no está escuchando, `-s` no imprime nada y el error
+parece un problema de la API. Y `curl http://localhost:3001/api/openapi.json` devuelve el
+contrato completo, que es lo que consume el cliente.
+
+**Los `id` de nodo y de elemento son de la base de cada uno**: si el grafo se importó en
+otro orden, no coinciden con los de otro entorno, pero los metros y los niveles sí.
+
 ## 8. Comandos frecuentes
 
 Desde `backend/`:

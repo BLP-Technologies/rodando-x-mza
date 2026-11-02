@@ -366,8 +366,9 @@ de vereda `PARTIAL` cuestan como 200 m, y así se comparan con 200 m de vereda `
 `NONE` no es un factor alto: **es `-1`, que es como pgRouting representa una arista que no
 se puede recorrer** ("a negative value on a cost column is interpreted as the edge does not
 exist"). Con eso la arista queda fuera del grafo sin un `WHERE` que la filtre, y cuando no
-hay camino el caso de uso ya tiene respuesta: C003 devuelve la mejor ruta disponible y marca
-los tramos comprometidos.
+hay camino el caso de uso ya tiene respuesta: C003 responde que no hay recorrido accesible,
+porque **no se desvía a la persona por un paso que no se puede franquear**
+([13 §6](13-api-de-ruteo.md#6-cuando-no-hay-recorrido)).
 
 **En un cruce, el nivel puede venir de la esquina.** `crossings.accessibility_level`
 sólo tiene valor si alguien miró ese cruce puntual; el importador no lo escribe, porque
@@ -542,7 +543,8 @@ reproducir.
 **No está en el camino del ruteo.** El área limita **las puntas** de una consulta, no el
 recorrido: el camino sigue siendo todo el grafo, y por eso no hay ninguna arista que se
 recorte por caer afuera (ver [11 §5](11-grafo-peatonal.md)). El endpoint que la usa y el
-código de error con el que rechaza no son parte de este esquema.
+código de error con el que rechaza son de
+[13](13-api-de-ruteo.md#8-cómo-se-rechaza), no de este esquema.
 
 **Alternativas descartadas.** Un enum no aplica: no es un vocabulario cerrado y tiene
 atributos propios (la geometría, el nombre, el estado). Un `CHECK` tampoco: el perímetro
