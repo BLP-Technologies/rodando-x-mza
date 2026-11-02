@@ -8,6 +8,7 @@
 
 import { redirect } from 'next/navigation';
 import { getSession } from '@/session/session';
+import { Providers } from './providers';
 
 export default async function PortalLayout({ children }: LayoutProps<'/'>) {
   const session = await getSession();
@@ -32,7 +33,9 @@ export default async function PortalLayout({ children }: LayoutProps<'/'>) {
         </div>
       </header>
 
-      <main className="min-h-0 flex-1">{children}</main>
+      <main className="min-h-0 flex-1">
+        <Providers>{children}</Providers>
+      </main>
     </div>
   );
 }

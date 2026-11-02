@@ -35,6 +35,7 @@ deliberada, no automática.
 | Driver Postgres | pg | 8 |
 | Migraciones | node-pg-migrate | 9 |
 | Validación y contrato | Zod | 4 |
+| Estado de datos del cliente | TanStack Query | 5 |
 | OpenAPI | @asteasolutions/zod-to-openapi | 9 |
 | Base de datos | PostgreSQL + PostGIS + pgRouting | contenedor |
 | Portal web | Next.js | 16 |
