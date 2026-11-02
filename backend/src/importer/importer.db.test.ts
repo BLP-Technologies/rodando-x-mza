@@ -2,6 +2,7 @@ import { fileURLToPath } from 'node:url';
 import { sql, type Transaction } from 'kysely';
 import { afterAll, describe, expect, it } from 'vitest';
 import { getDb } from '../db/index.js';
+import { inRolledBackTransaction } from '../db/test-transaction.js';
 import type { DB } from '../db/types.js';
 import { importOsm } from './importer.run.js';
 import { readOsm, type OsmExtract } from './osm.reader.js';
@@ -10,32 +11,6 @@ const FIXTURE = fileURLToPath(new URL('./fixtures/two-blocks.osm', import.meta.u
 const PEDESTRIAN_FIXTURE = fileURLToPath(
   new URL('./fixtures/pedestrian-street.osm', import.meta.url),
 );
-
-/**
- * Señal para que la transacción de la prueba se deshaga: Kysely no tiene un "rollback"
- * explícito, y tirar dentro de `execute` es la forma documentada de pedirlo. Así el test
- * no deja un grafo de mentira en la base de desarrollo.
- */
-class Rollback extends Error {}
-
-async function inRolledBackTransaction<T>(
-  work: (trx: Transaction<DB>) => Promise<T>,
-): Promise<T> {
-  let result: T | undefined;
-
-  try {
-    await getDb()
-      .transaction()
-      .execute(async (trx) => {
-        result = await work(trx);
-        throw new Rollback();
-      });
-  } catch (error) {
-    if (!(error instanceof Rollback)) throw error;
-  }
-
-  return result as T;
-}
 
 /** Los ids y las cantidades que no pueden cambiar entre dos corridas. */
 async function snapshot(trx: Transaction<DB>): Promise<Record<string, number[] | number>> {

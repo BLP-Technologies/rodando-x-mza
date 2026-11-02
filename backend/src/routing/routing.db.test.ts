@@ -2,6 +2,7 @@ import { fileURLToPath } from 'node:url';
 import { sql, type Transaction } from 'kysely';
 import { afterAll, describe, expect, it } from 'vitest';
 import { getDb } from '../db/index.js';
+import { inRolledBackTransaction } from '../db/test-transaction.js';
 import type { DB } from '../db/types.js';
 import { importOsm } from '../importer/importer.run.js';
 import type { RoutePoint } from './routing.sql.js';
@@ -20,32 +21,6 @@ const ISLAND: [{ lon: number; lat: number }, { lon: number; lat: number }] = [
   { lon: -68.842028, lat: -32.89296 },
   { lon: -68.841028, lat: -32.89296 },
 ];
-
-/**
- * Señal para que la transacción de la prueba se deshaga: Kysely no tiene un "rollback"
- * explícito, y tirar dentro de `execute` es la forma documentada de pedirlo. Así el test
- * no deja un grafo de mentira en la base de desarrollo.
- */
-class Rollback extends Error {}
-
-async function inRolledBackTransaction<T>(
-  work: (trx: Transaction<DB>) => Promise<T>,
-): Promise<T> {
-  let result: T | undefined;
-
-  try {
-    await getDb()
-      .transaction()
-      .execute(async (trx) => {
-        result = await work(trx);
-        throw new Rollback();
-      });
-  } catch (error) {
-    if (!(error instanceof Rollback)) throw error;
-  }
-
-  return result as T;
-}
 
 /** Las coordenadas de los dos extremos de una vereda del grafo, para pedir esa arista. */
 async function firstSidewalk(
