@@ -25,7 +25,7 @@ esqueleto: qué calles existen, por dónde pasan, cómo se llaman y de qué clas
 Las veredas, las esquinas y los cruces los construye el importador sobre ese
 esqueleto.
 
-No decide el código del importador (#12, #33 y #34) ni la construcción y validación de
+No decide el código del importador (#12 y #33) ni la construcción y validación de
 la topología con una consulta real (#13). Tampoco el costo de las aristas, que vive en
 [09 §4.7](09-modelo-de-datos.md): acá se define la forma de la relación, no la
 fórmula. Los números de las tablas son un punto de partida y se revisan con el mapa
@@ -43,7 +43,7 @@ cuales entran 99: 49 `residential`, 21 `tertiary`, 19 `secondary`, 8 `primary`,
 1 `pedestrian` y 1 `living_street`.
 
 De esas 99, el importador excluye antes las **15 calzadas de boulevard**, que siguen
-pendientes en #34 (§3.6), y deriva el resto, peatonal incluida (§3.5). Los números de
+fuera del MVP (§3.6), y deriva el resto, peatonal incluida (§3.5). Los números de
 la corrida van al reporte (§4).
 
 Una `way` **no es una calle ni una cuadra**: puede empezar y terminar en la mitad de
@@ -204,7 +204,8 @@ nodos— la corrida lo reporta con el nodo y no inventa la vereda.
 **En la zona piloto la corrida las encuentra en estos cruces.** El cuadro original de
 esta sección partía del mapa con el boulevard y la peatonal ya derivados: cuatro T,
 todas contra Plaza Independencia, que ocupa 2,2 manzanas y corta las calles que la
-cruzarían. Con las `way` de la grilla —sin las 15 calzadas de boulevard, que son #34—
+cruzarían. Con las `way` de la grilla —sin las 15 calzadas de boulevard, que quedan
+fuera del MVP (§3.6)—
 la regla del grado 3 encuentra estas:
 
 | T | El brazo que termina |
@@ -218,15 +219,16 @@ la regla del grado 3 encuentra estas:
 
 Dos de las cuatro T del cuadro original —Mitre × Gerónimo Espejo y Mitre × Rivadavia—
 no aparecen acá porque el brazo que termina es Mitre, que es boulevard: sus calzadas
-están fuera de la grilla (§3.6) y esas T vuelven con ellas en #34. La cuarta, la
+están fuera del grafo (§3.6) y esas T no se derivan mientras el boulevard quede
+fuera. La cuarta, la
 peatonal, ya entra: sus dos puntas son T cuyo brazo que termina es ella y se derivan
 como tales, sin vereda de la boca (§3.5). Y quedan **tres nodos de tres brazos donde
 ninguno es el que termina** —una calle que se abre en Y, dos que se tocan en un
 punto—: ésos se reportan y no se derivan, porque no son ni un cruce ni una T.
 
 Un brazo que termina y es un boulevard tiene más líneas que dos: el lado opuesto
-recibe entonces más de dos nodos y más de una vereda de la boca. Eso se resuelve en
-#34, junto con esas vías.
+recibe entonces más de dos nodos y más de una vereda de la boca. Queda fuera del MVP
+junto con esas vías (§3.6).
 
 **Los tramos que desembocan en una intersección no soportada** quedan sin cortar en esa
 punta, así que no producen vereda de ese lado. En la zona piloto son los nueve brazos de
@@ -333,8 +335,8 @@ de la corrida aunque el cuadrante de las plazas termine en Perú; cualquier recu
 sobre "la zona" tiene que decir si cuenta el búfer, porque el búfer no es el piloto
 ([10 §3](10-datos-y-zona-piloto.md)).
 
-Con el umbral de 25 m las dos entran como boulevard y sus calzadas quedan fuera de la
-grilla hasta #34, que es lo que el umbral pide. Las dos están verificadas: Mitre por el
+Con el umbral de 25 m las dos entran como boulevard y sus calzadas **quedan fuera del
+grafo**. Las dos están verificadas: Mitre por el
 relevamiento de este documento y Belgrano mirando el mapa. Si alguna vez aparece un
 caso dudoso, la corrección es una excepción por calle, como las de los offsets (§3.4),
 y no un umbral distinto para todas.
@@ -343,6 +345,46 @@ y no un umbral distinto para todas.
 separadas por una mediana no se detectan como boulevard: el importador les deriva
 cuatro veredas, sin mediana, y la corrida lo reporta. Se corrige con una excepción por
 calle, como los offsets.
+
+**El boulevard queda fuera del MVP, y es una decisión de alcance, no un pendiente.**
+
+Qué cuesta: en el grafo no existen las veredas de Bartolomé Mitre ni su mediana. Las
+veredas de las calles que lo cruzan pasan de largo, así que **ninguna ruta se rompe ni
+se alarga de forma perceptible**: el desvío mayor es el ancho del boulevard. Lo que no
+se puede es caminar a lo largo de la avenida ni cruzarla por la mediana.
+
+Por qué no se resolvió. §3.4 supone **dos líneas por tramo**, una a cada lado del eje,
+y §3.2 **dos líneas por brazo**: de ahí salen las cuatro esquinas de un cruce común.
+Una mediana es una tercera línea que no sale de un tramo sino de dos, y con ella cada
+brazo del boulevard aporta tres líneas, así que esquinas y cruces hay que
+generalizarlos. Se probaron dos caminos y ninguno cerró:
+
+- **La mediana como tercera línea** —la que describe este apartado—: resuelve la
+  mediana como una línea más, pero al entrar las calzadas al grafo cambia la
+  clasificación de nodos de otras intersecciones, y aparecieron nodos perdidos en
+  esquinas sin relación con el boulevard.
+- **Las calzadas como dos calles comunes**, sin mediana: cada una con sus dos veredas y
+  la interior haciendo de mediana. Es aditivo en el código —sólo se deja de excluir— y
+  las veredas interiores quedan a 4 a 8 m una de otra, que es lo que da el offset real
+  de Mitre. También perdió nodos en intersecciones ajenas.
+
+El problema de fondo es el mismo en los dos: el importador deriva con **reglas
+globales** sobre el conjunto de vías, así que agregar quince calzadas no es un cambio
+local. Sin comparar nodo por nodo contra una línea base, "sólo agrega" no se puede
+afirmar.
+
+**Cómo se incorpora.** El camino elegido es una **herramienta de dibujado**: se dibujan
+las aristas y se asocian a cordones ya existentes, sin derivación. El modelo lo soporta
+sin cambios: la identidad es la coordenada del cordón y el par de nodos de la arista
+(§4), la escritura es upsert y nunca borra, así que una arista dibujada sobrevive a las
+reimportaciones, y `is_verified` distingue lo dibujado de lo derivado.
+
+Si alguna vez se retoma en el importador, el orden es: (1) corregir `angleBetween`, que
+hoy manda a "no soportada" a la T cuyo brazo perpendicular no reconoce —tres nodos de
+la línea base y tres más con las calzadas adentro, entre ellos las dos puntas de Mitre
+en Rivadavia—; (2) decidir qué pasa con el tramo de la calle que cruza entre las dos
+calzadas; (3) la derivación, con un portón de aceptación que compare nodos y cruces por
+esquina contra la línea base.
 
 ### 3.7 Los cruces
 
@@ -551,7 +593,7 @@ FROM pgr_connectedComponents(
 En el extracto da **10 componentes**, y eso no es un error: **dentro del polígono del
 piloto es una sola**, con los 110 nodos que caen adentro. Las otras nueve son de 2 a 10
 nodos y están todas en el búfer: retazos que mueren en el borde del extracto y veredas que
-hoy sólo se conectarían por una calzada de Belgrano, que entra con #34.
+hoy sólo se conectarían por una calzada de Belgrano, que queda fuera del grafo (§3.6).
 
 ### 5.2 La consulta de una ruta
 
@@ -615,6 +657,7 @@ JOIN walkable_edges edge ON edge.id = path.edge;
 | Caso | Por qué no entra | Qué se hace |
 | --- | --- | --- |
 | **Senderos de plazas** (153 `footway`) | No son paralelos a ninguna calle, no tienen cordón ni dato de accesibilidad, y el modelo no tiene "área caminable" | Fuera del MVP. El ruteo termina en el nodo del borde más cercano al destino. Se revisa cuando el relevamiento cubra los senderos |
+| **El boulevard** (Bartolomé Mitre, Manuel Belgrano) | Una mediana es una tercera línea que no sale de un tramo sino de dos, y las esquinas de §3.2 suponen dos líneas por brazo | Fuera del MVP, con la decisión y el plan en §3.6 |
 | **Plazas como destino interior** (`area=yes`) | Lo mismo: entrar y salir de una plaza necesita un área, no una arista entre cordones | Fuera del MVP, y documentado en la ficha de campo |
 | **Cruces a mitad de cuadra** (18 `footway=crossing`, 128 nodos `highway=crossing`) | Se derivan los cruces por brazo; los de OSM no alcanzan y mezclarlos deja intersecciones sin cruce | No se leen. Consecuencia explícita: **el grafo no tiene nodos a mitad de cuadra**; el caso de [09 §4.4](09-modelo-de-datos.md#44-el-modelo-en-la-calle) aparece sólo si el portal crea uno, y eso está fuera del MVP |
 | **Cordones por nodo** (`kerb`, 4 en el búfer) | Es accesibilidad, no geometría, y hay 4 en toda la zona | No se leen: `kerb_nodes.accessibility_level` nace en `NULL` y lo llena el relevamiento |
@@ -632,8 +675,7 @@ disparador para revisarla, y el disparador más frecuente es el relevamiento.
 ## 7. Lo que este documento no decide
 
 - **El importador.** El código que aplica §2 a §4, y su forma: script por lotes,
-  transacción, reporte. Son #12 (la grilla), #33 (los cruces) y #34 (el boulevard y la
-  peatonal).
+  transacción, reporte. Son #12 (la grilla) y #33 (los cruces).
 - **Los índices únicos** de §4 ya existen; #12 los usa para el upsert.
 - **El valor de los offsets** (§3.4) y del umbral de boulevard (§3.6). Son puntos de
   partida, y se ajustan mirando el mapa de la zona piloto.
