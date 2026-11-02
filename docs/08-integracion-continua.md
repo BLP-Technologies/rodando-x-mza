@@ -324,8 +324,8 @@ Tres diferencias con el del backend, todas porque el portal no tiene base de dat
 - **Un solo paso de verificación**: no hay `test` porque el portal todavía no tiene
   tests. Cuando los tenga, entra acá.
 
-**Cada job nuevo se agrega a la lista de checks requeridos del ruleset** (§6), o su
-resultado no bloquea nada. `Lint y build` está pendiente de agregar.
+**Cada job nuevo se agrega a la lista de checks requeridos del ruleset** (§6), o
+su resultado no bloquea nada. `Lint y build` ya está en esa lista.
 
 `mobile/` sigue el mismo camino cuando exista: `mobile.yml` con su `working-directory`,
 su lockfile en el cache y sus comandos.
