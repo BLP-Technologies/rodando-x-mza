@@ -96,6 +96,11 @@ elementos: el importador no inventa un nivel
 ([09 §4.1](09-modelo-de-datos.md#41-enums)). Un grafo recién importado dice "no sé"
 en todas partes, que es la verdad.
 
+Como no escribe ninguna de las dos columnas, el importador **no compite** en la regla de
+precedencia entre el relevamiento y el portal
+([12 §8.2](12-relevamiento-de-accesibilidad.md)): una reimportación no puede borrar lo
+que alguien relevó.
+
 ## 3. Cómo se deriva
 
 ### 3.1 Las líneas caminables
