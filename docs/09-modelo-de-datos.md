@@ -107,6 +107,14 @@ visita y la imagen no se distinguen en la base —`is_verified` responde "¿algu
 comprobó esto?"—; cuál de las dos fue, y de cuándo es la imagen, vive en la planilla
 del relevamiento.
 
+**`is_verified` es además la columna que resuelve quién gana entre dos escrituras.** La
+carga del relevamiento no pisa un elemento verificado salvo que se fuerce, y la edición
+del portal lo pisa porque es el forzado explícito: la regla lee esta columna y no otra
+([12 §8.2](12-relevamiento-de-accesibilidad.md)). El MVP no agrega una columna de
+procedencia ni de autor: lo que pisó una carga forzada queda en el reporte de la corrida.
+Si el portal tiene que mostrar autoría, son `verified_at` y `verified_by`, y se deciden
+con #49.
+
 **`report_status` no incluye la baja.** La baja de un reporte es `deleted_at`, no un
 estado: si `DELETED` fuera un valor del enum, habría dos fuentes de verdad para "este
 reporte está borrado". Los diagramas de estados sí muestran la baja como estado final

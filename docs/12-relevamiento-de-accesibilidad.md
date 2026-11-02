@@ -20,6 +20,7 @@ Este documento responde:
 - **Con qué instrumento**, y qué columnas tiene (§6).
 - **Qué no es fuente** de accesibilidad (§7).
 - **Cómo** el dato llega a la base (§8).
+- **Quién gana** cuando dos escrituras tocan el mismo elemento (§8.2).
 
 El importador aporta **dónde** está cada vereda; el relevamiento aporta **cómo está**.
 Son dos fuentes distintas para dos mitades del dato, y conviene no confundirlas: una
@@ -196,6 +197,9 @@ tienen columna en la base. Son el registro del operativo y sobreviven ahí: con 
 que pueden salir de una imagen de hace años, "cómo se obtuvo" y "de cuándo es" son la
 forma de saber en qué confiar y qué volver a mirar.
 
+`verificacion` es además lo que sostiene que `is_verified` signifique algo: la carga no
+acepta una fila con nivel y sin ella (§8.2).
+
 **La geometría no la produce el relevamiento**: la deriva el importador
 ([11 §3](11-grafo-peatonal.md)). Pedirla otra vez duplicaría el dato y garantizaría que
 las dos versiones discrepen.
@@ -218,6 +222,8 @@ El dato existe en la planilla y tiene que llegar a `sidewalks.accessibility_leve
 `kerb_nodes.accessibility_level`, `is_verified` y `obstacles`. El mecanismo —semilla
 SQL, importación de la planilla, o pantalla del portal— y quién lo usa es #14.
 
+### 8.1 El emparejamiento
+
 Lo que este documento sí fija es que **el relevamiento no espera al importador**. Su
 unidad —el tramo entre dos esquinas— es la misma que la del grafo, así que puede
 empezar escribiendo la etiqueta en palabras. Cuando exista el grafo, ese texto se
@@ -230,9 +236,81 @@ coinciden con OSM (`Av. España` es `España`; `General Espejo` es `Gral. Gerón
 Espejo`). La forma canónica es la de OSM, que es de donde sale la geometría
 ([11 §3.8](11-grafo-peatonal.md)).
 
+### 8.2 La precedencia: lo relevado no se pisa
+
+Dos caminos escriben `accessibility_level` sobre el mismo elemento: la carga del
+relevamiento (#14) y la edición desde el portal (#49, C014). Sin regla, gana la última
+escritura por accidente y nadie puede decir por qué un elemento quedó como quedó. El
+importador no participa: no escribe el nivel ni `is_verified`, que conservan su valor de
+import ([11 §2](11-grafo-peatonal.md)).
+
+| Escritor | Escribe el nivel | Deja `is_verified` | Regla |
+| --- | --- | --- | --- |
+| Import de OpenStreetMap | no | no lo toca | no participa |
+| Carga del relevamiento | sí | verdadero | **saltea lo verificado** |
+| Portal (C014) | sí, incluido el `NULL` de "sin dato" | verdadero | **fuerza por definición** |
+
+**La regla.** Un elemento con `is_verified` en verdadero **no se pisa**. `is_verified`
+quiere decir que alguien del equipo miró el elemento (§5): no es un casillero vacío, y
+una planilla no puede borrar ese trabajo sin dejar rastro. La carga escribe la fila
+cuando el elemento no está verificado, y la saltea cuando lo está.
+
+**La edición del portal no es una excepción: es el forzado.** Un moderador mirando el
+elemento y guardando el nivel *es* el acto explícito, y la edición ya deja `is_verified`
+en verdadero. Por eso el portal no consulta la regla ni pide una confirmación aparte por
+estar pisando dato relevado: escribir ahí es responder por el cambio.
+
+**Cómo se fuerza la carga.** Con `--force` en el comando de carga, que aplica todas las
+filas aunque el elemento esté verificado y deja en el reporte el nivel que pisó. Forzar
+es una decisión sobre la corrida —"esta planilla es más nueva que lo que hay en la
+base"— y no sobre una fila, así que la planilla no gana una columna de forzado: una fila
+suelta se corrige desde el portal, que es donde una persona mira el elemento.
+
+**Qué reporta la carga.** Cada fila cae en una sola categoría, y el reporte da el conteo
+y la lista de cada una:
+
+| Categoría | Qué pasó | ¿Es error? |
+| --- | --- | --- |
+| aplicada | se escribió el nivel e `is_verified` en verdadero | no |
+| ya estaba | el elemento está verificado y ya tiene ese nivel; no se escribe nada | no |
+| salteada | el elemento está verificado y tiene otro nivel | no |
+| sin nivel | la fila no trae nivel, así que no escribe el elemento | no |
+| sin match | la etiqueta no emparejó ningún elemento (§8.1) y no se escribe nada | **sí** |
+
+Correr la misma planilla dos veces da `aplicada: 0`: la segunda corrida cae en *ya
+estaba*. *Salteada* tampoco es un error —es la regla trabajando— y la carga termina
+bien, pero no en silencio: el conteo va en el resumen, y cada fila salteada se lista con
+el nivel de la base y el de la planilla, para que se vea qué se estaba por pisar. Un
+`NULL` en la base cuenta como un valor distinto. Y la fila salteada se saltea **entera,
+obstáculos incluidos**: es una sola observación, y la que perdió la precedencia no sirve
+tampoco para crear obstáculos. Si esa fila traía un obstáculo nuevo, entra por el portal.
+
+**Una fila con nivel y sin `verificacion` es un error de fila, y no se escribe.**
+`is_verified` es lo que le da sentido a toda esta regla: escribirlo en verdadero a partir
+de una fila que no dice cómo se obtuvo sería inventar la procedencia.
+
+### 8.3 Lo que la regla no resuelve
+
+La regla protege el trabajo hecho, no la frescura del dato. La base no guarda **cuándo**
+se miró un elemento —la fecha vive en la planilla (§6)—, así que no puede decidir cuál de
+dos observaciones es más nueva: una planilla de hace un año, forzada, gana sobre una
+edición del portal de ayer. Para el MVP se acepta, y el forzado queda en el reporte.
+
+**No se agrega ninguna columna.** `is_verified` es todo lo que la regla necesita leer, y
+la procedencia de una corrida vive en su reporte, igual que la del importador
+([11 §4.1](11-grafo-peatonal.md)): un artefacto que se lee, no una columna que hay que
+mantener. Si el portal alguna vez tiene que contestar "quién cambió esto y cuándo", son
+dos columnas —`verified_at timestamptz` y `verified_by integer` con FK a `users`, en
+`NULL` para lo que venga de la planilla, que trae un nombre y no un id— y se deciden con
+#49, cuando exista la pantalla que las usa. Una migración es barata hasta ese día.
+
 ## 9. Lo que este documento no decide
 
-- **El mecanismo de carga** y quién lo opera: #14.
+- **El mecanismo de carga** y quién lo opera: #14. Su precedencia frente al portal ya
+  está fijada (§8.2); lo abierto es con qué comando o pantalla se carga.
+- **La autoría de un cambio de nivel.** El MVP no guarda quién lo cambió ni cuándo
+  (§8.3): lo que pisó una carga forzada queda en el reporte de la corrida. Vuelve con
+  #49 si el portal tiene que mostrar autoría.
 - **El valor de los factores de costo** de cada nivel: es calibración, y vive en
   [09 §4.7](09-modelo-de-datos.md).
 - **Los umbrales físicos** (ancho, pendiente, escalón). Hoy no existen porque no se
@@ -242,7 +320,7 @@ Espejo`). La forma canónica es la de OSM, que es de donde sale la geometría
   "¿alguien lo miró?"; la fuente y la antigüedad viven en la planilla (§6). Si alguna
   vez tiene que llegar a la base, es una columna con un enum de dos valores, no otro
   booleano.
-- **La normalización de los nombres de calle**: se resuelve al emparejar (§8).
+- **La normalización de los nombres de calle**: se resuelve al emparejar (§8.1).
 
 ## 10. Documentos relacionados
 
