@@ -1,36 +1,55 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Portal de moderación
 
-## Getting Started
+Aplicación Next.js que muestra el grafo peatonal de accesibilidad del microcentro
+de Mendoza y, más adelante, permite editarlo (C012–C014). Hoy hace dos cosas:
+dibuja lo que devuelve `GET /api/graph` y muestra las propiedades del elemento
+que se selecciona, con un moderador simulado.
 
-First, run the development server:
+Los pasos completos —base, backend y portal— están en
+[docs/05-desarrollo.md](../docs/05-desarrollo.md) §4. Las decisiones del portal
+—sesión, cliente tipado, mapa— en
+[docs/16-el-portal.md](../docs/16-el-portal.md).
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## Requisitos
+
+- Node.js 22 y pnpm 12.4.1.
+- El backend levantado en `http://localhost:3001`, con `CORS_ORIGINS` que incluya
+  `http://localhost:3000` ([docs/15](../docs/15-integracion-con-el-cliente.md) §3).
+
+## Puesta en marcha
+
+```sh
+cp .env.example .env.local   # NEXT_PUBLIC_API_URL=http://localhost:3001
+pnpm install
+pnpm dev                     # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+La dirección de la API es configuración: sale de `NEXT_PUBLIC_API_URL`
+([docs/15](../docs/15-integracion-con-el-cliente.md) §3). Si falta, el portal usa el
+backend de desarrollo, así que el build de producción tiene que definirla: Next
+inlinea las `NEXT_PUBLIC_*` al compilar
+([docs/16](../docs/16-el-portal.md) §6).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Comandos
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Comando | Qué hace |
+| --- | --- |
+| `pnpm dev` | desarrollo con recarga automática |
+| `pnpm build` | build de producción; incluye el chequeo de tipos |
+| `pnpm start` | sirve el build de `pnpm build` |
+| `pnpm lint` | ESLint |
+| `pnpm api:types` | regenera `src/api/schema.d.ts` desde la API levantada |
 
-## Learn More
+## Tipos de la API
 
-To learn more about Next.js, take a look at the following resources:
+`src/api/schema.d.ts` se genera desde `/api/openapi.json` y **se commitea**: el
+build de CI no tiene un backend levantado. No se edita a mano; cuando cambia un
+esquema del backend, con el backend arriba:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```sh
+pnpm api:types
+git add src/api/schema.d.ts
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Si algo está mal en esos tipos, el error está en el esquema del backend: se
+corrige allá y se regenera ([docs/16](../docs/16-el-portal.md)).

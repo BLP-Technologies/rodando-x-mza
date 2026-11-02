@@ -98,7 +98,16 @@ backend/src/
 └── auth/         # una funcionalidad (p. ej. C001/C002)
 ```
 
-Regla para decidir dónde va un archivo:
+```
+portal/src/
+├── app/          # rutas y layouts: orquestan, no implementan
+├── api/          # cliente HTTP tipado y contrato generado de la API
+├── map/          # una funcionalidad: el mapa del grafo
+├── session/      # de dónde sale la sesión del portal
+└── config.ts     # valores por entorno y la caja del piloto
+```
+
+La misma regla decide el destino en las dos aplicaciones:
 
 | Pregunta | Destino |
 | --- | --- |
@@ -109,6 +118,10 @@ Regla para decidir dónde va un archivo:
 Dentro de una funcionalidad, el rol del archivo se marca en el nombre:
 `auth.router.ts`, `auth.schemas.ts`, `auth.service.ts`, `auth.repository.ts`. El
 test va junto al archivo que prueba (`auth.router.test.ts`).
+
+En el portal, lo que no es una funcionalidad se llama por lo que hace —`api/`,
+`session/`— y los componentes de `app/` no implementan: montan. El detalle de la
+estructura del portal está en [16 §3](16-el-portal.md).
 
 ## 4. TypeScript y calidad
 

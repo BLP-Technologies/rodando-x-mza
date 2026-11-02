@@ -18,7 +18,7 @@ decisiones de stack ni la estructura del código: eso está en
 
 | Herramienta | Versión | Para qué |
 | --- | --- | --- |
-| Node.js | 22 LTS | correr el backend |
+| Node.js | 22 LTS | correr el backend y el portal |
 | pnpm | 12.4.1 (fijada en `packageManager`) | gestor de paquetes |
 | Git | — | clonar y versionar |
 | Docker (con Compose v2) | — | levantar la base |
@@ -36,7 +36,8 @@ instalar el plugin v2 en lugar del viejo.
 | Debian / Ubuntu / Mint | Docker Engine + plugin Compose | el paquete `docker-compose` de la distro suele ser v1; conviene el plugin v2 |
 | Otros Linux | Docker Engine + plugin Compose | si se prefiere podman, funciona como reemplazo y los comandos son los mismos |
 
-Puertos que deben estar libres: **5432** (base de datos) y **3001** (API).
+Puertos que deben estar libres: **5432** (base de datos), **3001** (API) y
+**3000** (portal).
 
 > Los comandos de esta guía están escritos para una terminal tipo Unix (bash). En
 > Windows, WSL2 la provee; en PowerShell hay que tener en cuenta las diferencias (por
@@ -85,6 +86,12 @@ cp .env.example .env       # el .env no se versiona; los valores por defecto
                            # ya coinciden con el compose
 pnpm migrate               # aplica las migraciones de la base
 pnpm dev                   # API en http://localhost:3001
+
+# 3) Portal, en otra terminal
+cd ../portal
+pnpm install
+cp .env.example .env.local # NEXT_PUBLIC_API_URL=http://localhost:3001
+pnpm dev                   # portal en http://localhost:3000
 ```
 
 La base se **aprovisiona sola**: la primera vez que se inicializa el volumen, el
@@ -93,6 +100,12 @@ contenedor corre `infra/initdb/`, que habilita las extensiones `postgis` y
 
 `pnpm dev` y `pnpm migrate` toman las variables de `.env` automáticamente. En
 PowerShell, el `cp` del paso 3 equivale a `Copy-Item .env.example .env`.
+
+El portal necesita el backend arriba y el origen `http://localhost:3000` en
+`CORS_ORIGINS` —el `.env.example` del backend ya lo trae—: sin ese encabezado el
+navegador bloquea la respuesta del grafo aunque la API conteste `200`
+([15 §3](15-integracion-con-el-cliente.md)). Qué muestra y cómo está armado el
+portal es de [16](16-el-portal.md).
 
 ## 5. Reiniciar la base desde cero
 
@@ -217,6 +230,15 @@ Desde `backend/`:
 | `pnpm db:types` | regenera `src/db/types.ts` desde la base (requiere la base levantada) |
 | `pnpm db:types:verify` | falla si los tipos generados no coinciden con el esquema |
 
+Desde `portal/`:
+
+| Comando | Qué hace |
+| --- | --- |
+| `pnpm dev` | portal con recarga automática, en `http://localhost:3000` |
+| `pnpm build` | build de producción; incluye el chequeo de tipos |
+| `pnpm lint` | ESLint |
+| `pnpm api:types` | regenera `src/api/schema.d.ts` desde la API levantada (ver abajo) |
+
 Base de datos, desde `infra/`:
 
 | Comando | Qué hace |
@@ -227,6 +249,23 @@ Base de datos, desde `infra/`:
 | `docker compose down` | detiene el contenedor (conserva los datos) |
 | `docker compose down -v` | además borra los datos: base de cero |
 | `docker compose exec db psql -U rodando -d rodando` | abre `psql` en la base (§6) |
+
+### Regenerar los tipos de la API
+
+`portal/src/api/schema.d.ts` no se escribe a mano: lo genera `openapi-typescript`
+leyendo `GET /api/openapi.json`, y se versiona para que el build del portal
+funcione sin un backend levantado (el CI no tiene uno). Después de tocar un
+esquema del backend:
+
+```sh
+# con el backend arriba
+cd portal
+pnpm api:types
+```
+
+Y el archivo regenerado se commitea junto con el cambio del backend. No se edita
+a mano: si algo está mal ahí, el error está en el esquema Zod
+([16 §6](16-el-portal.md)).
 
 ### Regenerar los tipos de la base
 
@@ -287,6 +326,7 @@ se moviera al dispositivo. Ahí se evalúa un tipo con marca o un parser en el d
 | La app falla porque falta la extensión `postgis` o `pgrouting` | el volumen se creó antes de agregar `infra/initdb/`. Recrearla con `docker compose down -v` y `docker compose up -d` |
 | `pnpm migrate` falla con `type "geometry" does not exist` | la base no tiene PostGIS habilitado. Pasa en una base creada a mano con `createdb`, porque las extensiones las pone `infra/initdb/` al inicializar el volumen. Recrear la base (§5) o correr `CREATE EXTENSION postgis; CREATE EXTENSION pgrouting;` en ella |
 | En Fedora/RHEL el contenedor de la base no arranca y el log dice `Permission denied` sobre `/docker-entrypoint-initdb.d` | SELinux bloquea el bind mount. El montaje debe llevar el flag `z` (`:ro,z`, ya está en el compose); no quitarlo |
+| El portal carga pero el mapa queda vacío y el cartel dice que no se pudo conectar con la API | el backend no está levantado, o `CORS_ORIGINS` no incluye el origen del portal (`http://localhost:3000`). El bloqueo de CORS no se anuncia como CORS en la consola del navegador ([15 §3](15-integracion-con-el-cliente.md)) |
 
 ## 10. Documentos relacionados
 
@@ -298,5 +338,7 @@ se moviera al dispositivo. Ahí se evalúa un tipo con marca o un parser en el d
 - [06-windows-wsl.md](06-windows-wsl.md): trabajar desde Windows con WSL2.
 - [08-integracion-continua.md](08-integracion-continua.md): la verificación que corre
   en cada pull request, con los mismos comandos de §8.
-- [09-modelo-de-datos.md](09-modelo-de-datos.md): convenciones del esquema y de las
-  migraciones que aplica §4.
+- [09-modelo-de-datos.md](09-modelo-de-datos.md): convenciones del esquema y de
+  las migraciones que aplica §4.
+- [16-el-portal.md](16-el-portal.md): el portal de moderación, su estructura y
+  cómo se corre.
