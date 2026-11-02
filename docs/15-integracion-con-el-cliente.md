@@ -10,7 +10,7 @@
 Responde:
 
 - **De dónde** saca el cliente el contrato y con qué lo convierte en código (§2).
-- **A dónde** apunta, sin hardcodear nada (§3).
+- **A dónde** apunta y **qué orígenes** pueden llamarla, sin hardcodear nada (§3).
 - **Qué puede hacer** un cliente hoy y qué todavía no (§4).
 - **Qué no es obvio** del contrato de ruteo y se programa mal en la primera pasada (§5).
 - **Qué hace** el cliente con un error (§6) y con el mapa (§7).
@@ -44,9 +44,38 @@ Dos cosas prácticas de desarrollo que no son del contrato pero se pagan igual:
   backend. En desarrollo hay que apuntar a la máquina del equipo en la red local; en Expo,
   la opción de host de la LAN resuelve el caso. La dirección concreta depende de cada red y
   no se documenta acá.
-- **El backend todavía no responde CORS.** Un cliente nativo no lo necesita —el `fetch` de
-  React Native no lo aplica—, pero si el cliente corre en un navegador, las peticiones
-  fallan sin ese encabezado y el error no menciona CORS por ningún lado. Está en §8.
+- **Un cliente de navegador necesita CORS, y el backend lo resuelve con una allowlist.**
+  Sin `Access-Control-Allow-Origin` el navegador bloquea la respuesta aunque la API haya
+  contestado `200`. Cómo se configura está en el resto de esta sección.
+
+### CORS: qué orígenes pueden llamar
+
+El backend emite los encabezados CORS **solo** para los orígenes de una allowlist
+explícita, la variable `CORS_ORIGINS` (`backend/.env.example`): orígenes separados por
+comas, sin ruta. El `.env.example` trae el portal en desarrollo
+(`http://localhost:3000`); en el servidor va el origen real
+([03](03-despliegue-y-operacion.md) §7). Sin valor, no se permite ninguno.
+
+El middleware vive en `backend/src/http/cors.ts`: la política es chica y propia, así que
+no se usa el paquete `cors`. Las reglas, que son las que un cliente percibe:
+
+- **Se responde el origen exacto**, nunca `*`, y toda respuesta lleva `Vary: Origin` para
+  que ninguna caché intermedia la reutilice con otro origen.
+- **Un origen fuera de la allowlist no rompe la API**: no se emite ningún encabezado y el
+  pedido se atiende igual, con su `200` o su error normal. No hay `403`: el bloqueo lo
+  hace el navegador, y el mensaje que deja en la consola **no menciona CORS**. Cuando un
+  cliente de navegador "no recibe nada" y la API sí responde, la causa más probable es
+  un origen que falta en `CORS_ORIGINS`.
+- **Sin credenciales.** No se emite `Access-Control-Allow-Credentials`: la API todavía no
+  tiene autenticación (§4). Mandar cookies o tokens desde el navegador es una decisión
+  aparte, y llegado el caso se toma sobre esta misma allowlist, más estricta.
+- **El preflight `OPTIONS` se responde antes del ruteo**, con `204` sin cuerpo,
+  `GET, POST, OPTIONS` como métodos, `Content-Type` como único encabezado permitido y
+  `Access-Control-Max-Age` para que el navegador cachee el resultado.
+- **La comparación normaliza el origen**: mayúsculas y barra final no importan, así que
+  `http://localhost:3000/` y `http://localhost:3000` son el mismo origen. Una entrada con
+  ruta o query no matchea nunca, así que el backend la rechaza al arrancar en vez de
+  dejar una configuración que no funciona.
 
 ## 4. Qué puede hacer un cliente hoy
 
@@ -56,6 +85,7 @@ Dos cosas prácticas de desarrollo que no son del contrato pero se pagan igual:
 | Leer el grafo —veredas, cruces, cordones— de un área | `GET /api/graph?bbox=…` ([14](14-la-api-del-grafo.md)) |
 | Leer el contrato | `GET /api/openapi.json`, o la página navegable en `GET /api/docs` |
 | Saber si el servicio está arriba | `GET /api/health`, `GET /api/health/ready` |
+| Llamar a la API desde un navegador | Los orígenes de `CORS_ORIGINS`, sin credenciales (§3) |
 | Registrarse, iniciar sesión | No existe ([07 §3](07-plan-de-trabajo.md), Fase 3) |
 | Guardar rutas y lugares frecuentes | No existe (C006 a C009) |
 | Reportar un obstáculo | No existe (C010) |
@@ -101,9 +131,11 @@ una cortesía: los datos son ODbL 1.0 y la atribución es obligatoria
 ## 8. Lo que este documento no decide
 
 - **El contrato de cada caso de uso.** Vive en su documento; hoy [13](13-api-de-ruteo.md).
-- **CORS.** Si un cliente corre en un navegador, hace falta decidir qué orígenes se permiten
-  y quién los configura. Hoy no hay ningún cliente web y por eso no está resuelto; el
-  disparador es el primero que lo sea.
+- **Qué orígenes se permiten en cada entorno, y con qué credenciales.** La allowlist y
+  su funcionamiento son de este documento (§3); los valores concretos son configuración
+  de despliegue ([03](03-despliegue-y-operacion.md) §7), y el día que haya autenticación,
+  lo que el navegador manda para identificarse es la Fase 3
+  ([07](07-plan-de-trabajo.md)).
 - **La autenticación.** Cómo se registra, cómo se guarda el token y cómo lo manda el cliente
   es la Fase 3.
 - **La versión de la API.** No hay `/v1`: el contrato cambia y los clientes se regeneran. Si
