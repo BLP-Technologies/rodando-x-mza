@@ -75,10 +75,6 @@ export function Login({ onVolver, onLogin, onRegistro }: PantallaLogin) {
               <Text style={styles.title} accessibilityRole="header">
                 Iniciar sesión
               </Text>
-              <Text style={styles.description}>
-                Ingresá con el correo de la cuenta simulada creada en este
-                dispositivo
-              </Text>
             </View>
             <View style={styles.fieldGroup}>
               <Text style={styles.label}>Email</Text>

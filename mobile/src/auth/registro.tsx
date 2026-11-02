@@ -19,7 +19,7 @@ export type DatosRegistro = {
 
 interface PantallaRegistro {
   onVolver: () => void;
-  onRegistro: (datos: DatosRegistro) => void;
+  onRegistro: (datos: DatosRegistro)  => Promise<string | null>;
   onLogin: () => void;
 }
 
@@ -60,13 +60,14 @@ export function Registro({ onVolver, onRegistro, onLogin }: PantallaRegistro) {
   const passwordRef = useRef<TextInput>(null);
   const confirmarRef = useRef<TextInput>(null);
 
-  const handleRegistro = () => {
+  const handleRegistro = async() => {
     const nombreLimpio = nombre.trim();
     const emailLimpio = email.trim().toLowerCase();
     const mensaje = validar(nombreLimpio, emailLimpio, password, confirmar);
     setError(mensaje);
     if (mensaje === null) {
-      onRegistro({ nombre: nombreLimpio, email: emailLimpio, password });
+      const resultado = await onRegistro({ nombre: nombreLimpio, email: emailLimpio, password });
+      setError(resultado);
     }
   };
 
@@ -94,10 +95,6 @@ export function Registro({ onVolver, onRegistro, onLogin }: PantallaRegistro) {
               <Text style={styles.tagline}>TU CIUDAD, A TU MANERA</Text>
               <Text style={styles.title} accessibilityRole="header">
                 Crear Cuenta
-              </Text>
-              <Text style={styles.description}>
-                Esta cuenta es simulada y se guarda únicamente en este
-                dispositivo.
               </Text>
             </View>
             <View style={styles.fieldGroup}>
@@ -167,7 +164,7 @@ export function Registro({ onVolver, onRegistro, onLogin }: PantallaRegistro) {
                 autoComplete="new-password"
                 textContentType="newPassword"
                 returnKeyType="done"
-                onSubmitEditing={handleRegistro}
+                onSubmitEditing={() => handleRegistro()}
               />
             </View>
             {error !== null && (

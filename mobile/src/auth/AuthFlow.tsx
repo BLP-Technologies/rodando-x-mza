@@ -3,44 +3,47 @@ import { StatusBar } from 'expo-status-bar';
 import { Bienvenida } from './bienvenida';
 import { Registro, type DatosRegistro } from './registro';
 import { Login, type DatosLogin } from './login';
-import { guardarCuenta, leerCuenta } from './almacenamiento';
 import { useAuth } from './AuthContext';
+import * as authService from './authService';
 
 type PantallaActual = 'bienvenida' | 'registro' | 'login';
 
-const MENSAJE_ERROR = 'El email o la contraseña son incorrectos';
 
-// Flujo previo a tener sesión: Bienvenida, Registro y Login.
-// Al iniciar sesión o entrar como invitado, App pasa a mostrar la navegación principal.
-export function AuthFlow() {
+function mensajeDeError(error: unknown): string {
+  if (error instanceof Error && error.message === 'CONFLICT') {
+    return 'Ya existe una cuenta con ese correo';
+  }
+  if (error instanceof Error && error.message === 'UNAUTHENTICATED') {
+    return 'El correo o la contraseña son incorrectos';
+  }
+  return 'Error inesperado';
+}
+
+
+export function AuthFlow(){
   const { iniciarSesion, entrarComoInvitado } = useAuth();
   const [pantallaActual, setPantallaActual] = useState<PantallaActual>('bienvenida');
 
-  const handleRegistro = async (datos: DatosRegistro) => {
+  const handleRegistro = async (datos: DatosRegistro): Promise<string | null> => {
     try {
-      await guardarCuenta(datos);
+      await authService.registrarCuenta(datos);
       setPantallaActual('login');
+      return null
     } catch (error) {
       console.log('Error al guardar la cuenta', error);
+      return mensajeDeError(error);
     }
   };
 
-  // Devuelve el mensaje de error a mostrar en Login, o null si el inicio fue correcto
+  
   const handleLogin = async (datos: DatosLogin): Promise<string | null> => {
     try {
-      const cuenta = await leerCuenta();
-      if (
-        cuenta === null ||
-        cuenta.email !== datos.email ||
-        cuenta.password !== datos.password
-      ) {
-        return MENSAJE_ERROR;
-      }
-      iniciarSesion({ nombre: cuenta.nombre, email: cuenta.email });
+      const cuenta = await authService.iniciarSesion(datos);
+      iniciarSesion(cuenta);
       return null;
     } catch (error) {
       console.log('Error al iniciar sesión', error);
-      return MENSAJE_ERROR;
+      return mensajeDeError(error);
     }
   };
 
