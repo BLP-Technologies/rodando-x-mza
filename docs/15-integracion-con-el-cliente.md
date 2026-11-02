@@ -53,9 +53,9 @@ Dos cosas prácticas de desarrollo que no son del contrato pero se pagan igual:
 | Capacidad | Estado |
 | --- | --- |
 | Consultar un recorrido accesible | `POST /api/routes/calculate` ([13](13-api-de-ruteo.md)) |
-| Leer el contrato | `GET /api/openapi.json` |
+| Leer el grafo —veredas, cruces, cordones— de un área | `GET /api/graph?bbox=…` ([14](14-la-api-del-grafo.md)) |
+| Leer el contrato | `GET /api/openapi.json`, o la página navegable en `GET /api/docs` |
 | Saber si el servicio está arriba | `GET /api/health`, `GET /api/health/ready` |
-| Leer el grafo —veredas, cruces, cordones— | No existe todavía (#45) |
 | Registrarse, iniciar sesión | No existe ([07 §3](07-plan-de-trabajo.md), Fase 3) |
 | Guardar rutas y lugares frecuentes | No existe (C006 a C009) |
 | Reportar un obstáculo | No existe (C010) |
