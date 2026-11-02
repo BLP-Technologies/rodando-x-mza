@@ -25,18 +25,18 @@ El contrato completo está en **`GET /api/openapi.json`**: lo genera el backend 
 esquemas Zod, así que no puede desincronizarse del código que valida
 ([02 §6](02-stack-y-estructura.md)).
 
-Un cliente genera su cliente HTTP tipado a partir de ese documento y **no escribe los tipos
-a mano**. Cuando cambia un esquema del backend, el cliente se regenera: es el único paso
-manual, y conviene tenerlo como comando del proyecto de cada cliente.
+Un cliente genera su cliente HTTP tipado a partir de ese documento y **no escribe los
+tipos a mano**. Cuando cambia un esquema del backend, el cliente se regenera: es el único
+paso manual, y conviene tenerlo como comando del proyecto de cada cliente.
 
-El contrato también se puede leer como página navegable en **`GET /api/docs`**, sin abrir el
-JSON.
+El contrato también se puede leer como página navegable en **`GET /api/docs`**, sin
+abrir el JSON.
 
 ## 3. La URL es configuración
 
-La dirección de la API **nunca va en el código**: es un valor de configuración del cliente,
-con un valor de desarrollo y un valor de despliegue. Esto no es una preferencia de estilo;
-es la diferencia entre cambiar una variable y recomponer una app.
+La dirección de la API **nunca va en el código**: es un valor de configuración del
+cliente, con un valor de desarrollo y un valor de despliegue. Esto no es una preferencia
+de estilo; es la diferencia entre cambiar una variable y recomponer una app.
 
 Dos cosas prácticas de desarrollo que no son del contrato pero se pagan igual:
 

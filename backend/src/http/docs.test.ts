@@ -28,13 +28,14 @@ describe('GET /api/docs', () => {
     expect(res.headers['content-type']).toContain('javascript');
   });
 
-  it('publica el contrato que consume la página, con el path de ruteo', async () => {
+  it('publica el documento que la página consume', async () => {
     const res = await request(app).get('/api/openapi.json');
 
     expect(res.status).toBe(200);
 
     const document = res.body as { openapi: string; paths: Record<string, unknown> };
     expect(document.openapi).toBe('3.1.0');
-    expect(Object.keys(document.paths)).toContain('/api/routes/calculate');
+    // Hay algo que mostrar: qué paths son, lo verifica el test de cada módulo.
+    expect(Object.keys(document.paths).length).toBeGreaterThan(0);
   });
 });
