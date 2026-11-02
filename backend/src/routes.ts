@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { graphRouter } from './graph/graph.routes.js';
 import { healthRouter } from './http/health.js';
 import { openApiDocument } from './openapi.js';
 import { routingRouter } from './routing/routing.routes.js';
@@ -7,6 +8,7 @@ import { routingRouter } from './routing/routing.routes.js';
 export const apiRouter = Router();
 
 apiRouter.use('/health', healthRouter);
+apiRouter.use('/graph', graphRouter);
 apiRouter.use('/routes', routingRouter);
 
 /**

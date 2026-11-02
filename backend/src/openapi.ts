@@ -1,4 +1,6 @@
 import { OpenAPIRegistry, OpenApiGeneratorV31 } from '@asteasolutions/zod-to-openapi';
+import { z } from 'zod';
+import { bboxParamSchema, graphResponseSchema } from './graph/graph.schemas.js';
 import { errorResponseSchema } from './http/error-response.js';
 import { routeRequestSchema, routeResponseSchema } from './routing/routing.schemas.js';
 
@@ -10,6 +12,38 @@ import { routeRequestSchema, routeResponseSchema } from './routing/routing.schem
  * genera al importar este módulo: es una constante, no un cálculo por pedido.
  */
 const registry = new OpenAPIRegistry();
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/graph',
+  summary: 'Leer el grafo de un área',
+  description:
+    'Devuelve las veredas, los cruces y los cordones que intersecan el bbox, como una ' +
+    'FeatureCollection de GeoJSON. Sólo lee: no escribe ni cachea nada. Si el área tiene ' +
+    'más de 2000 elementos, devuelve las primeras y lo avisa con `truncated: true`. ' +
+    'Ver docs/14-la-api-del-grafo.md.',
+  request: {
+    query: z.object({ bbox: bboxParamSchema }),
+  },
+  responses: {
+    200: {
+      description:
+        'Los elementos del área. Una colección vacía es una respuesta válida: esa zona ' +
+        'no tiene grafo.',
+      content: { 'application/json': { schema: graphResponseSchema } },
+    },
+    400: {
+      description:
+        'El `bbox` no cumple el contrato: falta, no son cuatro números, está fuera de ' +
+        'rango o tiene las esquinas invertidas.',
+      content: { 'application/json': { schema: errorResponseSchema } },
+    },
+    500: {
+      description: 'Error no esperado.',
+      content: { 'application/json': { schema: errorResponseSchema } },
+    },
+  },
+});
 
 registry.registerPath({
   method: 'post',

@@ -694,6 +694,8 @@ disparador para revisarla, y el disparador más frecuente es el relevamiento.
 - [12-relevamiento-de-accesibilidad.md](12-relevamiento-de-accesibilidad.md): de dónde
   sale la accesibilidad de estas veredas y esquinas.
 - [13-api-de-ruteo.md](13-api-de-ruteo.md): el contrato de la consulta de un recorrido.
+- [14-la-api-del-grafo.md](14-la-api-del-grafo.md): el contrato de la lectura del grafo
+  por área, que es lo que dibuja el portal.
 - [01-diagramas.md](01-diagramas.md): el DER y los diagramas del modelo en la calle.
 - [07-plan-de-trabajo.md](07-plan-de-trabajo.md): fases y definición de terminado.
 - [`data/README.md`](../data/README.md): el polígono y la procedencia del extracto.
