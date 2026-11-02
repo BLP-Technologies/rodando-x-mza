@@ -173,6 +173,10 @@ El documento se publica en **`GET /api/openapi.json`**, generado al arrancar des
 esquemas registrados; hoy lo alimenta el contrato de ruteo
 ([13](13-api-de-ruteo.md)).
 
+Para leerlo a ojo, el mismo documento se publica como página navegable en
+**`GET /api/docs`**: la página pide el documento al backend, que también le sirve la UI,
+así que no hay copia ni CDN de por medio.
+
 Los **errores** también son parte del contrato, y se describen en
 [04-errores-y-mensajes.md](04-errores-y-mensajes.md).
 

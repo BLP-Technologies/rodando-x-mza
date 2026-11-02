@@ -29,6 +29,9 @@ Un cliente genera su cliente HTTP tipado a partir de ese documento y **no escrib
 a mano**. Cuando cambia un esquema del backend, el cliente se regenera: es el único paso
 manual, y conviene tenerlo como comando del proyecto de cada cliente.
 
+El contrato también se puede leer como página navegable en **`GET /api/docs`**, sin abrir el
+JSON.
+
 ## 3. La URL es configuración
 
 La dirección de la API **nunca va en el código**: es un valor de configuración del cliente,
