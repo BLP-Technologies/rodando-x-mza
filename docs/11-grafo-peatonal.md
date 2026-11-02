@@ -576,8 +576,8 @@ es no renumerar, y nada en el esquema renumera: las claves son `IDENTITY` que s�
 significa que el pedido tenga sentido: la validación es contra `service_areas`
 ([09 §4.8](09-modelo-de-datos.md#48-las-áreas-de-servicio)), que guarda el perímetro donde
 se aceptan, y el punto se valida **tal como se pidió**, no el nodo al que se pega. Esa
-validación no recorta el camino, sólo los extremos. El endpoint que la aplica y el código
-`OUTSIDE_SERVICE_AREA` son de C003, no de este capítulo.
+validación no recorta el camino, sólo los extremos. El endpoint que la aplica y con qué
+error rechaza están en [13](13-api-de-ruteo.md).
 
 ### 5.1 La validación
 
@@ -683,7 +683,8 @@ disparador para revisarla, y el disparador más frecuente es el relevamiento.
 - **La normalización de nombres** de calle: es del emparejamiento con el relevamiento
   ([12 §8](12-relevamiento-de-accesibilidad.md)).
 - **La API del ruteo.** §5 deja la vista y las consultas de validación y de camino; el
-  caso de uso C003, con sus parámetros y su respuesta, es otro documento.
+  contrato de C003, con sus parámetros, su respuesta y el caso sin recorrido, está en
+  [13-api-de-ruteo.md](13-api-de-ruteo.md).
 
 ## 8. Documentos relacionados
 
@@ -692,6 +693,7 @@ disparador para revisarla, y el disparador más frecuente es el relevamiento.
 - [10-datos-y-zona-piloto.md](10-datos-y-zona-piloto.md): la zona y el extracto.
 - [12-relevamiento-de-accesibilidad.md](12-relevamiento-de-accesibilidad.md): de dónde
   sale la accesibilidad de estas veredas y esquinas.
+- [13-api-de-ruteo.md](13-api-de-ruteo.md): el contrato de la consulta de un recorrido.
 - [01-diagramas.md](01-diagramas.md): el DER y los diagramas del modelo en la calle.
 - [07-plan-de-trabajo.md](07-plan-de-trabajo.md): fases y definición de terminado.
 - [`data/README.md`](../data/README.md): el polígono y la procedencia del extracto.

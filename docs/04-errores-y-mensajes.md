@@ -64,7 +64,9 @@ Códigos iniciales. Una funcionalidad agrega los suyos siguiendo §7.
 
 Los `details` de `VALIDATION_ERROR` tienen la forma
 `[{ "field": "<campo>", "code": "<MOTIVO>" }]` (p. ej. `INVALID_EMAIL`,
-`REQUIRED`).
+`REQUIRED`). Los motivos no se listan acá: los define la funcionalidad que los produce
+—el ruteo define `OUTSIDE_SERVICE_AREA` en [13](13-api-de-ruteo.md#8-cómo-se-rechaza)—
+porque son parte de la validación de ese caso de uso y no del catálogo general.
 
 ## 5. Errores esperables y no esperables
 
@@ -117,7 +119,9 @@ el monorepo (ver [02](02-stack-y-estructura.md) §3).
 
 ## 8. Documentos relacionados
 
-- [00-reglas-documentacion.md](00-reglas-documentacion.md): reglas de la
-documentación.
+- [00-reglas-documentacion.md](00-reglas-documentacion.md): las reglas de la
+  documentación.
 - [02-stack-y-estructura.md](02-stack-y-estructura.md): convenciones de idioma y
   estructura del proyecto.
+- [13-api-de-ruteo.md](13-api-de-ruteo.md): el caso de uso que usa
+  `OUTSIDE_SERVICE_AREA` como motivo de validación.
