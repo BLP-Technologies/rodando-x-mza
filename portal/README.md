@@ -24,8 +24,11 @@ pnpm install
 pnpm dev                     # http://localhost:3000
 ```
 
-La dirección de la API es configuración y no vive en el código: sale de
-`NEXT_PUBLIC_API_URL` ([docs/15](../docs/15-integracion-con-el-cliente.md) §3).
+La dirección de la API es configuración: sale de `NEXT_PUBLIC_API_URL`
+([docs/15](../docs/15-integracion-con-el-cliente.md) §3). Si falta, el portal usa el
+backend de desarrollo, así que el build de producción tiene que definirla: Next
+inlinea las `NEXT_PUBLIC_*` al compilar
+([docs/16](../docs/16-el-portal.md) §6).
 
 ## Comandos
 

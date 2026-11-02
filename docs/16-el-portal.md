@@ -246,6 +246,11 @@ obligatoria ([10 §3](10-datos-y-zona-piloto.md), [15 §7](15-integracion-con-el
 - **La dirección de la API es configuración**: `NEXT_PUBLIC_API_URL`
   ([15 §3](15-integracion-con-el-cliente.md)), documentada en
   `portal/.env.example`. Ningún componente la conoce: sale de `src/config.ts`.
+  Si falta, `src/config.ts` cae al backend de desarrollo
+  (`http://localhost:3001`), para que el build de CI no dependa de un `.env`.
+  Como Next **inlinea las variables `NEXT_PUBLIC_*` en el momento del build**, el
+  build de producción tiene que definirla o el bundle queda apuntando a
+  `localhost`.
 
 ## 7. Cómo se corre
 
