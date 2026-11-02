@@ -14,11 +14,11 @@ Este documento responde:
 
 - **Qué es** GitHub Actions y cómo se ejecuta un workflow (§2).
 - **Dónde** vive la configuración en el repositorio (§3).
-- **Qué hace** el workflow de este proyecto, paso por paso (§4).
+- **Qué hace** cada workflow de este proyecto, paso por paso (§4 y §8).
 - **Cuándo** se activa (§5).
 - **Qué reglas** protegen `main` y cómo se comporta el merge (§6).
 - **Cómo** leer un resultado en rojo y reproducirlo localmente (§7).
-- **Cómo** extenderlo cuando aparezcan `portal/` y `mobile/` (§8).
+- **Cómo** está dividido por aplicación, y cómo se agrega `mobile/` (§8).
 - **Qué** suele fallar y cuánto cuesta (§9 y §10).
 
 No describe el despliegue —eso está en [03-despliegue-y-operacion.md](03-despliegue-y-operacion.md)—
@@ -35,13 +35,13 @@ Vocabulario, que conviene fijar porque los nombres se repiten en toda la interfa
 
 | Término | Qué es | En este proyecto |
 | --- | --- | --- |
-| **Workflow** | Un archivo de configuración completo; se identifica por su `name` | `Backend` |
+| **Workflow** | Un archivo de configuración completo; se identifica por su `name` | `Backend`, `Portal` |
 | **Evento** | Lo que dispara la corrida | un pull request, un push a `main` |
-| **Job** | Un grupo de pasos que corre en una máquina; los jobs corren en paralelo entre sí | `Lint, tipos y tests` |
+| **Job** | Un grupo de pasos que corre en una máquina; los jobs corren en paralelo entre sí | `Lint, tipos y tests`, `Lint y build` |
 | **Step** | Un paso dentro del job: un comando o una acción ya publicada | `pnpm test` |
 | **Runner** | La máquina virtual donde corre el job | Ubuntu, provista por GitHub |
 | **Action** | Un paso empaquetado y reutilizable, referenciado con `@vN` | `actions/checkout@v4` |
-| **Check** | El resultado que el workflow publica en el commit o el PR | `Lint, tipos y tests` |
+| **Check** | El resultado que el workflow publica en el commit o el PR | `Lint, tipos y tests`, `Lint y build` |
 
 Dos consecuencias de cómo está construido, que explican casi todo lo demás:
 
@@ -57,12 +57,13 @@ para que los corra un robot en una máquina limpia.
 ## 3. Dónde vive la configuración
 
 En una ruta fija: `.github/workflows/`. Cada archivo `.yml` de esa carpeta es un
-workflow. En este proyecto hay uno solo:
+workflow. En este proyecto hay uno por aplicación: `backend.yml` y `portal.yml`.
 
 ```
 .github/
 ├── workflows/
-│   └── backend.yml          # CI del backend
+│   ├── backend.yml          # CI del backend (backend/src)
+│   └── portal.yml           # CI del portal (portal/src)
 └── ISSUE_TEMPLATE/
     └── tarea.md             # plantilla de tareas (07 §7)
 ```
@@ -75,7 +76,7 @@ cualquier otro cambio, y queda en el historial.
 La ruta no es configurable: un archivo `.yml` fuera de `.github/workflows/` es un
 archivo cualquiera que GitHub ignora, sin avisar.
 
-## 4. Qué hace el workflow de este proyecto
+## 4. Qué hace el workflow del backend
 
 `.github/workflows/backend.yml`, completo:
 
@@ -191,9 +192,13 @@ cuál falló.
 | Edición por la web de un archivo | Sí, igual que cualquier push | GitHub lo trata como un commit más |
 | Cambio en `docs/` | Sí | El workflow no filtra por rutas: se acepta el costo (unos 20 s) a cambio de no tener que mantener una lista de rutas |
 
-Una corrida dura del orden de **30 a 40 segundos**. La base de servicio y el paso de
-migraciones suman unos 13 s sobre la preparación del entorno: la medición de
-referencia es 34 s en el job completo (run `41136603246`).
+Una corrida del job del backend dura del orden de **30 a 40 segundos**. La base de
+servicio y el paso de migraciones suman unos 13 s sobre la preparación del entorno: la
+medición de referencia es 34 s en el job completo (run `41136603246`).
+
+El job del portal no tiene base de servicio ni migraciones, pero instala su propio
+`node_modules` y compila: **32 s** en la primera corrida (run `41506145365`), del mismo
+orden que el del backend.
 
 ## 6. Las reglas que protegen `main`
 
@@ -204,7 +209,7 @@ sobre `refs/heads/main`:
 | Regla | Efecto |
 | --- | --- |
 | `pull_request` (0 aprobaciones) | Todo cambio entra por PR a una rama distinta de `main`, no por push directo |
-| `required_status_checks` → `Lint, tipos y tests` | El check tiene que estar en verde para mergear |
+| `required_status_checks` → `Lint, tipos y tests` y `Lint y build` | Los checks tienen que estar en verde para mergear |
 | `strict_required_status_checks_policy` | El PR tiene que estar actualizado con `main` antes de mergear |
 | `deletion` | `main` no se puede borrar |
 | `non_fast_forward` | Nada de `git push --force` sobre `main` |
@@ -248,33 +253,82 @@ Reproducir el problema en local es correr los mismos comandos, en el mismo lugar
 cd backend
 pnpm install --frozen-lockfile
 pnpm lint && pnpm typecheck && pnpm test
+
+cd ../portal
+pnpm install --frozen-lockfile
+pnpm lint && pnpm build
 ```
 
 > **La reproducción más fiel es con la misma versión de Node y de pnpm que usa el
 > workflow**: Node 22 y la versión de `packageManager`. Con otra versión, un rojo
 > puede no reproducirse y un verde puede no significar nada.
 
-## 8. Cómo se extiende
+## 8. El workflow del portal, y cómo se extiende
 
-Cuando aparezcan `portal/` y `mobile/`, cada uno con su `package.json`, hay dos
-caminos:
+Cada aplicación con su `package.json` tiene **su workflow**, con su `working-directory`
+y sus propios comandos. Es más simple de leer que un workflow único con un job por
+carpeta, y deja que cada aplicación cambie lo que verifica sin tocar a las demás.
 
-- **Un workflow por aplicación** (`backend.yml`, `portal.yml`, `mobile.yml`), cada uno
-  con su `working-directory`. Es lo más simple de leer y de mantener mientras cada app
-  tenga sus propios comandos.
-- **Un workflow con un job por aplicación**, cuando compartan los comandos y solo
-  cambie la carpeta.
+`.github/workflows/portal.yml`, completo:
 
-En los dos casos, **cada job nuevo se agrega a la lista de checks requeridos del
-ruleset**, o su resultado no bloquea nada.
+```yaml
+name: Portal
 
-El workflow **ya tiene** un Postgres de servicio, porque `pnpm db:types:verify` compara
-los tipos generados contra el esquema real: sin base no hay contra qué comparar. La
-imagen es la del compose y las extensiones se habilitan en un paso, igual que en
-desarrollo.
+on:
+  push:
+    branches: [main]
+  pull_request:
 
-Si los tests empiezan a tocar la base, el servicio ya está: solo hay que apuntarles
-`DATABASE_URL`, que el job define para todos los pasos.
+permissions:
+  contents: read
+
+concurrency:
+  group: portal-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verificar:
+    name: Lint y build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: portal
+    steps:
+      - uses: actions/checkout@v4
+
+      # La versión de pnpm sale de packageManager en portal/package.json.
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: portal/package.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+          cache-dependency-path: portal/pnpm-lock.yaml
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm lint
+
+      # `next build` incluye el chequeo de tipos: no hace falta un `tsc` aparte.
+      - run: pnpm build
+```
+
+Tres diferencias con el del backend, todas porque el portal no tiene base de datos:
+
+- **Sin `services`**, así que no hay Postgres efímero ni pasos de migración.
+- **`pnpm lint` y `pnpm build`, sin `tsc --noEmit` aparte**: `next build` ya corre el
+  chequeo de tipos con la configuración del proyecto, y un `tsc` suelto verificaría lo
+  mismo con otra configuración.
+- **Un solo paso de verificación**: no hay `test` porque el portal todavía no tiene
+  tests. Cuando los tenga, entra acá.
+
+**Cada job nuevo se agrega a la lista de checks requeridos del ruleset** (§6), o su
+resultado no bloquea nada. `Lint y build` está pendiente de agregar.
+
+`mobile/` sigue el mismo camino cuando exista: `mobile.yml` con su `working-directory`,
+su lockfile en el cache y sus comandos.
 
 ## 9. Detalles que muerden
 
