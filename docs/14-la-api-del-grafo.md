@@ -1,0 +1,236 @@
+# La API del grafo
+
+> Documento temático. Define el contrato de `GET /api/graph`: qué área recibe, cómo la
+> valida, qué devuelve y qué no hace. Es el estado vivo de esa decisión: se edita en su
+> lugar cuando cambia. Se complementa con [09-modelo-de-datos.md](09-modelo-de-datos.md),
+> que define los enums de accesibilidad, con
+> [11-grafo-peatonal.md](11-grafo-peatonal.md), que define las tablas y la vista del grafo,
+> y con [04-errores-y-mensajes.md](04-errores-y-mensajes.md), que define la forma del
+> error.
+
+## 1. Alcance
+
+Este documento responde:
+
+- **Con qué entrada** se lee el grafo, y por qué un bbox (§3).
+- **Qué significa "interseca"** en el filtro (§4).
+- **Qué devuelve**, campo por campo, y cómo avisa que recortó (§5).
+- **Cómo se rechaza** un pedido (§6).
+
+No decide la forma del grafo —es de [11](11-grafo-peatonal.md)—, ni qué significa cada
+nivel —es de [09 §4.1](09-modelo-de-datos.md)—, ni el catálogo de errores, que es de
+[04](04-errores-y-mensajes.md).
+
+**El endpoint no escribe nada.** No hay caché, ni tiles, ni una tabla intermedia: es una
+lectura del grafo del momento, y por eso dos pedidos iguales devuelven lo mismo mientras
+el dato no cambie.
+
+## 2. Los dos límites que ordenan el diseño
+
+1. **Sin ver no se puede moderar.** El portal tiene que poder dibujar veredas, cruces y
+   cordones antes de tocar nada, y hoy la única forma de verlos es `psql`, pgAdmin o QGIS.
+   Por eso lo que se lee es el grafo **entero de una zona**, no un elemento por vez: la
+   unidad de trabajo del portal es el mapa, no la fila.
+2. **La respuesta es GeoJSON, no una forma propia.** La geometría ya la guarda PostGIS y
+   cualquier cliente de mapas lee `FeatureCollection` sin traducirla. Inventar una forma
+   más plana obligaría al cliente a reconstruir geometrías con lo que ya viaja armado.
+
+De ahí sale el resto: el área es la entrada porque **no hay geocoder ni búsqueda por
+nombre de calle** ([13 §2](13-api-de-ruteo.md)), y el piloto entero son ~1000 elementos
+(§5), así que no hace falta paginar.
+
+## 3. El pedido
+
+`GET /api/graph?bbox=<minLon>,<minLat>,<maxLon>,<maxLat>`
+
+El contrato se publica generado desde los esquemas Zod en `GET /api/openapi.json`
+([02 §6](02-stack-y-estructura.md)): el Zod es la fuente y el documento es su lectura.
+
+- **Cuatro números separados por coma, en WGS 84 (SRID 4326), en orden
+  `minLon,minLat,maxLon,maxLat`** —oeste, sur, este, norte—. Es el orden de un bbox de
+  GeoJSON, no el `[lat, lon]` del pedido de ruteo
+  ([13 §3](13-api-de-ruteo.md)): el que lo escribe lo está copiando de un mapa, y ahí el
+  orden ya es ese.
+- **`GET` y no `POST`**: lo único que viaja es el área, entra en la URL, y así el pedido
+  se puede repetir con `curl` o desde la barra del navegador. Que no haya cuerpo no
+  depende de que el endpoint escriba o no: no escribe (§1).
+- **Un solo parámetro.** No hay `kind`, `level` ni `zoom`: el cliente filtra al dibujar,
+  que es gratis, y un parámetro que nadie pidió es un contrato más que mantener (§7).
+- **Se validan cuatro cosas**: que haya `bbox`, que sean cuatro números, que cada
+  coordenada esté en rango (`lon` en −180…180, `lat` en −90…90) y que las esquinas sean
+  coherentes (`minLon < maxLon`, `minLat < maxLat`). Lo que no cumple eso es
+  `VALIDATION_ERROR` con el campo `bbox` (§6).
+- **El área no se valida contra `service_areas`.** El ruteo rechaza una punta fuera del
+  perímetro porque el pedido es "llevenme de A a B" ([13 §4.1](13-api-de-ruteo.md)); acá
+  el pedido es "mostrame lo que hay", y el búfer del extracto también es grafo que el
+  moderador tiene que poder ver.
+
+## 4. Qué se filtra, y por qué alcanza
+
+Se devuelven los elementos cuya geometría **interseca** el bbox. El filtro es el operador
+`&&` contra la columna `geom`, que compara las cajas de las dos geometrías: es el que usa
+el índice GiST, y las tres tablas tienen uno
+([11](11-grafo-peatonal.md), migración `create-graph-tables`).
+
+Una consecuencia explícita: **un elemento cuya caja pisa el área pero cuya geometría no
+pasa por ella entra igual**. Es un caso de esquina —una diagonal larga contra la esquina
+del bbox— y devolverlo de más no rompe el dibujo, porque el cliente recorta al dibujar;
+filtrar de menos sí dejaría huecos. A cambio, la consulta es de índice, que es lo que
+pide un endpoint que el mapa llama en cada paneo.
+
+**Los cordones son puntos y entran por el borde.** `&&` incluye el contacto, así que un
+cordón justo en el borde del área aparece: es el vértice donde se juntan dos veredas, y
+dejar afuera un extremo rompería la unión que el cliente necesita dibujar.
+
+**Una sola consulta por pedido.** Las tres tablas son la misma pregunta —qué hay de esta
+clase en esta área— así que van en un `UNION ALL` con su `ORDER BY` (§5), no en tres
+consultas que el servicio tenga que juntar.
+
+## 5. La respuesta
+
+`200` con el grafo del área:
+
+```json
+{
+  "type": "FeatureCollection",
+  "truncated": false,
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-68.843969355, -32.893218907],
+          [-68.844202692, -32.894110973],
+          [-68.84423142, -32.89422089]
+        ]
+      },
+      "properties": {
+        "element_kind": "sidewalk",
+        "element_id": 5,
+        "level": null,
+        "is_verified": false,
+        "street_name": "Patricias Mendocinas"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-68.843969, -32.893219] },
+      "properties": {
+        "element_kind": "kerb",
+        "element_id": 3,
+        "level": null,
+        "is_verified": false
+      }
+    }
+  ]
+}
+```
+
+| Campo | Para qué |
+| --- | --- |
+| `type` | `FeatureCollection`, para que un cliente de GeoJSON lo lea sin condicionales |
+| `truncated` | Si la respuesta trae **todas** las features del área o sólo las primeras (§5.1). No es parte de GeoJSON |
+| `features[].geometry` | La geometría guardada, vía `ST_AsGeoJSON`, en orden `[lon, lat]`: `LineString` en veredas y cruces, `Point` en cordones |
+| `features[].properties.element_kind` | De qué clase es el elemento: `sidewalk`, `crossing` o `kerb` |
+| `features[].properties.element_id` | El `id` de su fila. Es la clave con la que el portal va a poder pedir o editar el elemento cuando exista esa funcionalidad (§7) |
+| `features[].properties.level` | El nivel **guardado** del elemento: `FULL`, `PARTIAL`, `NONE`, o `null` si nadie lo relevó ([09 §4.1](09-modelo-de-datos.md)) |
+| `features[].properties.is_verified` | Si alguien miró lo que decidió ese nivel ([09 §4.1](09-modelo-de-datos.md)) |
+| `features[].properties.street_name` | El nombre de la calle. **Sólo en veredas**, y puede ser `null`: hay filas del import sin nombre |
+
+Cinco decisiones detrás de esa forma:
+
+- **`street_name` existe sólo en la vereda.** Un cruce y un cordón no tienen nombre de
+  calle en el modelo: mandar `street_name: null` en las tres clases diría que el dato
+  podría estar y no está cargado, que es otra cosa.
+- **`level` es el del elemento, no el derivado.** En un cruce, el nivel que cobra el
+  ruteo sale de sus dos esquinas ([09 §4.7](09-modelo-de-datos.md)); acá se devuelve
+  `crossings.accessibility_level` tal como está guardado. Son dos preguntas distintas: el
+  ruteo quiere saber cuánto cuesta pasar, el portal quiere ver **qué dato hay** para
+  corregirlo.
+- **No se filtra por nivel.** Un elemento `NONE` también se devuelve, cuando exista: el
+  portal tiene que poder mostrar el paso infranqueable para arreglarlo, a diferencia del
+  ruteo, que lo saca del grafo ([13 §2](13-api-de-ruteo.md)).
+- **No se expone el largo ni el costo.** Los metros de una arista y su costo son del
+  ruteo ([09 §4.7](09-modelo-de-datos.md)); si el cliente necesita un largo, lo mide de
+  la geometría que ya tiene.
+
+### 5.1 El tope de 2000, y el aviso de que se recortó
+
+La respuesta trae **como mucho 2000 features**. Si el área tiene más, devuelve las
+primeras y `"truncated": true`.
+
+- **El tope no es una regla de negocio, es una red.** El piloto entero son 977 features
+  (329 veredas, 270 cruces, 378 cordones) y en un pedido normal no se llega; el número
+  está para que un bbox de media provincia no arme una respuesta de decenas de megabytes
+  contra un cliente que la va a dibujar igual de mal.
+- **El aviso va al lado de `type`, no adentro de las features.** GeoJSON no tiene dónde
+  decir "esto está incompleto", y una `FeatureCollection` recortada en silencio miente.
+  Un campo extra en la raíz es lo que un cliente de GeoJSON ignora sin romperse y un
+  humano ve de una.
+- **Las primeras son un conjunto definido.** El orden es determinístico —primero
+  veredas, después cruces y al final cordones; dentro de cada clase por `id`— así que dos
+  pedidos iguales recortan en el mismo lugar. Sin eso, "las primeras" dependería del
+  plan de la consulta.
+- **No hay paginación ni cursor.** Con este tamaño, un cursor sería un contrato que hay
+  que mantener para un caso que no ocurre. Si algún día ocurre, el cliente parte el área
+  en áreas más chicas, que es lo que ya sabe hacer un mapa (§7).
+
+**Medido.** Sobre el grafo del piloto, un pedido de todo el piloto —977 features, 230 KB
+de JSON— tarda **del orden de 15 a 30 ms** de punta a punta por HTTP, y un bbox del
+microcentro —131 features, 30 KB— **unos 6 a 10 ms en caliente**. La consulta en sí es de
+**menos de 1 ms** (`EXPLAIN ANALYZE` sobre las tres tablas usa el índice GiST y devuelve 131
+filas): el cuello es armar y transferir la respuesta, no la base. Es el costo aceptado de
+devolver geometría real, y no hay caché que lo esconda (§1). Los números dependen de la
+máquina; se vuelven a medir con el backend arriba y un `curl -w '%{time_total}'`.
+
+## 6. Cómo se rechaza
+
+| Situación | Status | Respuesta |
+| --- | --- | --- |
+| Falta `bbox` | 400 | `VALIDATION_ERROR` con `details: [{ field: "bbox", code: "REQUIRED" }]` |
+| `bbox` que no son cuatro números | 400 | `VALIDATION_ERROR` con `details: [{ field: "bbox", code: "INVALID" }]` |
+| Una coordenada fuera de rango | 400 | `VALIDATION_ERROR` con `details: [{ field: "bbox", code: "INVALID" }]` |
+| Esquinas invertidas o de área cero | 400 | `VALIDATION_ERROR` con `details: [{ field: "bbox", code: "INVALID" }]` |
+| El área no tiene grafo | 200 | Una `FeatureCollection` con `features: []`. No es un error |
+| Cualquier fallo de la base | 500 | `INTERNAL_ERROR`, sin detalles ([04 §5](04-errores-y-mensajes.md)) |
+
+**Un solo `INVALID` para los tres motivos, y no un `INVALID_RANGE` propio.** Los cuatro
+chequeos son la misma pregunta con distinta respuesta —"¿este bbox sirve?"— y la acción
+del cliente es la misma en los tres casos: rehacerlo. Distinguir "está al revés" de "se
+fue de rango" no le cambia el mensaje ni la salida a quien lo arma, y
+[04 §4](04-errores-y-mensajes.md#4-catálogo-de-códigos) pide no inventar motivos que no
+cambien nada. `REQUIRED` sí es aparte: no es un bbox malformado, es uno que no vino.
+
+Todo eso sigue [04](04-errores-y-mensajes.md): el backend no manda texto, manda códigos.
+
+## 7. Lo que este documento no decide
+
+- **El detalle o la edición de un elemento.** No hay `GET /api/graph/:kind/:id` ni `PATCH`.
+  Se agrega cuando el portal abra una ficha, y entonces el `element_id` que ya devuelve
+  esta respuesta es la clave para pedirla.
+- **La paginación, los tiles y la caché.** Hoy el tope avisa y el cliente parte el área
+  si le importa (§5.1). Se revisa cuando aparezca un caso medido: el piloto entero entra
+  en una respuesta.
+- **El filtro por clase, por nivel o por "sin relevar".** El cliente filtra lo que ya
+  recibió. Se agrega como parámetro cuando el área empiece a ser mucho más grande que lo
+  que el portal dibuja.
+- **El nivel derivado de un cruce.** Se devuelve el guardado (§5); si el portal necesita
+  el que se cobra, es una consulta del ruteo
+  ([09 §4.7](09-modelo-de-datos.md)), no un campo más acá.
+- **La proyección y el estilo del mapa.** Cada cliente decide cómo lo dibuja; la API no
+  manda colores ni simplificación.
+- **El texto que ve el moderador.** Lo escribe el portal a partir de los códigos y de los
+  elementos ([04 §6](04-errores-y-mensajes.md)).
+
+## 8. Documentos relacionados
+
+- [09-modelo-de-datos.md](09-modelo-de-datos.md): los enums de accesibilidad y el costo de
+  las aristas.
+- [11-grafo-peatonal.md](11-grafo-peatonal.md): las tablas del grafo, sus índices y la
+  vista `walkable_edges`.
+- [13-api-de-ruteo.md](13-api-de-ruteo.md): el otro consumidor del grafo, y el contraste
+  entre el nivel guardado y el que se cobra.
+- [04-errores-y-mensajes.md](04-errores-y-mensajes.md): la forma de la respuesta de error.
+- [10-datos-y-zona-piloto.md](10-datos-y-zona-piloto.md): el recorte y el perímetro del
+  piloto, que acá no se aplica como validación (§3).
