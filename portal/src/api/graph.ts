@@ -27,6 +27,31 @@ export function formatBBox(bbox: BBox): string {
 }
 
 /**
+ * Redondea el bbox a 5 decimales (~1 m), que es la precisión con la que tiene
+ * sentido pedir un área: dos paneos que terminan en el mismo lugar comparten
+ * clave de query y no piden dos veces el mismo grafo.
+ */
+export function roundBBox(bbox: BBox): BBox {
+  const round = (value: number) => Number(value.toFixed(5));
+
+  return {
+    minLon: round(bbox.minLon),
+    minLat: round(bbox.minLat),
+    maxLon: round(bbox.maxLon),
+    maxLat: round(bbox.maxLat),
+  };
+}
+
+/**
+ * La clave de la query del grafo. Es un prefijo (`['graph']`) más las cuatro
+ * coordenadas, así que invalidar `['graph']` invalida todas las áreas de una vez
+ * ([16 §5.4](../../docs/16-el-portal.md)).
+ */
+export function graphQueryKey(bbox: BBox) {
+  return ['graph', bbox.minLon, bbox.minLat, bbox.maxLon, bbox.maxLat] as const;
+}
+
+/**
  * Lee las veredas, los cruces y los cordones que intersecan el área.
  *
  * `truncated` viene al lado de las features y no adentro: si es `true`, el área

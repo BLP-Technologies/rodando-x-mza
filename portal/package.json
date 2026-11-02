@@ -11,6 +11,7 @@
     "api:types": "openapi-typescript http://localhost:3001/api/openapi.json -o src/api/schema.d.ts"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.105.3",
     "leaflet": "^1.9.4",
     "next": "16.4.2",
     "react": "19.3.0",

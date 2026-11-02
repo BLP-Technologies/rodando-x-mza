@@ -15,7 +15,8 @@
 
 import 'leaflet/dist/leaflet.css';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import type { LatLngBounds, LatLngBoundsLiteral } from 'leaflet';
 import {
   CircleMarker,
@@ -27,7 +28,12 @@ import {
 } from 'react-leaflet';
 
 import { describeApiError } from '@/api/error-messages';
-import { readGraph, type GraphFeature } from '@/api/graph';
+import {
+  graphQueryKey,
+  readGraph,
+  roundBBox,
+  type GraphFeature,
+} from '@/api/graph';
 import { PILOT_BOUNDS, type BBox } from '@/config';
 import { FeatureDetails } from './feature-details';
 import { lineStyle, pointStyle } from './feature-style';
@@ -130,6 +136,13 @@ function MapEvents({
  * Acomoda la vista al grafo de la primera respuesta. Después manda el usuario:
  * si el mapa se reencuadrara en cada paneo, no se podría panear.
  */
+/**
+ * Acomoda la vista al grafo de la primera respuesta. Después manda el usuario: si
+ * el mapa se reencuadrara en cada paneo, no se podría panear.
+ *
+ * Una sola vez por montaje: el `ref` lo garantiza aunque el componente se
+ * re-renderice con cada refetch o cambio de bbox.
+ */
 function FitBounds({
   bounds,
   suppressMoveEndRef,
@@ -138,9 +151,11 @@ function FitBounds({
   suppressMoveEndRef: React.RefObject<boolean>;
 }) {
   const map = useMap();
+  const applied = useRef(false);
 
   useEffect(() => {
-    if (!bounds) return;
+    if (applied.current || !bounds) return;
+    applied.current = true;
 
     // `animate: false` dispara `moveend` de forma sincrónica, así que la
     // bandera lo tapa y no pedimos dos veces el mismo grafo.
@@ -155,63 +170,60 @@ function FitBounds({
 export default function GraphMap() {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const suppressMoveEnd = useRef(false);
-  const lastRequest = useRef(0);
-  const lastBBox = useRef<BBox>(PILOT_BOUNDS);
 
-  const [features, setFeatures] = useState<GraphFeature[]>([]);
-  const [truncated, setTruncated] = useState(false);
-  const [initialBounds, setInitialBounds] = useState<LatLngBoundsLiteral | null>(null);
-  const [isFirstLoad, setIsFirstLoad] = useState(true);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // El área que se está mirando: cambiarla cambia la clave de la query y es el
+  // único disparador de un pedido nuevo.
+  const [bbox, setBbox] = useState<BBox>(PILOT_BOUNDS);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const selected = features.find((feature) => featureId(feature) === selectedId) ?? null;
+  const { data, error, isPending, refetch } = useQuery({
+    queryKey: graphQueryKey(bbox),
+    queryFn: () => readGraph(bbox),
+    // Sin esto cada paneo vacía el mapa mientras llega la respuesta nueva.
+    placeholderData: keepPreviousData,
+    // Un reintento y no tres: el default espera ~7 s antes de mostrar el error, y
+    // con la API caída el mapa se queda en "Cargando el grafo…" todo ese rato. Un
+    // reintento cubre el corte momentáneo sin dejar al moderador mirando una
+    // pantalla muerta.
+    retry: 1,
+  });
 
-  const load = useCallback(async (bbox: BBox) => {
-    const request = lastRequest.current + 1;
-    lastRequest.current = request;
-    lastBBox.current = bbox;
+  const features = data?.features ?? [];
+  const truncated = data?.truncated ?? false;
 
-    try {
-      const collection = await readGraph(bbox);
+  const selected =
+    features.find((feature) => featureId(feature) === selectedId) ?? null;
 
-      // Una respuesta vieja que llega después de una nueva se descarta.
-      if (request !== lastRequest.current) return;
+  /** La caja de la primera respuesta, para el encuadre inicial. */
+  const firstBounds = useMemo(
+    () => (data === undefined ? null : boundsOf(data.features)),
+    [data],
+  );
 
-      setFeatures(collection.features);
-      setTruncated(collection.truncated);
-      setErrorMessage(null);
-      setInitialBounds((current) => current ?? boundsOf(collection.features));
-    } catch (error) {
-      if (request !== lastRequest.current) return;
-      setErrorMessage(describeApiError(error));
-    } finally {
-      if (request === lastRequest.current) setIsFirstLoad(false);
-    }
-  }, []);
+  /** Paneo o zoom terminado: cambiar el área, con espera. */
+  const onMoveEnd = (bounds: LatLngBounds) => {
+    if (suppressMoveEnd.current) return;
+    if (debounceRef.current) clearTimeout(debounceRef.current);
 
-  /** Paneo o zoom terminado: pedir la caja de la vista, con espera. */
-  const onMoveEnd = useCallback(
-    (bounds: LatLngBounds) => {
-      if (suppressMoveEnd.current) return;
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-
-      debounceRef.current = setTimeout(() => {
-        void load({
+    debounceRef.current = setTimeout(() => {
+      setBbox(
+        roundBBox({
           minLon: bounds.getWest(),
           minLat: bounds.getSouth(),
           maxLon: bounds.getEast(),
           maxLat: bounds.getNorth(),
-        });
-      }, DEBOUNCE_MS);
-    },
-    [load],
-  );
+        }),
+      );
+    }, DEBOUNCE_MS);
+  };
 
   // No dejar un pedido agendado cuando el mapa se desmonta.
-  useEffect(() => () => {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-  }, []);
+  useEffect(
+    () => () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    },
+    [],
+  );
 
   const lines = features.filter(isLineFeature);
   const points = features.filter(isPointFeature);
@@ -224,14 +236,10 @@ export default function GraphMap() {
           minZoom={13}
           maxZoom={19}
           className="h-full w-full"
-          // Primera carga: cuando Leaflet ya tiene la vista del piloto, que es
-          // la caja inicial. Va acá y no en un `useEffect` para no encadenar
-          // renders (`react-hooks/set-state-in-effect`).
-          whenReady={() => void load(PILOT_BOUNDS)}
         >
           <TileLayer url={TILE_URL} attribution={OSM_ATTRIBUTION} maxZoom={19} />
 
-          <FitBounds bounds={initialBounds} suppressMoveEndRef={suppressMoveEnd} />
+          <FitBounds bounds={firstBounds} suppressMoveEndRef={suppressMoveEnd} />
           <MapEvents onMoveEnd={onMoveEnd} onMapClick={() => setSelectedId(null)} />
 
           {lines.map((feature) => (
@@ -253,21 +261,21 @@ export default function GraphMap() {
           ))}
         </MapContainer>
 
-        {isFirstLoad && (
+        {isPending && (
           <p className="absolute left-1/2 top-3 z-[1100] -translate-x-1/2 rounded bg-white/95 px-3 py-1.5 text-sm text-slate-600 shadow">
             Cargando el grafo…
           </p>
         )}
 
-        {errorMessage !== null && (
+        {error !== null && (
           <div
             role="alert"
             className="absolute left-1/2 top-3 z-[1100] flex max-w-md -translate-x-1/2 items-center gap-3 rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 shadow"
           >
-            <span>{errorMessage}</span>
+            <span>{describeApiError(error)}</span>
             <button
               type="button"
-              onClick={() => void load(lastBBox.current)}
+              onClick={() => void refetch()}
               className="shrink-0 rounded border border-red-400 px-2 py-1 text-xs hover:bg-red-100"
             >
               Reintentar

@@ -75,10 +75,15 @@ portal/src/
 | ¿Responde quién es la persona que modera? | `session/` |
 | ¿Es un valor que cambia entre entornos? | `config.ts` |
 
-Los componentes de `app/` **orquestan**: el layout resuelve la sesión y la
-página monta el panel del mapa. La lógica de Leaflet, los estilos y el panel de
-propiedades viven en `map/`, así que una segunda pantalla puede reusar el mapa
-sin copiarlo.
+Los componentes de `app/` **orquestan**: el layout resuelve la sesión, monta el
+proveedor de datos (`providers.tsx`) y la página monta el panel del mapa. La
+lógica de Leaflet, los estilos y el panel de propiedades viven en `map/`, así que
+una segunda pantalla puede reusar el mapa sin copiarlo.
+
+**El estado de datos del cliente es de [TanStack Query](https://tanstack.com/query)**
+(§5.4). Una sola caché de queries para todo el grupo `(portal)`, montada en
+`app/(portal)/providers.tsx`: va ahí y no en el layout raíz porque `(auth)` no
+hace ninguna consulta.
 
 ### Los dos grupos de rutas
 
@@ -196,24 +201,50 @@ tapar el resto del grafo.
 
 ### 5.4 La vista, el refetch y el tope
 
+Los datos del mapa son **una query por área**: `useQuery` con la clave
+`['graph', minLon, minLat, maxLon, maxLat]` y `readGraph(bbox)` como `queryFn`.
+La clave es el área, así que pedir otra área es pedir otra entrada de caché y no
+hay que coordinar nada a mano.
+
 - **La vista inicial es la caja del piloto**, con las cuatro esquinas de
   [`data/pilot-zone.geojson`](../data/pilot-zone.geojson)
   ([10 §2](10-datos-y-zona-piloto.md)) como constantes en `src/config.ts`. Es una
   constante y no una consulta porque la API no expone `service_areas`: cuando lo
   haga, la caja se lee y la constante se va.
-- **La primera respuesta reencuadra el mapa** al grafo recibido. Después manda el
-  usuario: reencuadrar en cada paneo haría imposible panear.
+- **La primera respuesta reencuadra el mapa** al grafo recibido, una sola vez por
+  montaje. Después manda el usuario: reencuadrar en cada paneo haría imposible
+  panear. El `fitBounds` suprime el `moveend` que él mismo dispara, o se pediría
+  dos veces la misma área.
 - **Al terminar un paneo o un zoom se vuelve a pedir el área visible**, con una
-  espera de 300 ms para no pedir una vez por cada cuadro del arrastre. El pedido
-  es el `bbox` de la vista y no el del piloto: al acercarse, el grafo se ve
-  completo aunque el área sea más chica. Una respuesta que llega tarde, cuando ya
-  hay un pedido más nuevo, se descarta.
+  espera de 300 ms para no pedir una vez por cada cuadro del arrastre, y el bbox
+  se redondea a 5 decimales (~1 m) para que dos paneos que terminan en el mismo
+  lado compartan clave. El pedido es el `bbox` de la vista y no el del piloto: al
+  acercarse, el grafo se ve completo aunque el área sea más chica.
+- **Lo que la librería no hace, y por eso sigue escrito a mano**: el debounce del
+  `moveend`, el `fitBounds` inicial y la supresión del `moveend`. Tampoco la
+  selección, que es estado de interfaz y no del servidor: meterla en la caché
+  sería el error clásico.
+- **`placeholderData: keepPreviousData`**: mientras llega el área nueva el mapa
+  sigue dibujando la anterior, en vez de vaciarse en cada paneo.
+- **`gcTime` de un minuto**: cada área deja su colección (30–230 KB), así que una
+  sesión de paneo acumularía decenas con el default de cinco minutos. Al minuto
+  se liberan, y volver a la vista anterior sigue siendo instantáneo.
+- **Un reintento y no tres**: el default de la librería espera ~7 s antes de
+  mostrar el error, y con la API caída el mapa se quedaría en "Cargando el
+  grafo…" todo ese rato.
 - **El tope de 2000 se avisa en pantalla** ([14 §5.1](14-la-api-del-grafo.md)):
   si la API devuelve `truncated: true`, el mapa lo dice y propone acercarse.
   Recortar en silencio mentiría sobre lo que hay en la zona.
 - **Si la API no responde, el mapa lo dice**: un cartel con el motivo en español
-  y un botón para reintentar. No hay pantalla rota ni un error que sólo exista en
-  la consola.
+  y un botón de reintentar que vuelve a pedir la misma área. No hay pantalla rota
+  ni un error que sólo exista en la consola.
+
+**`cacheComponents` y las queries.** Next 16 prerenderiza también los componentes
+de cliente, y una query activa durante el prerender lee el reloj y puede romper el
+build (`blocking-prerender-current-time`). La del mapa no corre ese riesgo porque
+vive debajo de un `ssr: false` ([§5.2](#52-leaflet-no-existe-en-el-servidor)): nunca
+se renderiza en el servidor. Si alguna vez una `useQuery` sale de ahí —un panel de
+detalle sin mapa, por ejemplo—, tiene que quedar detrás de un `Suspense`.
 
 ### 5.5 La atribución
 
