@@ -1,9 +1,6 @@
 import { OpenAPIRegistry, OpenApiGeneratorV31 } from '@asteasolutions/zod-to-openapi';
-import {
-  errorResponseSchema,
-  routeRequestSchema,
-  routeResponseSchema,
-} from './routing/routing.schemas.js';
+import { errorResponseSchema } from './http/error-response.js';
+import { routeRequestSchema, routeResponseSchema } from './routing/routing.schemas.js';
 
 /**
  * El documento `OpenAPI`, generado desde los esquemas Zod.

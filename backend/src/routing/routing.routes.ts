@@ -1,8 +1,9 @@
 import { Router } from 'express';
 import { getDb } from '../db/index.js';
 import { ERROR_CODES } from '../http/error-codes.js';
+import { validationDetails } from '../http/error-response.js';
 import { HttpError } from '../http/errors.js';
-import { routeRequestSchema, validationDetails } from './routing.schemas.js';
+import { routeRequestSchema } from './routing.schemas.js';
 import { calculateRoute } from './routing.service.js';
 
 /** Rutas de ruteo: el caso de uso C003, montado en `/api/routes`. */

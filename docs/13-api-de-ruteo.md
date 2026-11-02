@@ -255,6 +255,8 @@ Cinco decisiones detrás de esa forma:
 
 `field` es la ruta del campo en el cuerpo (`origin`, `origin.lat`, `destination`), y puede
 haber más de un `detail` en el mismo error: dos puntas fuera de zona son un solo 400.
+`REQUIRED` e `INVALID` son los motivos genéricos de cualquier cuerpo; `OUTSIDE_SERVICE_AREA`
+es el de dominio de este caso de uso ([04 §4](04-errores-y-mensajes.md#4-catálogo-de-códigos)).
 
 Todo eso sigue [04](04-errores-y-mensajes.md): el backend no manda texto, manda códigos.
 
