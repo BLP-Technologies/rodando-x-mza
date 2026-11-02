@@ -5,7 +5,6 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { importOsm } from '../importer/importer.run.js';
 import { getDb } from './index.js';
 import { inRolledBackTransaction } from './test-transaction.js';
-import type { DB } from './types.js';
 
 const PILOT_ZONE = fileURLToPath(new URL('../../../data/pilot-zone.geojson', import.meta.url));
 const FIXTURE = fileURLToPath(new URL('../importer/fixtures/two-blocks.osm', import.meta.url));
