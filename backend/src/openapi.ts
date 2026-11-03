@@ -2,6 +2,11 @@ import { OpenAPIRegistry, OpenApiGeneratorV31 } from '@asteasolutions/zod-to-ope
 import { z } from 'zod';
 import { bboxParamSchema, graphResponseSchema, updateGraphElementBodySchema, graphElementSchema, elementKindSchema } from './graph/graph.schemas.js';
 import { errorResponseSchema } from './http/error-response.js';
+import {
+  createReportRequestSchema,
+  reportImageSchema,
+  reportSchema,
+} from './reports/reports.schemas.js';
 import { routeRequestSchema, routeResponseSchema } from './routing/routing.schemas.js';
 
 /**
@@ -110,6 +115,84 @@ registry.registerPath({
     400: {
       description:
         'El pedido no cumple el contrato, o una punta está fuera del perímetro de búsqueda.',
+      content: { 'application/json': { schema: errorResponseSchema } },
+    },
+    500: {
+      description: 'Error no esperado.',
+      content: { 'application/json': { schema: errorResponseSchema } },
+    },
+  },
+});
+
+registry.registerPath({
+  method: 'post',
+  path: '/api/reports',
+  summary: 'Reportar un obstáculo',
+  description:
+    'Guarda la percepción de quien reporta: el código de tipo del catálogo, la ' +
+    'severidad, una descripción y el punto. El `type` es el **código** del ' +
+    'catálogo `obstacle_types` (`POTHOLE`, `OTHER`, …), no su id; `OTHER` se ' +
+    'acepta como cualquier otro. El punto no se valida contra las áreas de ' +
+    'servicio: un reporte fuera del piloto se guarda igual. El reporte es ' +
+    'anónimo mientras no haya autenticación, y nace en `PENDING`: las ' +
+    'transiciones de estado son de la moderación. La imagen se sube antes con ' +
+    'POST /api/reports/images y viaja en `image_url`. Ver docs/17-la-api-de-reportes.md.',
+  request: {
+    body: {
+      content: { 'application/json': { schema: createReportRequestSchema } },
+    },
+  },
+  responses: {
+    201: {
+      description:
+        'El reporte guardado: su id, el tipo y la severidad que se pidieron, y el ' +
+        'estado con el que nace (`PENDING`).',
+      content: { 'application/json': { schema: reportSchema } },
+    },
+    400: {
+      description:
+        'El cuerpo no cumple el contrato, o el código de tipo no existe entre los ' +
+        'activos.',
+      content: { 'application/json': { schema: errorResponseSchema } },
+    },
+    500: {
+      description: 'Error no esperado.',
+      content: { 'application/json': { schema: errorResponseSchema } },
+    },
+  },
+});
+
+registry.registerPath({
+  method: 'post',
+  path: '/api/reports/images',
+  summary: 'Subir la imagen de un reporte',
+  description:
+    'Recibe una imagen en multipart (`file`) y devuelve su URL, que después va en ' +
+    '`image_url` al crear el reporte. Se aceptan PNG, JPEG y WebP de hasta 5 MB; ' +
+    'SVG no, porque puede llevar script y se sirve desde el mismo dominio. Es un ' +
+    'paso aparte del reporte para que el contrato del reporte siga siendo JSON y ' +
+    'una imagen sin reporte sea un archivo huérfano. Ver docs/17-la-api-de-reportes.md §4.',
+  request: {
+    body: {
+      content: {
+        'multipart/form-data': {
+          schema: {
+            type: 'object',
+            required: ['file'],
+            properties: { file: { type: 'string', format: 'binary' } },
+          },
+        },
+      },
+    },
+  },
+  responses: {
+    201: {
+      description: 'La imagen guardada, con la URL que se usa en el reporte.',
+      content: { 'application/json': { schema: reportImageSchema } },
+    },
+    400: {
+      description:
+        'No vino el archivo, o el archivo no es PNG, JPEG o WebP, o pesa más de 5 MB.',
       content: { 'application/json': { schema: errorResponseSchema } },
     },
     500: {

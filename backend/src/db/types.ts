@@ -74,7 +74,7 @@ export interface Reports {
   status: Generated<ReportStatus>;
   type_id: number;
   updated_at: Generated<Timestamp>;
-  user_id: number;
+  user_id: number | null;
 }
 
 export interface SavedRoutes {

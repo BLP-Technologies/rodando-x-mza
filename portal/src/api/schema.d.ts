@@ -198,6 +198,131 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reportar un obstáculo
+         * @description Guarda la percepción de quien reporta: el código de tipo del catálogo, la severidad, una descripción y el punto. El `type` es el **código** del catálogo `obstacle_types` (`POTHOLE`, `OTHER`, …), no su id; `OTHER` se acepta como cualquier otro. El punto no se valida contra las áreas de servicio: un reporte fuera del piloto se guarda igual. El reporte es anónimo mientras no haya autenticación, y nace en `PENDING`: las transiciones de estado son de la moderación. La imagen se sube antes con POST /api/reports/images y viaja en `image_url`. Ver docs/17-la-api-de-reportes.md.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["CreateReportRequest"];
+                };
+            };
+            responses: {
+                /** @description El reporte guardado: su id, el tipo y la severidad que se pidieron, y el estado con el que nace (`PENDING`). */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Report"];
+                    };
+                };
+                /** @description El cuerpo no cumple el contrato, o el código de tipo no existe entre los activos. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description Error no esperado. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reports/images": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Subir la imagen de un reporte
+         * @description Recibe una imagen en multipart (`file`) y devuelve su URL, que después va en `image_url` al crear el reporte. Se aceptan PNG, JPEG y WebP de hasta 5 MB; SVG no, porque puede llevar script y se sirve desde el mismo dominio. Es un paso aparte del reporte para que el contrato del reporte siga siendo JSON y una imagen sin reporte sea un archivo huérfano. Ver docs/17-la-api-de-reportes.md §4.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "multipart/form-data": {
+                        /** Format: binary */
+                        file: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description La imagen guardada, con la URL que se usa en el reporte. */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ReportImage"];
+                    };
+                };
+                /** @description No vino el archivo, o el archivo no es PNG, JPEG o WebP, o pesa más de 5 MB. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description Error no esperado. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -374,6 +499,42 @@ export interface components {
                 lat: number;
                 lon: number;
             };
+        };
+        Report: {
+            id: number;
+            type: string;
+            /** @enum {string} */
+            severity: "MINOR" | "MODERATE" | "CRITICAL";
+            /** @enum {string} */
+            status: "PENDING" | "APPROVED" | "UNDER_REPAIR" | "RESOLVED" | "REJECTED";
+        };
+        /**
+         * @description El reporte de un obstáculo, con la severidad que percibió quien lo manda.
+         * @example {
+         *       "type": "POTHOLE",
+         *       "severity": "MODERATE",
+         *       "description": "Pozo profundo en la esquina",
+         *       "geom": {
+         *         "lon": -68.8444,
+         *         "lat": -32.8897
+         *       },
+         *       "image_url": "http://localhost:3001/uploads/2f1c6c1e-0f6c-4a4e-9d3a-0c5b1b2f7a11.jpg"
+         *     }
+         */
+        CreateReportRequest: {
+            type: string;
+            /** @enum {string} */
+            severity: "MINOR" | "MODERATE" | "CRITICAL";
+            description: string;
+            geom: {
+                lon: number;
+                lat: number;
+            };
+            /** Format: uri */
+            image_url?: string;
+        };
+        ReportImage: {
+            url: string;
         };
     };
     responses: never;

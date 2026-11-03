@@ -295,6 +295,15 @@ mismo pozo. Entonces la columna vive en el lado que se repite —`reports.obstac
 nullable y sin `UNIQUE`— y no al revés. Un único `obstacles.report_id` no podría
 representar dos reportes del mismo obstáculo sin duplicar el obstáculo.
 
+**El autor.** `reports.user_id` es **nullable**, aunque la columna nació `NOT NULL`
+con FK a `users`. La razón es de fase: no hay autenticación (Fase 3) ni una sola fila
+en `users`, así que exigir el autor haría imposible el único caso que existe hoy, que
+alguien reporte un pozo sin tener cuenta. Un reporte anónimo es legítimo mientras no
+haya login; cuando lo haya, el reporte autenticado vuelve a completar el campo. La
+alternativa descartada —sembrar un usuario "ciudadano"— deja una fila de mentira que
+después hay que deshacer con un `UPDATE` masivo
+([17 §6](17-la-api-de-reportes.md#6-el-reporte-anónimo)).
+
 **El flujo de aprobación** (C012) crea el obstáculo y, en la misma transacción, marca
 el reporte: `status = 'APPROVED'` y `obstacle_id` con el id nuevo. Aprobar significa
 crear el obstáculo; no hay estado aprobado sin obstáculo.
