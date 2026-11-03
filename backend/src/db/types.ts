@@ -96,6 +96,14 @@ export interface ServiceAreas {
   updated_at: Generated<Timestamp>;
 }
 
+export interface Sessions {
+  created_at: Generated<Timestamp>;
+  expires_at: Timestamp;
+  id: Generated<number>;
+  token_hash: string;
+  user_id: number;
+}
+
 export interface Sidewalks {
   accessibility_level: AccessibilityLevel | null;
   created_at: Generated<Timestamp>;
@@ -177,6 +185,7 @@ export interface DB {
   reports: Reports;
   saved_routes: SavedRoutes;
   service_areas: ServiceAreas;
+  sessions: Sessions;
   sidewalks: Sidewalks;
   tutorial_categories: TutorialCategories;
   tutorials: Tutorials;
