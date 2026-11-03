@@ -367,6 +367,337 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/obstacles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Leer los obstáculos de un estado
+         * @description Devuelve los obstáculos publicados, como una FeatureCollection de GeoJSON, con el punto de cada uno, su tipo y su nombre, la severidad, la fecha de resolución —`null` si sigue activo—, el elemento del grafo al que está pegado y cuántos reportes lo apuntan. Al lado de las features viaja `obstacle_types`, el catálogo de tipos activos sin `OTHER`, que es la lista del formulario del portal. El filtro por estado es del servidor y tiene `ACTIVE` por defecto; un obstáculo activo es el que no tiene `resolved_at`. Los dados de baja no aparecen en ningún estado. Si hay más de 2000, devuelve los más nuevos y lo avisa con `truncated: true`. Ver docs/18-la-api-de-obstaculos.md §4.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Qué obstáculos se devuelven: los activos, los resueltos o todos. Si falta, se devuelven los activos (`ACTIVE`). */
+                    status?: "ACTIVE" | "RESOLVED" | "ALL";
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Los obstáculos del estado pedido, del más nuevo al más antiguo, con el catálogo de tipos activos en `obstacle_types`. Una colección vacía es una respuesta válida: no hay obstáculos en ese estado. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ObstacleFeatureCollection"];
+                    };
+                };
+                /** @description El estado no es uno del enum, o la query trae un parámetro que el contrato no tiene. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description Error no esperado. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /**
+         * Crear un obstáculo
+         * @description Publica un obstáculo: el código de tipo del catálogo, la severidad y el punto. El cuerpo no trae el elemento del grafo al que se cuelga: lo decide el servidor, pegando el punto al más cercano entre veredas, cruces y cordones. Si no hay ningún elemento cerca responde 400 con el motivo `NO_NEARBY_ELEMENT`, y si el tipo no existe, está inactivo o es `OTHER` responde 400 con el campo `type`. El punto de la respuesta es el que mandó el cliente. El obstáculo nace activo y el ruteo lo cobra en la consulta siguiente. Ver docs/18-la-api-de-obstaculos.md §3.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["CreateObstacleRequest"];
+                };
+            };
+            responses: {
+                /** @description El obstáculo creado, con la misma forma que una feature de GET /api/obstacles. */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ObstacleFeature"];
+                    };
+                };
+                /** @description El cuerpo no cumple el contrato, el código de tipo no sirve como obstáculo o no hay ningún elemento del grafo dentro del radio de pegamento. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description Error no esperado. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/obstacles/{id}/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resolver un obstáculo
+         * @description Marca el obstáculo como resuelto escribiendo `resolved_at`, y desde la consulta siguiente deja de sumar en el ruteo. No lleva cuerpo y es idempotente: resolver un obstáculo ya resuelto responde 200 con el mismo obstáculo y no cambia la fecha. Responde 404 si el id no existe o está dado de baja. No toca los reportes que lo apuntan. Ver docs/18-la-api-de-obstaculos.md §5.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description El obstáculo resuelto, con la misma forma que una feature de la lectura. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ObstacleFeature"];
+                    };
+                };
+                /** @description El `id` de la ruta no es un entero positivo. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description No hay ningún obstáculo con ese id, o está dado de baja. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description Error no esperado. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reports/{id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Aprobar un reporte
+         * @description Publica el obstáculo de un reporte con la clasificación que decide el moderador y marca el reporte como `APPROVED` apuntándolo al obstáculo nuevo. El punto sale del reporte: aprobar no mueve el pin. Todo ocurre en una transacción, en este orden: bloquear el reporte, pegar su punto al elemento del grafo más cercano, insertar el obstáculo y marcar el reporte. Si no hay ningún elemento cerca responde 400 con `NO_NEARBY_ELEMENT` y el reporte sigue `PENDING`. Ver docs/18-la-api-de-obstaculos.md §6.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ApproveReportRequest"];
+                };
+            };
+            responses: {
+                /** @description El obstáculo creado y el reporte marcado, que son los dos recursos que cambiaron. */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApproveReportResponse"];
+                    };
+                };
+                /** @description El cuerpo no cumple el contrato, el código de tipo no sirve como obstáculo o no hay ningún elemento del grafo cerca del punto del reporte. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description No hay ningún reporte con ese id, o está dado de baja. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description El reporte ya no está `PENDING`: alguien lo aprobó o lo descartó. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description Error no esperado. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reports/{id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Descartar un reporte
+         * @description Marca un reporte como `REJECTED` sin crear nada, en una transacción. No lleva cuerpo. Es la salida para un duplicado o para lo que no corresponde a un obstáculo. La decisión se toma una sola vez: un reporte que ya no está `PENDING` responde 409, y uno inexistente o dado de baja, 404. Ver docs/18-la-api-de-obstaculos.md §6.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description El reporte descartado: su id, el estado `REJECTED` y `obstacle_id` nulo. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ReportDecision"];
+                    };
+                };
+                /** @description El `id` de la ruta no es un entero positivo. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description No hay ningún reporte con ese id, o está dado de baja. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description El reporte ya no está `PENDING`: alguien lo aprobó o lo descartó. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description Error no esperado. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -607,11 +938,88 @@ export interface components {
                 severity: "MINOR" | "MODERATE" | "CRITICAL";
                 description: string;
                 image_url: string | null;
+                obstacle_id: number | null;
                 created_at: string;
             };
         };
         ReportImage: {
             url: string;
+        };
+        ObstacleFeatureCollection: {
+            /** @enum {string} */
+            type: "FeatureCollection";
+            truncated: boolean;
+            obstacle_types: {
+                code: string;
+                name: string;
+            }[];
+            features: components["schemas"]["ObstacleFeature"][];
+        };
+        ObstacleFeature: {
+            /** @enum {string} */
+            type: "Feature";
+            geometry: {
+                /** @enum {string} */
+                type: "Point";
+                coordinates: [
+                    number,
+                    number
+                ];
+            };
+            properties: {
+                id: number;
+                type: string;
+                type_name: string;
+                /** @enum {string} */
+                severity: "MINOR" | "MODERATE" | "CRITICAL";
+                resolved_at: string | null;
+                /** @enum {string} */
+                element_kind: "sidewalk" | "kerb" | "crossing";
+                element_id: number;
+                reports_count: number;
+                created_at: string;
+            };
+        };
+        /**
+         * @description Un obstáculo publicado por el moderador. Sin `element`: el servidor lo cuelga del elemento del grafo más cercano al punto.
+         * @example {
+         *       "type": "POTHOLE",
+         *       "severity": "MODERATE",
+         *       "geom": {
+         *         "lon": -68.8444,
+         *         "lat": -32.8897
+         *       }
+         *     }
+         */
+        CreateObstacleRequest: {
+            type: string;
+            /** @enum {string} */
+            severity: "MINOR" | "MODERATE" | "CRITICAL";
+            geom: {
+                lon: number;
+                lat: number;
+            };
+        };
+        ApproveReportResponse: {
+            obstacle: components["schemas"]["ObstacleFeature"];
+            report: components["schemas"]["ReportDecision"];
+        };
+        ReportDecision: {
+            id: number;
+            status: components["schemas"]["ReportStatus"];
+            obstacle_id: number | null;
+        };
+        /**
+         * @description La clasificación con la que el moderador publica el obstáculo de un reporte. El punto sale del reporte.
+         * @example {
+         *       "type": "POTHOLE",
+         *       "severity": "MODERATE"
+         *     }
+         */
+        ApproveReportRequest: {
+            type: string;
+            /** @enum {string} */
+            severity: "MINOR" | "MODERATE" | "CRITICAL";
         };
     };
     responses: never;

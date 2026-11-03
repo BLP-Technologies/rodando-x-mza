@@ -13,7 +13,7 @@ import type { components } from './schema';
 /** La colección que devuelve la lectura, con el aviso de recorte al lado de `type`. */
 export type ReportFeatureCollection = components['schemas']['ReportFeatureCollection'];
 
-/** Un reporte, con su punto y sus ocho propiedades. */
+/** Un reporte, con su punto y sus nueve propiedades. */
 export type ReportFeature = components['schemas']['ReportFeature'];
 
 /** El estado dentro del ciclo de moderación: los cinco del enum de la base. */

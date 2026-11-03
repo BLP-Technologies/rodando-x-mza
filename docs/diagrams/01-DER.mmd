@@ -17,7 +17,8 @@ erDiagram
     %%   - CHECK: en veredas y cruces start_node_id <> end_node_id (sin bucles);
     %%     en obstaculos num_nonnulls(sidewalk_id, kerb_node_id, crossing_id) <= 1.
     %%   - Defaults con significado: is_active de los catalogos en true; is_moderator,
-    %%     is_verified e is_resolved en false; reports.status en PENDING.
+    %%     is_verified en false; resolved_at en NULL (obstaculo activo, docs/09 §4.5);
+    %%     reports.status en PENDING.
     %%   - on delete: CASCADE en lo que cuelga del usuario como dato personal (lugares,
     %%     rutas guardadas, tutoriales guardados); RESTRICT para reports.user_id, para
     %%     los catalogos y para los elementos del grafo.
@@ -111,7 +112,7 @@ erDiagram
         int type_id FK
         obstacle_severity severity "MINOR, MODERATE, CRITICAL"
         geometry(Point,4326) geom
-        boolean is_resolved
+        timestamptz? resolved_at "NULL = activo (docs/09 §4.5)"
         timestamptz created_at
         timestamptz updated_at
         timestamptz? deleted_at

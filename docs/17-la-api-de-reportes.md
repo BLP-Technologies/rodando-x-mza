@@ -19,17 +19,21 @@ Este documento responde:
 - **Cómo se rechaza** un pedido (§5).
 - **Por qué el reporte no tiene autor** todavía (§6).
 - **Cómo se leen** los reportes que ya están guardados (§7).
+- **Cómo se moderan**: qué crea un obstáculo, qué descarta el reporte y en qué orden se
+escribe (§7.1).
 
-La API de reportes son **tres endpoints que hacen una cosa cada uno**:
+La API de reportes son **cinco endpoints que hacen una cosa cada uno**:
 
 - `POST /api/reports` guarda el reporte.
 - `POST /api/reports/images` guarda una imagen y devuelve su URL.
 - `GET /api/reports` lista los reportes de un estado (§7).
+- `POST /api/reports/{id}/approve` publica el obstáculo y marca el reporte (§7.1).
+- `POST /api/reports/{id}/reject` descarta el reporte (§7.1).
 
-No crea el obstáculo: eso es la moderación (#47), y hasta que exista, un reporte no
-cambia el mapa ni el ruteo ([09 §4.5](09-modelo-de-datos.md)). La lectura **no
-escribe** —aprobar, rechazar o resolver siguen siendo de #47— y tampoco autentica
-(Fase 3) ni agrupa duplicados.
+Un reporte **no cambia el mapa ni el ruteo por sí solo**: lo hace la aprobación, que crea el
+obstáculo ([09 §4.5](09-modelo-de-datos.md#45-reporte-y-obstáculo)). El alta, la lectura y el
+cierre del obstáculo son de [18](18-la-api-de-obstaculos.md); acá quedan las dos acciones
+que se toman sobre el reporte. La API no autentica (Fase 3) ni agrupa duplicados.
 
 **El punto no se valida contra `service_areas`.** El ruteo rechaza una punta fuera
 del perímetro porque el pedido es "llevenme de A a B"
@@ -107,8 +111,8 @@ dato, y el `POST` tiene que devolver lo justo para confirmar que se guardó.
 
 **El reporte nace `PENDING`.** El `status` lo pone la base con su default y la
 respuesta lo devuelve tal como quedó guardado, no como el código supone que quedó.
-El ciclo de vida —aprobar, marcar duplicado, resolver— es de la moderación (#47),
-que además crea el obstáculo en la transición a `APPROVED`
+El ciclo de vida —aprobar, descartar— es la moderación (§7.1), que crea el obstáculo en
+la transición a `APPROVED`
 ([09 §4.5](09-modelo-de-datos.md#45-reporte-y-obstáculo)).
 
 **Una sola consulta.** El catálogo se resuelve en el mismo `INSERT ... SELECT` que
@@ -237,6 +241,7 @@ misma que la del grafo —una `FeatureCollection` de GeoJSON con `truncated` al 
         "severity": "MODERATE",
         "description": "Pozo profundo en la esquina",
         "image_url": "http://localhost:3001/uploads/2f1c6c1e-0f6c-4a4e-9d3a-0c5b1b2f7a11.jpg",
+        "obstacle_id": null,
         "created_at": "2026-02-27T15:03:51.123Z"
       }
     }
@@ -256,6 +261,7 @@ misma que la del grafo —una `FeatureCollection` de GeoJSON con `truncated` al 
 | `features[].properties.severity` | La severidad que percibió quien reporta |
 | `features[].properties.description` | Lo que escribió quien reporta, entero: recortarlo al listarlo es del cliente |
 | `features[].properties.image_url` | La foto, o `null` si el reporte no tiene: un reporte sin foto es completo (§2) |
+| `features[].properties.obstacle_id` | El obstáculo que creó la aprobación, o `null` mientras no se aprobó (§7.1). Es lo que el portal muestra como "obstáculo #N" |
 | `features[].properties.created_at` | La fecha, en ISO 8601 con zona: el cliente no tiene que interpretar la zona horaria del driver |
 
 **El código y el nombre viajan juntos, y no es redundancia.** `type` es el nombre
@@ -298,16 +304,52 @@ sería una segunda forma de leer lo mismo.
 
 **La lectura no escribe nada.** No hay caché ni tabla intermedia: dos pedidos iguales
 devuelven lo mismo mientras el dato no cambie. Las transiciones de estado son de la
-moderación (#47), que es quien va a invalidar la lista del portal
-([16 §8](16-el-portal.md)).
+moderación (§7.1), y son ellas las que invalidan la lista del portal
+([16 §8](16-el-portal.md#8-las-pantallas-el-mapa-de-la-aplicación)).
+
+**`obstacle_id` viaja con el reporte y no es redundancia.** Es la columna que escribe la
+aprobación y lo único que une un reporte `APPROVED` con el obstáculo que creó: sin ella, el
+portal tendría que adivinar cuál de los obstáculos del elemento es el de este reporte. Un
+reporte que nunca se aprobó la lleva en `null`.
+
+### 7.1 La moderación
+
+Son las dos transiciones que el moderador toma sobre un reporte, y el único camino por el
+que un reporte llega al ruteo. El detalle —el pegamento al elemento del grafo, el orden de
+las escrituras y la forma de la respuesta de la aprobación— está en
+[18 §6](18-la-api-de-obstaculos.md#6-el-puente-de-un-reporte-a-un-obstáculo); acá queda el
+contrato de la transición:
+
+| Acción | Pedido | Respuesta | Qué escribe |
+| --- | --- | --- | --- |
+| Aprobar | `POST /api/reports/{id}/approve` con `{ type, severity }` | `201` con `{ obstacle, report: { id, status, obstacle_id } }` | Crea el obstáculo en el punto del reporte y marca `APPROVED` con `obstacle_id` |
+| Descartar | `POST /api/reports/{id}/reject`, sin cuerpo | `200` con `{ id, status: 'REJECTED', obstacle_id: null }` | Marca `REJECTED` y no crea nada |
+
+**El cuerpo de la aprobación es la clasificación del moderador**, no la del ciudadano: el
+`type` no acepta `OTHER` y el punto sale del reporte, porque aprobar clasifica lo que
+alguien reportó y no mueve el pin ([09 §4.5](09-modelo-de-datos.md#45-reporte-y-obstáculo)).
+
+**Los errores son los mismos en las dos acciones**: `404` si el reporte no existe o está
+dado de baja, y `409 CONFLICT` si su estado ya no es `PENDING`. La decisión se toma una sola
+vez, así que repetirla no es idempotente: es una segunda decisión sobre lo mismo. La
+excepción que sí es un `400` y no un `409` es un punto sin ningún elemento del grafo cerca:
+el reporte sigue `PENDING` y el moderador lo descarta o lo revisa
+([18 §6](18-la-api-de-obstaculos.md#6-el-puente-de-un-reporte-a-un-obstáculo)).
+
+**Los dos estados no se sincronizan.** Resolver el obstáculo no toca el reporte, que sigue
+`APPROVED`, y `UNDER_REPAIR` y `RESOLVED` quedan sin uso en el MVP. Es un límite conocido
+([09 §4.5](09-modelo-de-datos.md#45-reporte-y-obstáculo),
+[18 §8](18-la-api-de-obstaculos.md#8-lo-que-este-documento-no-decide)).
 
 ## 8. Lo que este documento no decide
 
 - **La autenticación y el autor del reporte.** Es Fase 3; hoy no hay usuario
   ([07 §3](07-plan-de-trabajo.md)).
-- **La moderación y las transiciones de `status`.** Aprobar, rechazar, marcar
-  duplicado y crear el obstáculo son de #47
-  ([09 §4.5](09-modelo-de-datos.md#45-reporte-y-obstáculo)).
+- **El detalle de la moderación.** Cómo se pega el punto al grafo y en qué orden se
+escribe está en [18 §6](18-la-api-de-obstaculos.md#6-el-puente-de-un-reporte-a-un-obstáculo);
+este documento sólo fija la transición (§7.1).
+- **Volver a moderar un reporte ya moderado.** `APPROVED` y `REJECTED` son finales; no hay
+  endpoint que deshaga la decisión.
 - **El detalle de un reporte como recurso propio.** El portal muestra lo que devuelve
   la lectura (§7); un `GET /api/reports/{id}` con el historial de moderación no
   existe todavía.
@@ -336,5 +378,7 @@ moderación (#47), que es quien va a invalidar la lista del portal
   contra el perímetro y no validarlo (§1).
 - [14-la-api-del-grafo.md](14-la-api-del-grafo.md): el otro contrato de escritura de
   la API.
+- [18-la-api-de-obstaculos.md](18-la-api-de-obstaculos.md): el obstáculo que crea la
+  aprobación, su lectura y su cierre.
 - [16-el-portal.md](16-el-portal.md): la pantalla que lee esta lista (§7).
 - [07-plan-de-trabajo.md](07-plan-de-trabajo.md): fases y casos de uso.

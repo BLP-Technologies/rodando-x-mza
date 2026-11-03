@@ -1,12 +1,13 @@
 'use client';
 
 /**
- * La navegación del portal: una entrada por objeto de trabajo.
+ * La navegación del portal: una entrada por objeto de trabajo y sólo por las pantallas que
+ * existen.
  *
- * Hoy son dos —el grafo y los reportes— porque son las dos pantallas que existen: los
- * obstáculos y el cálculo de ruta entran cuando tengan su pantalla, no antes
- * ([16 §8](../../docs/16-el-portal.md)). El estado activo se marca con `aria-current`
- * y con el estilo, para que no dependa del color.
+ * Son tres —el grafo, los reportes y los obstáculos—: `/routes` entra cuando tenga su
+ * pantalla, no antes. La barra no anuncia lo que falta, porque una sección que se clickea y
+ * no lleva a nada es peor que una que no está ([16 §8](../../docs/16-el-portal.md)). El
+ * estado activo se marca con `aria-current` y con el estilo, para que no dependa del color.
  */
 
 import Link from 'next/link';
@@ -15,6 +16,7 @@ import { usePathname } from 'next/navigation';
 const LINKS = [
   { href: '/', label: 'Grafo' },
   { href: '/reports', label: 'Reportes' },
+  { href: '/obstacles', label: 'Obstáculos' },
 ] as const;
 
 export function Nav() {

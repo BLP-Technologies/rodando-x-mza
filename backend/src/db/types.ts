@@ -45,8 +45,8 @@ export interface Obstacles {
   deleted_at: Timestamp | null;
   geom: string;
   id: Generated<number>;
-  is_resolved: Generated<boolean>;
   kerb_node_id: number | null;
+  resolved_at: Timestamp | null;
   severity: ObstacleSeverity;
   sidewalk_id: number | null;
   type_id: number;

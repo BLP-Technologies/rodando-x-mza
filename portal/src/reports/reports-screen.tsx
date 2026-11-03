@@ -212,7 +212,9 @@ export default function ReportsScreen() {
       </div>
 
       <aside className="w-80 shrink-0 overflow-y-auto border-l border-slate-200 bg-white p-4">
-        <ReportDetails report={selected} />
+        {/* `key` por reporte: el formulario de moderación arranca cerrado y vacío al pasar a
+            otro reporte, en vez de arrastrar el tipo que se estaba eligiendo. */}
+        <ReportDetails key={selected?.properties.id ?? 'none'} report={selected} />
       </aside>
     </section>
   );

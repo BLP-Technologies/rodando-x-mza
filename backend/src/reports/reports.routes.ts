@@ -4,8 +4,18 @@ import { ERROR_CODES } from '../http/error-codes.js';
 import { validationDetails } from '../http/error-response.js';
 import { HttpError } from '../http/errors.js';
 import { reportsImagesRouter } from './reports.images.routes.js';
-import { createReportRequestSchema, reportsQuerySchema } from './reports.schemas.js';
-import { createReport, readReports } from './reports.service.js';
+import {
+  approveReportRequestSchema,
+  createReportRequestSchema,
+  reportParamsSchema,
+  reportsQuerySchema,
+} from './reports.schemas.js';
+import {
+  approveReport,
+  createReport,
+  readReports,
+  rejectReport,
+} from './reports.service.js';
 
 /** Rutas de reportes ciudadanos, montadas en `/api/reports`.
  *
@@ -65,5 +75,75 @@ reportsRouter.get('/', async (req, res) => {
 
   res.json(await readReports(getDb(), parsed.data.status));
 });
+
+/**
+ * Aprueba un reporte: crea el obstáculo y marca el reporte en una transacción.
+ *
+ * El cuerpo trae la clasificación del moderador —tipo y severidad— y el punto sale del
+ * reporte ([18 §6](../../../docs/18-la-api-de-obstaculos.md)). Responde **201** porque crea
+ * un obstáculo, y con los dos recursos que cambiaron.
+ *
+ * Los tres rechazos esperables: `400` si el cuerpo no cumple el contrato o si no hay un
+ * elemento del grafo cerca del punto; `404` si el reporte no existe o está dado de baja; y
+ * `409` si ya no está pendiente.
+ */
+reportsRouter.post('/:id/approve', async (req, res) => {
+  const id = parseReportId(req.params.id);
+
+  const body: unknown = req.body ?? {};
+  const parsed = approveReportRequestSchema.safeParse(body);
+
+  if (!parsed.success) {
+    throw new HttpError(
+      400,
+      ERROR_CODES.VALIDATION_ERROR,
+      'invalid report approval',
+      validationDetails(parsed.error, body),
+    );
+  }
+
+  res.status(201).json(
+    // La transacción es de la ruta: el servicio escribe las tres cosas en orden y quien abre
+    // la transacción es quien puede deshacerla ([18 §6](../../../docs/18-la-api-de-obstaculos.md)).
+    await getDb()
+      .transaction()
+      .execute((trx) => approveReport(trx, id, parsed.data)),
+  );
+});
+
+/**
+ * Descarta un reporte sin crear obstáculo.
+ *
+ * No lleva cuerpo ni devuelve más que la fila del reporte
+ * ([18 §6](../../../docs/18-la-api-de-obstaculos.md)). Los mismos `404` y `409` que la
+ * aprobación: la decisión se toma una sola vez.
+ */
+reportsRouter.post('/:id/reject', async (req, res) => {
+  const id = parseReportId(req.params.id);
+
+  res.json(await getDb().transaction().execute((trx) => rejectReport(trx, id)));
+});
+
+/**
+ * El `id` de la ruta, ya validado.
+ *
+ * Un id que no es un entero positivo es `VALIDATION_ERROR` con el campo nombrado: es un
+ * pedido que la API no ofrece, no un reporte que falta.
+ */
+function parseReportId(raw: string | undefined): number {
+  const params = { id: raw };
+  const parsed = reportParamsSchema.safeParse(params);
+
+  if (!parsed.success) {
+    throw new HttpError(
+      400,
+      ERROR_CODES.VALIDATION_ERROR,
+      'invalid report id',
+      validationDetails(parsed.error, params),
+    );
+  }
+
+  return parsed.data.id;
+}
 
 reportsRouter.use('/images', reportsImagesRouter);

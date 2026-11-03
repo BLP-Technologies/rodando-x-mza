@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { pointGeometrySchema } from '../graph/graph.schemas.js';
+import { obstacleFeatureSchema } from '../obstacles/obstacles.schemas.js';
 
 /**
  * El contrato de `POST /api/reports` y el de la subida de imágenes, en esquemas
@@ -142,6 +143,9 @@ export const reportsQuerySchema = z.strictObject({
  * - `type` es el código del catálogo, para el cliente; `type_name` es el nombre en
  *   español, para la persona que modera.
  * - `image_url` es nullable porque la columna lo es: un reporte sin foto es completo.
+ * - `obstacle_id` es el obstáculo que creó la aprobación, o `null`. Es lo que permite
+ *   mostrar "obstáculo #N" en un reporte aprobado sin una segunda lectura
+ *   ([18 §6](../../../docs/18-la-api-de-obstaculos.md)).
  * - `created_at` viaja en ISO para que el cliente no tenga que interpretar la zona
  *   horaria del driver.
  */
@@ -157,6 +161,7 @@ export const reportFeatureSchema = z
       severity: reportSeveritySchema,
       description: z.string(),
       image_url: z.string().nullable(),
+      obstacle_id: z.number().int().nullable(),
       created_at: z.string(),
     }),
   })
@@ -180,3 +185,63 @@ export const reportsResponseSchema = z
   .meta({ id: 'ReportFeatureCollection' });
 
 export type ReportsResponse = z.infer<typeof reportsResponseSchema>;
+
+/** Los parámetros de `/api/reports/:id`; el `id` llega como texto y se coacciona. */
+export const reportParamsSchema = z.object({
+  id: z.coerce.number().int().positive(),
+});
+
+/**
+ * El cuerpo de `POST /api/reports/:id/approve`.
+ *
+ * Es la decisión del moderador: qué tipo y qué severidad tiene el obstáculo que se publica.
+ * El punto no viaja: sale del reporte, que es el que dijo dónde está
+ * ([17 §7](../../../docs/17-la-api-de-reportes.md)).
+ *
+ * El cuerpo es estricto: `geom` no se acepta acá, porque aprobar no mueve el punto.
+ */
+export const approveReportRequestSchema = z
+  .strictObject({
+    type: z.string(),
+    severity: reportSeveritySchema,
+  })
+  .meta({
+    id: 'ApproveReportRequest',
+    description:
+      'La clasificación con la que el moderador publica el obstáculo de un reporte. El ' +
+      'punto sale del reporte.',
+    example: { type: 'POTHOLE', severity: 'MODERATE' },
+  });
+
+export type ApproveReportRequest = z.infer<typeof approveReportRequestSchema>;
+
+/**
+ * El reporte después de la moderación: su `id`, el estado nuevo y el obstáculo que nombra.
+ *
+ * `obstacle_id` es `null` para un reporte rechazado: rechazar no crea nada.
+ */
+export const reportDecisionSchema = z
+  .object({
+    id: z.number().int(),
+    status: reportStatusSchema,
+    obstacle_id: z.number().int().nullable(),
+  })
+  .meta({ id: 'ReportDecision' });
+
+export type ReportDecision = z.infer<typeof reportDecisionSchema>;
+
+/**
+ * La respuesta de una aprobación: el obstáculo creado y el reporte marcado.
+ *
+ * Los dos viajan porque los dos cambiaron en la misma transacción, y el portal tiene que
+ * poder repintar la fila y el mapa sin volver a pedir nada
+ * ([18 §6](../../../docs/18-la-api-de-obstaculos.md)).
+ */
+export const approveReportResponseSchema = z
+  .object({
+    obstacle: obstacleFeatureSchema,
+    report: reportDecisionSchema,
+  })
+  .meta({ id: 'ApproveReportResponse' });
+
+export type ApproveReportResponse = z.infer<typeof approveReportResponseSchema>;

@@ -85,12 +85,16 @@ no se usa el paquete `cors`. Las reglas, que son las que un cliente percibe:
 | --- | --- |
 | Consultar un recorrido accesible | `POST /api/routes/calculate` ([13](13-api-de-ruteo.md)) |
 | Leer el grafo —veredas, cruces, cordones— de un área | `GET /api/graph?bbox=…` ([14](14-la-api-del-grafo.md)) |
+| Cambiar el nivel de accesibilidad de un elemento | `PATCH /api/graph/elements/{kind}/{id}` ([14 §7](14-la-api-del-grafo.md#7-la-edición-del-nivel)) |
+| Reportar un obstáculo, con foto | `POST /api/reports` y `POST /api/reports/images` ([17](17-la-api-de-reportes.md)) |
+| Leer los reportes de un estado | `GET /api/reports?status=…` ([17 §7](17-la-api-de-reportes.md#7-la-lectura-de-reportes)) |
+| Aprobar un reporte —crea el obstáculo— o descartarlo | `POST /api/reports/{id}/approve` y `/reject` ([18 §6](18-la-api-de-obstaculos.md#6-el-puente-de-un-reporte-a-un-obstáculo)) |
+| Leer, publicar y resolver obstáculos | `GET /api/obstacles`, `POST /api/obstacles` y `POST /api/obstacles/{id}/resolve` ([18](18-la-api-de-obstaculos.md)) |
 | Leer el contrato | `GET /api/openapi.json`, o la página navegable en `GET /api/docs` |
 | Saber si el servicio está arriba | `GET /api/health`, `GET /api/health/ready` |
 | Llamar a la API desde un navegador | Los orígenes de `CORS_ORIGINS`, sin credenciales (§3) |
 | Registrarse, iniciar sesión | No existe ([07 §3](07-plan-de-trabajo.md), Fase 3) |
 | Guardar rutas y lugares frecuentes | No existe (C006 a C009) |
-| Reportar un obstáculo | No existe (C010) |
 
 **Hoy no hay autenticación**: la API está abierta y ningún endpoint la pide. Un cliente que
 planifique contra un token que todavía no existe está planificando contra la nada.
