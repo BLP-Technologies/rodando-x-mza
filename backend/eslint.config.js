@@ -1,7 +1,9 @@
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-  { ignores: ['dist', 'node_modules'] },
+  // `src/db/types.ts` lo genera kysely-codegen desde la base (ver
+  // .kysely-codegenrc.json): no se edita a mano, así que no se lintea.
+  { ignores: ['dist', 'node_modules', 'src/db/types.ts'] },
   ...tseslint.configs.recommendedTypeChecked,
   {
     languageOptions: {

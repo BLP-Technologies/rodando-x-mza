@@ -2,44 +2,45 @@ stateDiagram-v2
     accTitle: Ciclo de vida de accesibilidad y verificación de un elemento del grafo peatonal
     accDescr: Estados de una vereda, una esquina (nodo de cordón) o un cruce peatonal según su nivel de accesibilidad y si el moderador ya verificó ese estado.
 
-    state "SIN VERIFICAR" as SIN_VERIFICAR
-    state "ACCESIBLE" as ACCESIBLE
-    state "PARCIALMENTE ACCESIBLE" as PARCIAL
-    state "NO ACCESIBLE" as NO_ACCESIBLE
+    state "SIN NIVEL" as UNVERIFIED
+    state "ACCESIBLE" as ACCESSIBLE
+    state "PARCIALMENTE ACCESIBLE" as PARTIALLY_ACCESSIBLE
+    state "NO ACCESIBLE" as NOT_ACCESSIBLE
 
-    [*] --> SIN_VERIFICAR
+    [*] --> UNVERIFIED
 
-    SIN_VERIFICAR --> ACCESIBLE: el moderador lo verifica y lo marca accesible (C014)
-    SIN_VERIFICAR --> PARCIAL: lo marca parcialmente accesible (solo nodos de cordón) (C014)
-    SIN_VERIFICAR --> NO_ACCESIBLE: lo marca no accesible (C014)
+    UNVERIFIED --> ACCESSIBLE: el moderador lo verifica y lo marca accesible (C014)
+    UNVERIFIED --> PARTIALLY_ACCESSIBLE: lo marca parcialmente accesible (C014)
+    UNVERIFIED --> NOT_ACCESSIBLE: lo marca no accesible (C014)
 
-    ACCESIBLE --> NO_ACCESIBLE: se deteriora o un nuevo relevamiento lo desmiente
-    NO_ACCESIBLE --> ACCESIBLE: se repara la rampa o se reconstruye la vereda
-    ACCESIBLE --> PARCIAL: el paso deja de ser completo
-    PARCIAL --> ACCESIBLE: se completa el rebaje o la rampa
-    PARCIAL --> NO_ACCESIBLE: el paso se vuelve intransitable
+    ACCESSIBLE --> NOT_ACCESSIBLE: se deteriora o un nuevo relevamiento lo desmiente
+    NOT_ACCESSIBLE --> ACCESSIBLE: se repara la rampa o se reconstruye la vereda
+    ACCESSIBLE --> PARTIALLY_ACCESSIBLE: el paso deja de ser completo
+    PARTIALLY_ACCESSIBLE --> ACCESSIBLE: se completa el rebaje o la rampa
+    PARTIALLY_ACCESSIBLE --> NOT_ACCESSIBLE: el paso se vuelve intransitable
 
-    ACCESIBLE --> SIN_VERIFICAR: se revierte la verificación (C014)
-    PARCIAL --> SIN_VERIFICAR: se revierte la verificación (C014)
-    NO_ACCESIBLE --> SIN_VERIFICAR: se revierte la verificación (C014)
+    ACCESSIBLE --> UNVERIFIED: se revierte la verificación (C014)
+    PARTIALLY_ACCESSIBLE --> UNVERIFIED: se revierte la verificación (C014)
+    NOT_ACCESSIBLE --> UNVERIFIED: se revierte la verificación (C014)
 
-    note right of SIN_VERIFICAR
+    note right of UNVERIFIED
         Estado inicial: el elemento ya existe en el grafo
         (importado de OpenStreetMap) pero nadie confirmó
-        todavía su estado real en la calle. El recorrido
-        lo advierte como tramo sin verificar.
+        su estado real en la calle. En el modelo de datos
+        es accessibility_level NULL; el recorrido lo
+        advierte como tramo sin verificar.
     end note
 
-    note right of ACCESIBLE
-        Verificado se guarda aparte del nivel de
-        accesibilidad: kerb_nodes.is_verified,
-        sidewalks.is_verified y crossings.is_verified.
-        Un elemento accesible pero no verificado
-        no debería darse por seguro.
+    note right of ACCESSIBLE
+        El nivel vive en accessibility_level y la
+        verificación en is_verified, que son ejes
+        distintos (docs/09-modelo-de-datos.md §4.1).
+        Un elemento accesible pero no verificado no
+        debería darse por seguro.
     end note
 
-    note left of NO_ACCESIBLE
+    note left of NOT_ACCESSIBLE
         Una vereda marcada como no accesible no se ofrece
         en los recorridos, aunque el mapa común la muestre.
-        El ruteo lo evita; el nivel parcial lo penaliza.
+        El ruteo la evita; el nivel parcial lo penaliza.
     end note

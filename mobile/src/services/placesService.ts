@@ -13,8 +13,16 @@ export const placesService = {
   // GET /api/places
   async getAll(): Promise<Place[]> {
     if (!USE_MOCK) {
-      const res = await apiFetch('/api/places');
-      return res.json();
+      try {
+        const res = await apiFetch('/api/places');
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data)) return data;
+          if (data && Array.isArray(data.data)) return data.data;
+        }
+      } catch (error) {
+        console.warn('Fallo en /api/places, usando almacenamiento local:', error);
+      }
     }
 
     await simulateNetworkDelay();
@@ -26,10 +34,10 @@ export const placesService = {
         await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(seedData));
         return seedData;
       }
-      return JSON.parse(stored) as Place[];
+      return stored ? JSON.parse(stored) : [];
     } catch (error) {
       console.error('Error al obtener lugares:', error);
-      return initialPlacesData as Place[];
+      return [];
     }
   },
 

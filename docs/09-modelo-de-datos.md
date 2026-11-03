@@ -1,0 +1,709 @@
+# Modelo de datos
+
+> Documento temático. Define las convenciones del esquema de la base de datos y cómo
+> se representa cada tipo de dato cerrado. Es el estado vivo de esas decisiones: se
+> edita en su lugar cuando cambian. Se complementa con
+> [01-diagramas.md](01-diagramas.md), que contiene el DER y los diagramas de estados,
+> con [02-stack-y-estructura.md](02-stack-y-estructura.md), que define el acceso a
+> datos, y con [00-reglas-documentacion.md](00-reglas-documentacion.md).
+
+## 1. Alcance
+
+Este documento responde:
+
+- **Qué convenciones** rigen el esquema: idioma de los valores, ausencia de dato y
+  baja lógica (§2).
+- **Cómo** se representa un conjunto cerrado de valores, y con qué criterio se elige
+  entre las tres formas posibles (§3).
+- **Qué** forma tiene cada campo cerrado del modelo, y qué relación hay entre
+  reportes y obstáculos (§4).
+- **Dónde** vive el costo de ruteo de las aristas y con qué se combina (§4.7).
+- **Cuál** es el perímetro dentro del que se aceptan las puntas de una consulta (§4.8).
+- **Cómo** se administra un enum: orden, agregar, renombrar y quitar valores (§5).
+- **Qué** forma tiene un catálogo y cómo se da de baja una fila (§6).
+- **Cómo** se escribe una migración: formato, nombres, marcas de tiempo y
+  `updated_at` (§7).
+
+No contiene el DER —eso es [01-diagramas.md](01-diagramas.md) §3 y su fuente en
+`docs/diagrams/01-DER.mmd`— ni las reglas de negocio que usan estos valores: las
+transiciones de estado están en los diagramas `05-est-*.mmd`. El costo de ruteo de las
+aristas sí se decide acá, pero solo en lo que toca al esquema: no es una columna (§4.7).
+
+## 2. Convenciones del esquema
+
+| Convención | Regla |
+| --- | --- |
+| Idioma de identificadores y valores de máquina | Inglés ([02](02-stack-y-estructura.md) §5) |
+| Idioma del texto de contenido | Español, en columnas `name_es` |
+| Ausencia de dato | `NULL`. Nunca un valor centinela (`0`, `''`, `'-'`, `'UNKNOWN'`) |
+| Baja lógica | `deleted_at`. Nunca un estado ni un booleano `is_deleted` |
+| Baja de una fila de catálogo | `is_active`, porque la FK tiene que seguir resolviendo (§6) |
+| Marcas de tiempo | `created_at` y `updated_at` en toda tabla mutable; `deleted_at` si hay baja lógica |
+
+La regla de `NULL` es la que más se rompe, y conviene tenerla explícita: **`NULL` es
+ausencia de dato; un valor del enum es un dato del dominio**. Por eso ningún enum
+lleva un miembro que signifique "no sé", y por eso "no accesible" (`NONE`) y "sin
+relevar" (`NULL`) son estados distintos y no se pueden confundir.
+
+## 3. Los tres casos
+
+Un conjunto cerrado de valores se representa de una de tres formas. El criterio **no**
+es cuánto cambia, sino qué es el valor:
+
+| Caso | Representación | Cuándo |
+| --- | --- | --- |
+| **Vocabulario del dominio** | `enum` de PostgreSQL | Cerrado, sin atributos propios, el código lo interpreta y hay que poder ordenarlo o compararlo |
+| **Catálogo** | Tabla de referencia + FK | El valor tiene identidad propia, lleva atributos, o lo edita un moderador sin deploy |
+| **Código de una fuente externa** | El tipo nativo del código + `CHECK` | El alfabeto lo fija la fuente y el sistema solo lo transporta |
+
+Hay una razón técnica, además de las de diseño, para preferir el enum sobre
+`varchar` + `CHECK` cuando corresponde: los tipos de la base se **generan** para
+Kysely. Un generador traduce un enum nativo a una unión de literales
+(`'FULL' | 'PARTIAL' | 'NONE'`); una restricción `CHECK` sobre `varchar` le es
+invisible y la columna queda tipada como `string`. Con `CHECK`, la restricción existe
+en la base pero se pierde justo en la capa donde se escriben las consultas.
+
+## 4. Decisión por campo
+
+### 4.1 Enums
+
+Un solo tipo por vocabulario, compartido por todas las tablas que lo usan:
+
+| Tipo | Valores, en orden de declaración | Se usa en |
+| --- | --- | --- |
+| `accessibility_level` | `FULL`, `PARTIAL`, `NONE` | `kerb_nodes`, `sidewalks`, `crossings` |
+| `obstacle_severity` | `MINOR`, `MODERATE`, `CRITICAL` | `obstacles` y `reports` |
+| `report_status` | `PENDING`, `APPROVED`, `UNDER_REPAIR`, `RESOLVED`, `REJECTED` | `reports` |
+
+De los tres, **solo `accessibility_level` es nullable**, y ahí `NULL` significa "no
+determinado": nadie relevó ese nodo, esa vereda o ese cruce. Los otros dos no lo son por
+una razón del mismo principio: un dato *permite* decir "no sé", una decisión no.
+`obstacles.severity` y `reports.severity` son `NOT NULL` porque alguien clasificó la
+barrera o la percibió, y `reports.status` es `NOT NULL DEFAULT 'PENDING'` porque todo
+reporte nace pendiente. Tampoco se usa un valor del enum para reemplazar el `NULL` del
+nivel.
+
+**`accessibility_level` en las tres tablas.** Antes, `kerb_nodes` tenía un ternario y
+`sidewalks` y `crossings` un booleano `is_accessible`. El booleano no es una versión
+de dos valores del ternario: es un ternario con un valor prohibido, y el valor
+prohibido —nadie lo relevó— es el caso más común al importar OpenStreetMap. Un
+booleano obliga a escribirlo como `false`, y entonces una vereda sin datos queda
+igual que una sin rampa: en una aplicación de accesibilidad ese es el peor default
+posible, porque el ruteo evita tramos que quizá están en buen estado.
+
+`PARTIAL` es el valor que justifica el ternario: una vereda angosta o con desnivel
+parcial no es intransitable, es transitable con penalización. Cuánto penaliza cada
+nivel se decide en el costo de las aristas (§4.7).
+
+**`is_verified` es otro eje y no se reemplaza.** Dice procedencia —"un moderador
+comprobó este valor"— no accesibilidad. Un elemento puede tener nivel `PARTIAL`
+importado de OSM sin que nadie lo haya verificado, y la inversa: el importador no
+debería inventar un nivel. Por eso `accessibility_level` y `is_verified` se guardan
+por separado y ninguna de las dos columnas se usa para significar lo de la otra.
+
+La columna es verdadera cuando una persona del equipo **miró el elemento**: en el
+lugar o en una imagen del lugar ([12 §5](12-relevamiento-de-accesibilidad.md)). La
+visita y la imagen no se distinguen en la base —`is_verified` responde "¿alguien
+comprobó esto?"—; cuál de las dos fue, y de cuándo es la imagen, vive en la planilla
+del relevamiento.
+
+**`is_verified` es además la columna que resuelve quién gana entre dos escrituras.** La
+carga del relevamiento no pisa un elemento verificado salvo que se fuerce, y la edición
+del portal lo pisa porque es el forzado explícito: la regla lee esta columna y no otra
+([12 §8.2](12-relevamiento-de-accesibilidad.md)). El MVP no agrega una columna de
+procedencia ni de autor: lo que pisó una carga forzada queda en el reporte de la corrida.
+
+**En el MVP `is_verified` se deriva de `level`.** La edición del portal escribe
+`is_verified` como `level IS NOT NULL`: un nivel guardado es un nivel que alguien miró, y
+"sin dato" no es un valor confirmado, así que devuelve el elemento al estado de recién
+importado ([14 §7](14-la-api-del-grafo.md)). Hoy no hay ninguna fuente que produzca un
+nivel sin verificar, así que las dos columnas no se contradicen nunca; el día que exista
+(si alguna vez se importa un nivel de OSM, por ejemplo), vuelven a ser dos ejes
+genuinamente separados. El precio de no guardar autor está aceptado por el MVP
+([12 §8.3](12-relevamiento-de-accesibilidad.md)).
+
+**`report_status` no incluye la baja.** La baja de un reporte es `deleted_at`, no un
+estado: si `DELETED` fuera un valor del enum, habría dos fuentes de verdad para "este
+reporte está borrado". Los diagramas de estados sí muestran la baja como estado final
+del ciclo de vida, y está bien: el ciclo de vida incluye la baja, pero el enum no.
+
+### 4.2 Catálogos
+
+| Tabla | Reemplaza | Filas iniciales |
+| --- | --- | --- |
+| `obstacle_types` | `obstacles.type` (`varchar`) | Las once de abajo |
+| `tutorial_categories` | `tutorials.category` (`varchar(30)`) | Ninguna: se siembran al definir la carga de tutoriales |
+
+Los tipos de obstáculo, en el orden del seed (el portal ordena por `name_es`):
+
+| `code` | `name_es` |
+| --- | --- |
+| `POTHOLE` | Pozo |
+| `BROKEN_PAVEMENT` | Rotura de vereda |
+| `MISSING_SIDEWALK` | Falta tramo de vereda |
+| `CONSTRUCTION` | Obra en la vía |
+| `TREE` | Árbol o raíces |
+| `STEP` | Escalón |
+| `STEEP_SLOPE` | Pendiente excesiva |
+| `NARROWING` | Estrechamiento |
+| `MISSING_RAMP` | Falta rampa |
+| `BLOCKED_PASSAGE` | Paso obstruido |
+| `OTHER` | Otros |
+
+**`OTHER` tiene un uso acotado, a propósito.** Es la salida del ciudadano cuando nada
+encaja, no la del moderador: al crear el obstáculo, el moderador clasifica con el tipo
+que corresponde, así que el dato que alimenta el ruteo y las estadísticas no arrastra
+"otros". Si `OTHER` empieza a aparecer seguido con el mismo motivo en la descripción,
+esa es la señal de que falta un tipo en el catálogo — y agregarlo es un `INSERT`, no
+una migración, porque el catálogo es datos.
+
+**`obstacles.type` va a catálogo** porque el tipo no es solo una etiqueta: lleva
+atributos propios (el nombre para mostrar) y va a crecer por datos —una barrera nueva no
+debería esperar un deploy—. Como `varchar` no admite un atributo, y como enum no admite
+atributos, la tabla de referencia es la única forma que cubre los dos casos.
+
+**El catálogo no lleva el efecto del tipo en el ruteo.** Si una barrera bloquea el paso o
+solo lo dificulta no es una propiedad del tipo —un pozo grande bloquea y uno chico no;
+una obra puede ocupar todo el ancho de la vereda o una parte— sino del obstáculo
+concreto, y ahí el dato ya existe: `obstacles.severity` (§4.7). Por eso no hay columna de
+peso ni de bloqueo en `obstacle_types`: agregarla daría dos fuentes para la misma
+pregunta y una contradicción posible (`MISSING_RAMP` marcado `MINOR` que igual bloquea).
+
+**`tutorials.category` va a catálogo** por la misma razón, con un argumento propio: la
+categoría la crean, editan y desactivan los moderadores. Un enum obligaría a una
+migración cada vez que alguien agrega una categoría de video.
+
+### 4.3 Los campos que se eliminan
+
+Tres campos del DER original se eliminaron, y se documenta acá porque quitarlos es una
+decisión de esquema, no un detalle.
+
+**`sidewalks.side`.** El "lado" de una vereda no es un atributo de la vereda: es una
+**relación entre tres cosas** —la vereda, la calzada y quien mira—. Una columna guarda
+atributos, no relaciones, y por eso el valor almacenado solo puede ser correcto para
+uno de los dos sentidos de circulación. Los casos que lo rompen no son excepciones: en
+una calle de doble sentido no hay un lado único, una vereda entre carriles no es ni
+izquierda ni derecha, y para un peatón que camina contra el sentido de la calle la
+izquierda queda a su derecha.
+
+Lo único que sobrevive del concepto es la convención de OpenStreetMap
+(`sidewalk:left` / `sidewalk:right`), que es relativa a la dirección en que el way
+fue digitalizado. Es determinista, pero es un **artefacto del import**: no sirve para
+la interfaz y cambia si alguien re-digitaliza el way. El importador tampoco lo lee:
+deriva siempre las dos veredas, una por lado, sin mirar qué declara la vía
+([11 §3.4](11-grafo-peatonal.md)).
+
+Lo que ve el peatón **se calcula y no se guarda**: la pierna de la ruta ya tiene una
+dirección (de A a B) y la vereda tiene geometría, así que el lado es un producto cruz
+entre dos vectores. Se recalcula en cada consulta, no se desactualiza y no ocupa una
+columna.
+
+También se descartó distinguir por numeración par o impar: la numeración es de la
+calle, no de la vereda, y una esquina pertenece a las dos.
+
+**`sidewalks.width`.** Un ancho por tramo es un promedio, y la vereda real se angosta
+y se ensancha dentro de la misma cuadra: en el microcentro el promedio es razonable, en
+un barrio no. El problema no se arregla con otro tipo de dato.
+
+Pero el argumento que decide es otro: para que el ancho aporte algo tiene que
+**alimentar el costo del ruteo**, y eso exige que alguien haya medido la vereda.
+OpenStreetMap casi nunca trae el ancho, y relevar anchos a mano no está en el alcance
+de ninguna fase. El resultado previsible era una columna que existe, que nadie llena,
+y que en seis meses alguien iba a encontrar en el DER preguntando si estaba rota.
+
+La accesibilidad ya expresa el resultado: una vereda demasiado angosta para una silla
+de ruedas es `PARTIAL` o `NONE`. El ancho solo hace falta si se quiere *calcular* el
+nivel en vez de relevarlo. Agregar la columna después es aditivo y barato; y si el
+ruteo llegara a necesitar el dato, probablemente no sea una columna sino muestras a lo
+largo de la arista.
+
+**`crossings.has_traffic_light`.** Es el mismo caso que el ancho, con un problema más:
+un booleano **no dice lo que hay que saber**. Que un cruce tenga semáforo o no explica
+poco de su riesgo peatonal —cuenta el volumen y la velocidad del tráfico, si hay senda
+pintada, si la fase es protegida, el ancho de la calzada—, así que cualquier regla que lo
+usara estaría adivinando.
+
+Pero lo que lo vuelve inservible en el MVP es el valor por defecto. La columna es
+`NOT NULL DEFAULT false` y OpenStreetMap no trae el tag de forma confiable, así que **el
+import deja todo el grafo diciendo "sin semáforo"**. Una penalización por ese campo
+castigaría todos los cruces, incluidos los de una calle de barrio donde no hay semáforos
+porque no hacen falta: exactamente el error del booleano de accesibilidad (§4.1), un
+valor que significa "no sé" y termina afirmando algo falso.
+
+Se elimina del DER en esta decisión y la columna se borra con la migración
+correspondiente (#24). Si en alguna fase se quiere modelar el riesgo de un cruce, es un
+análisis propio —y casi seguro no con un booleano—; el tag de OSM se puede volver a
+importar cuando exista ese modelo.
+
+### 4.4 El modelo en la calle
+
+El DER dice qué tablas hay; estos esquemas dicen **qué representa cada una**. Lo
+primero es la calle como la ve una persona; el mapeo al grafo viene después.
+
+**Una intersección de dos calles.** Cuatro cordones (uno por esquina), cuatro cruces y
+las veredas que llegan a cada uno. Las rampas están en amarillo y los nodos en verde:
+lo que ilustra es que **varias rampas de una misma esquina son un solo `kerb_node`**,
+con un solo nivel de accesibilidad.
+
+![Intersección de dos calles: veredas, cruces y rampas por esquina](diagrams/imgs/interseccion-ilustracion.png)
+
+El mismo lugar como grafo: los nodos son los vértices, los cruces las aristas que
+forman el cuadrado del cruce, y las veredas las que salen hacia afuera.
+
+![El grafo de la intersección: cuatro nodos y las aristas de vereda y de cruce](diagrams/imgs/interseccion-grafo.png)
+
+**Un cruce a mitad de cuadra.** Acá se ve el caso que más cuesta: dos nodos que **no
+son esquinas**. Un cordón existe donde se conecta algo, no donde hay una manzana.
+
+![Cruce peatonal a mitad de cuadra, con sus dos nodos](diagrams/imgs/cruce-ilustracion.png)
+
+Y su grafo: el cruce es la arista vertical, y la vereda queda **partida en dos aristas**
+porque el nodo corta el tramo.
+
+![El grafo del cruce a mitad de cuadra](diagrams/imgs/cruce-grafo.png)
+
+Dos consecuencias que se desprenden de esos dibujos y que conviene tener presentes:
+
+- **Un solo nivel por nodo, aunque tenga dos rampas.** Si la rampa hacia un cruce está
+  bien y la del otro no, un único `accessibility_level` miente en una de las dos
+  direcciones. Es la simplificación que se acepta para el MVP; para que falle del lado
+  seguro, el nivel del nodo se registra por el **peor caso** de sus rampas: ante la
+  duda, el ruteo evita el paso. Revisar cuando el relevamiento muestre esquinas con
+  rampas muy distintas entre sí.
+- **Una vereda se corta en cada nodo.** El importador no puede mapear "una way de OSM =
+  una vereda": tiene que cortar la way en cada nodo, incluidos los que crea un cruce a
+  mitad de cuadra. Si no, la topología queda desconectada en esos puntos.
+
+### 4.5 Reporte y obstáculo
+
+Son dos tablas distintas porque son dos cosas distintas, y comparten dos columnas con
+el mismo nombre, lo que conviene explicar de entrada:
+
+| | `reports.type_id` / `reports.severity` | `obstacles.type_id` / `obstacles.severity` |
+| --- | --- | --- |
+| Qué representan | La **percepción** del ciudadano que reportó | La **decisión** del moderador al publicar |
+| Para qué sirven | Que el moderador sepa qué le pareció ver, y estadística de lo que la gente reporta | Alimentan el mapa, el ruteo y las estadísticas del sistema |
+| Pueden ser `OTHER` | Sí | No: el moderador clasifica con el tipo que corresponde |
+
+Sin esa distinción, las columnas parecen duplicadas. No lo están: el reporte guarda el
+insumo, el obstáculo guarda el resultado, y compararlos es lo que permite ver dónde la
+percepción ciudadana y la clasificación oficial no coinciden.
+
+**Cardinalidad.** Un reporte nace sin obstáculo y puede no tenerlo nunca. Un obstáculo,
+en cambio, puede tener **varios** reportes apuntándolo: varias personas reportan el
+mismo pozo. Entonces la columna vive en el lado que se repite —`reports.obstacle_id`,
+nullable y sin `UNIQUE`— y no al revés. Un único `obstacles.report_id` no podría
+representar dos reportes del mismo obstáculo sin duplicar el obstáculo.
+
+**El flujo de aprobación** (C012) crea el obstáculo y, en la misma transacción, marca
+el reporte: `status = 'APPROVED'` y `obstacle_id` con el id nuevo. Aprobar significa
+crear el obstáculo; no hay estado aprobado sin obstáculo.
+
+**Los duplicados** no necesitan diseño propio en el MVP: el moderador aprueba uno y
+los demás se marcan `REJECTED`, que ya es el estado previsto para "duplicado". Si más
+adelante quieren agruparlos, la columna permite que varios reportes apunten al mismo
+obstáculo; se agrega en el portal, no en el esquema.
+
+**Dónde cuelga un obstáculo.** De a lo sumo uno de los tres elementos primitivos:
+`sidewalk_id`, `kerb_node_id` o `crossing_id`, con
+`CHECK (num_nonnulls(...) <= 1)`. Tres columnas y un `CHECK`, en lugar de un par
+polimórfico `element_type` + `element_id`, que se ve más prolijo pero pierde la
+integridad referencial: nada impediría apuntar a un id que no existe.
+
+No es un detalle teórico: **`MISSING_RAMP` vive en el cordón**, no en la vereda. La
+rampa es la pieza que une vereda y calzada, y en el modelo es el `kerb_node`. Un
+esquema que solo permitiera colgar obstáculos de veredas dejaría sin lugar el tipo más
+específico de una aplicación de accesibilidad.
+
+Colar de **cero** elementos es válido: el `geom` del obstáculo es la fuente de verdad
+de dónde está. El vínculo con el elemento es un enriquecimiento que el portal resuelve
+con el punto, y existe para que el ruteo pueda penalizar el elemento correcto.
+
+**Obstáculo y nivel de accesibilidad no se reemplazan.** Un obstáculo es un **evento**
+—tiene fecha, autor, severidad y un ciclo de vida que termina al resolverse—; el nivel
+es el **estado actual** del elemento. Si una rampa rota se resolviera solo bajando el
+nivel del cordón a `NONE`, se perdería cuándo se rompió, cuántas rampas rotas hubo en
+el año, y alguien tendría que acordarse de subir el nivel cuando se arregle. Lo que
+corresponde es crear el obstáculo y, si la barrera vuelve el paso intransitable, bajar
+el nivel también: son dos datos complementarios.
+
+### 4.6 Rutas guardadas
+
+`saved_routes` guarda **solo los extremos**, y eso es deliberado: **no se agrega una
+columna con la geometría del recorrido.**
+
+La razón es la promesa del producto. Si alguien guarda "casa → escuela" y el sistema
+almacena el camino calculado, ese camino puede volverse intransitable a la mitad —un
+obstáculo nuevo, una vereda rota— y la aplicación estaría mandando a la persona por un
+recorrido que ya no existe. Guardar el punto de partida y el de llegada obliga a
+recalcular cada vez, con los obstáculos y la accesibilidad del momento.
+
+La consecuencia aceptada: el mismo par de extremos puede dar caminos distintos en
+momentos distintos. Eso no es un defecto, es el comportamiento correcto.
+
+### 4.7 El costo de las aristas se calcula, no se guarda
+
+Ni `sidewalks` ni `crossings` llevan una columna de costo. El costo de cada arista se
+**deriva en la consulta de ruteo** a partir de lo que ya está en el esquema: la longitud de
+su geometría, el `accessibility_level` del elemento y los obstáculos activos que lo afectan.
+
+Una vista, `walkable_edges`, reúne las dos tablas de aristas y escribe la fórmula una sola
+vez:
+
+```
+costo(e) = metros(e) × factor_nivel(e) + Σ penalización(obstáculos activos de e)
+```
+
+**Una vista no es una copia.** `CREATE VIEW` guarda solo el texto de la consulta: cada vez
+que se consulta, PostgreSQL lo expande y calcula el costo en ese momento. No ocupa espacio,
+no hay nada que mantener actualizado y no puede desincronizarse con las tablas. La que
+guarda datos es la vista *materializada*, y es justamente la que no se quiere. La vista
+existe en `infra/migrations/1793500666032_create-walkable-edges-view.sql` y expone también
+`metros` y `level` —el nivel que efectivamente se cobró— porque un costo que no se puede
+descomponer no se puede explicar ni revisar ([11 §5](11-grafo-peatonal.md)).
+
+**`metros`** es `ST_Length(geom::geography)`, en metros reales y no en grados. No es un
+detalle: `pgr_dijkstra` minimiza la suma de los costos, así que las aristas tienen que estar
+en una unidad comparable; con grados, un tramo norte-sur cuesta más que uno este-oeste del
+mismo largo. Y sin ningún término de distancia el algoritmo minimiza la **cantidad de
+aristas** y no los metros: una ruta de quince cuadras cortas le gana a una de tres largas.
+
+**`factor_nivel`** multiplica, porque el nivel y el largo describen el mismo recorrido: 100 m
+de vereda `PARTIAL` cuestan como 200 m, y así se comparan con 200 m de vereda `FULL`.
+
+| `accessibility_level` | `factor_nivel` |
+| --- | --- |
+| `FULL` | 1 |
+| `PARTIAL` | 2 |
+| `NULL` | 2 |
+| `NONE` | `-1` |
+
+`NONE` no es un factor alto: **es `-1`, que es como pgRouting representa una arista que no
+se puede recorrer** ("a negative value on a cost column is interpreted as the edge does not
+exist"). Con eso la arista queda fuera del grafo sin un `WHERE` que la filtre, y cuando no
+hay camino el caso de uso ya tiene respuesta: C003 responde que no hay recorrido accesible,
+porque **no se desvía a la persona por un paso que no se puede franquear**
+([13 §6](13-api-de-ruteo.md#6-cuando-no-hay-recorrido)).
+
+**En un cruce, el nivel puede venir de la esquina.** `crossings.accessibility_level`
+sólo tiene valor si alguien miró ese cruce puntual; el importador no lo escribe, porque
+dónde termina el asfalto no dice cómo se entra. Así que el valor que entra en
+`factor_nivel` es el del cruce si lo tiene, y si no, **el peor de sus dos esquinas**
+([12 §3](12-relevamiento-de-accesibilidad.md)). **El peor**, con el orden del enum
+(`FULL < PARTIAL < NONE`), y una esquina sin dato cuenta como `PARTIAL` antes de comparar:
+un cruce con una esquina sin relevar y la otra `FULL` se cobra como `PARTIAL`, no como
+`FULL`. Si no, la esquina que nadie miró abarataría el cruce.
+
+Eso cierra un hueco del modelo: un nodo no tiene costo, así que una esquina `NONE` no
+bloqueaba nada. Con el derivado, una esquina sin rampa deja en `NONE` los cruces que
+salen de ella —no se cruza por ahí— y deja caminable la vereda que la rodea, que es lo
+que pasa en la calle. No hace falta inventar un costo en el nodo, ni que C014 escriba
+en dos tablas.
+
+`NULL` se cobra como `PARTIAL`, y la regla se enuncia así: **sin dato no se evita y no se
+premia**. Las dos lecturas directas son peores. Cobrarlo como `FULL` hace que el import de
+OpenStreetMap —que no trae accesibilidad— deje toda la red gratis, y entonces el ruteo
+prefiere una vereda sin relevar antes que una que un moderador revisó y marcó `PARTIAL`: el
+relevamiento castigaría al dato bueno. Cobrarlo como `NONE` deja la zona piloto sin ninguna
+ruta posible, que es el default que §4.1 ya descartó para el ternario.
+
+**Las penalizaciones suman, y por eso no multiplican.** Un obstáculo es un evento puntual:
+está en un lugar, y cuesta lo mismo en una cuadra de 50 m que en una de 100. Si su efecto
+multiplicara el largo, el mismo pozo costaría el doble por estar en una vereda más larga,
+que es falso; lo que escala con la distancia es caminar, y eso ya está en `metros`. Sumar
+deja además una sola unidad, los **metros equivalentes**: "este pozo cuesta como 15 m de
+vuelta".
+
+| Situación de la arista | Sumando |
+| --- | --- |
+| Sin obstáculos activos | 0 |
+| Un obstáculo `MINOR` | +15 m |
+| Un obstáculo `MODERATE` | +40 m |
+| Un obstáculo `CRITICAL` | la arista pasa a `-1` |
+
+Dos obstáculos en la misma cuadra suman. Que el mismo pozo reportado por cinco personas
+cuente una vez no depende de esta fórmula sino del modelo: los cinco reportes apuntan a
+**un** obstáculo, no a cinco (§4.5).
+
+**`CRITICAL` es la única severidad que no se pondera: bloquea.** Bloquear es una propiedad
+del obstáculo concreto y no de su tipo —un pozo grande bloquea y uno chico solo dificulta;
+una obra puede ocupar todo el ancho de la vereda o una parte—, así que el dato vive en
+`obstacles.severity` y no en el catálogo (§4.2). La consecuencia a tener presente: en el
+enum, `CRITICAL` pasa a significar "no se puede pasar" y ya no puede significar "muy malo,
+pero pasable". Si ese matiz hiciera falta, se agrega un nivel al enum (§5), no una columna.
+
+**Obstáculos activos** son los que tienen `is_resolved = false` y `deleted_at IS NULL`. El
+estado del reporte no entra en el costo: un reporte `UNDER_REPAIR` cuyo obstáculo sigue
+activo describe una barrera que sigue en la calle.
+
+**En un nodo, solo se honra el bloqueo.** Los metros son una cantidad de arista y un
+`kerb_node` no tiene: `pgr_dijkstra` no cobra por nodo, y como el caminar es no dirigido
+tampoco se puede cobrar "al salir" de uno sin volver el grafo dirigido. Entonces un
+obstáculo `CRITICAL` sobre un cordón deja intransitables todas sus aristas incidentes —la
+esquina no se puede usar, que es lo que significa una rampa faltante—, y un `MINOR` o
+`MODERATE` sobre un cordón **no mueve el costo**: queda en el mapa como información. Las
+alternativas descartadas repartían la penalización entre las aristas incidentes, con lo que
+la cuenta dependía del grado del nodo y una ruta que atravesaba la esquina pagaba dos veces.
+La puerta para modelar costo en el nodo existe —`pgr_trsp` con penalizaciones de giro— pero
+pide un grafo consciente de giros: es otra decisión.
+
+Los números de las tablas son el **punto de partida**, no el contrato: se ajustan midiendo
+rutas reales, y viven en la vista, no en los datos.
+
+#### Por qué no una columna `weight`
+
+El diagrama de C012 escribía `UPDATE sidewalks SET weight = weight + penalty` al crear un
+obstáculo, y ese `UPDATE` es el que no va a existir. Los motivos:
+
+1. **Una columna así es un caché sin invariante.** Tiene que ser verdadera después de cada
+   escritura, y los escritores son varios: crear el obstáculo (C012), resolverlo (C013),
+   cambiar el nivel de accesibilidad (C014), corregir la severidad en el portal, reimportar
+   OpenStreetMap. Cada uno de esos caminos tendría que acordarse de recalcular, y ninguno de
+   esos cálculos se puede auditar: no queda registro de qué se sumó.
+2. **`weight = weight + penalty` no se puede revertir.** Resolver el obstáculo tiene que
+   restar exactamente lo que se sumó: si la misma barrera tuvo dos reportes aprobados como
+   dos obstáculos se sumó dos veces, pero no hay columna que diga cuántas, y la reparación
+   resta una vez. Con el costo derivado, resolver el obstáculo alcanza para que deje de
+   contar.
+3. **El obstáculo ya es dueño de su efecto.** Guardar el efecto en la arista duplica una
+   verdad que tiene dueño propio, que es el obstáculo con su tipo, su severidad y su estado.
+   Es el mismo argumento de §4.6 para no guardar el recorrido de una ruta guardada, y el de
+   §4.1 para que `report_status` no lleve un valor `DELETED`.
+4. **El número es política, no dato de la calle.** Qué factor recibe cada nivel y cuántos
+   metros equivalentes suma cada severidad se ajusta probando, y guardarlos convertiría cada
+   ajuste en una migración de datos sobre todo el grafo. Así se cambia una vista.
+
+#### Limitaciones aceptadas
+
+**Bloquear bloquea la arista entera.** Una barrera en el metro 80 de una vereda de 100 m
+deja intransitable también el metro 60, que físicamente se puede caminar hasta ahí. Pasa
+porque la unidad de costo es la arista y el modelo no tiene barreras en el medio de una; las
+aristas ya se cortan en cada nodo, así que en el peor caso se pierde una cuadra.
+
+El arreglo correcto no es afinar el costo por metro: es **partir la arista en el punto del
+obstáculo** cuando el moderador lo vincula, con ese punto convertido en un `kerb_node` nuevo
+y las dos mitades heredando nivel y verificación. No entra en el MVP por una razón que no es
+de esquema: sería la primera vez que el portal modifica el grafo, y eso exige que el
+importador respete los cortes al reimportar, cosa que hoy no puede porque `crossings` no
+tiene identificador externo (§8). Se revisa cuando el importador sea idempotente. Mientras
+tanto, el portal puede avisar, al vincular un obstáculo a un tramo, que en el ruteo esa
+barrera bloquea la cuadra entera y no solo el punto: la limitación queda visible en lugar de
+sorpresiva.
+
+#### Consecuencias
+
+- **C012 no recalcula nada.** Crea el obstáculo y marca el reporte; el efecto en el ruteo
+  aparece en la próxima consulta, sin escribir en las tablas del grafo. Bajar además el nivel
+  del elemento, cuando la barrera cambia su estado actual, sigue siendo válido (§4.5), pero
+  el ruteo ya no depende de que se haga.
+- **C013 y C014 tampoco.** Resolver un obstáculo o cambiar un nivel escribe una sola tabla.
+  Dejan de existir los escritores del costo que podían desincronizarlo.
+- **Toda consulta de ruteo paga la derivación.** En la zona piloto son algunos miles de
+  aristas y no se nota. Se mide con `EXPLAIN` antes de suponer; si molesta, la salida es una
+  vista materializada que se refresca cuando cambia una de las tablas que la alimentan, no
+  una columna que alguien actualiza a mano.
+- **Hacen falta índices parciales de obstáculos activos** por `sidewalk_id`, `kerb_node_id` y
+  `crossing_id`. Los que existen filtran por `IS NOT NULL`, no por estado. Se agregan al
+  implementar el ruteo, con la medición a la vista.
+- **La vista es donde se unen las dos tablas de aristas.** `pgr_dijkstra` necesita una
+  sola relación con `id`, `source`, `target` y `cost`, y los `id` de veredas y cruces se
+  pisan, así que ahí se resuelven los identificadores sintéticos; como el caminar es no
+  dirigido, alcanza con `cost` y `directed => false`, sin `reverse_cost`. La forma de
+  esa relación y el identificador sintético están en
+  [11 §5](11-grafo-peatonal.md).
+- **El semáforo no entra.** `crossings.has_traffic_light` se elimina (§4.3): el costo de un
+  cruce no depende por ahora de nada más que su accesibilidad y sus obstáculos.
+
+### 4.8 Las áreas de servicio
+
+`service_areas` guarda **los perímetros dentro de los que se aceptan las puntas de una
+consulta de ruteo**. Resuelve una red de seguridad que antes no existía: el ruteo pegaba
+cualquier coordenada del mundo al cordón más cercano, así que un punto en otra provincia
+devolvía un camino que empezaba en el borde del grafo y parecía válido.
+
+| Columna | Tipo | Para qué |
+| --- | --- | --- |
+| `id` | `int` PK | Clave estable de la fila; viaja en la respuesta del grafo como identidad del área |
+| `name` | `varchar(100)` único | Identifica el área en el código y en la operación |
+| `geom` | `geometry(Polygon, 4326)` | El perímetro de búsqueda |
+| `is_active` | `boolean` | Baja lógica de la fila |
+| `created_at`, `updated_at` | `timestamptz` | Marcas de tiempo |
+
+El único de `name` existe para que el área nombrada en el código sea una sola fila, y el
+índice GiST sobre `geom` porque la validación es una consulta espacial por cada punta de
+cada pedido de ruta.
+
+**Es una tabla y no una columna de configuración.** La geometría de un polígono es un dato,
+no un parámetro: no tiene forma de `varchar` ni de `numeric`, y guardarla en una variable de
+entorno obliga a que el proceso la parsee y a que no haya índice espacial que usar. Una
+variable de entorno tampoco tiene historia: no se ve qué perímetro estaba activo ayer ni
+queda registrado quién lo cambió.
+
+**Una fila por área, y no una sola fila.** Agregar una zona —el resto de la Ciudad de
+Mendoza, un segundo piloto— es un `INSERT`, no una migración. Con una columna en una tabla
+de configuración habría que cambiar el esquema para pasar de una zona a varias, y con un
+`varchar` habría que inventar un formato para dos geometrías.
+
+**`is_active` permite reemplazar un polígono sin cortar el servicio.** Un perímetro que crece
+se reemplaza en una transacción: se desactiva el viejo y se activa el nuevo, y no existe un
+instante en que la aplicación no sepa contra qué validar. `deleted_at` no serviría: no hay
+baja lógica que conservar, la fila vieja se descarta.
+
+**La geometría se deriva, no se dibuja a mano.** La fila que existe hoy es `Zona piloto Fase
+1`, el polígono de [10](10-datos-y-zona-piloto.md) corrido **50 m hacia afuera con las
+esquinas en ángulo recto** (`ST_Buffer(...::geography, 50, 'join=mitre')`). El método y el
+WKT quedan en la migración `1793503685017_create-service-areas.sql`, que es donde se puede
+reproducir.
+
+**La lectura de las activas la hace `GET /api/graph`.** La respuesta trae las áreas
+vigentes en `service_areas`, con su `id`, su nombre y su polígono, y el contrato está en
+[14 §5.2](14-la-api-del-grafo.md). No hay endpoint propio del área: es un polígono fijo
+que el mapa dibuja junto con el grafo que ya pide.
+
+**No está en el camino del ruteo.** El área limita **las puntas** de una consulta, no el
+recorrido: el camino sigue siendo todo el grafo, y por eso no hay ninguna arista que se
+recorte por caer afuera (ver [11 §5](11-grafo-peatonal.md)). El endpoint que la usa y el
+código de error con el que rechaza son de
+[13](13-api-de-ruteo.md#8-cómo-se-rechaza), no de este esquema.
+
+**Alternativas descartadas.** Un enum no aplica: no es un vocabulario cerrado y tiene
+atributos propios (la geometría, el nombre, el estado). Un `CHECK` tampoco: el perímetro
+cambia con el piloto, y un `CHECK` con coordenadas obliga a una migración cada vez.
+
+## 5. Administrar un enum
+
+```sql
+CREATE TYPE obstacle_severity AS ENUM ('MINOR', 'MODERATE', 'CRITICAL');
+
+ALTER TABLE obstacles
+  ADD COLUMN severity obstacle_severity NOT NULL;
+```
+
+**El orden de declaración es parte del contrato.** PostgreSQL ordena y compara los
+enums por el orden en que se declararon los valores, así que `ORDER BY severity` y
+`severity >= 'MODERATE'` funcionan sin columna de orden. Eso vale mientras el orden
+declarado signifique algo: `MINOR < MODERATE < CRITICAL` es intencional.
+
+**Agregar un valor** conserva el orden solo si se indica la posición:
+
+```sql
+ALTER TYPE obstacle_severity ADD VALUE 'EXTREME' AFTER 'CRITICAL';
+```
+
+Sin `BEFORE`/`AFTER`, el valor queda al final, y con eso `severity >= 'CRITICAL'`
+empieza a incluir valores que antes no incluía. Por eso la posición no es opcional
+como paso de migración.
+
+En PostgreSQL 16, `ADD VALUE` corre dentro de una transacción, pero **el valor nuevo
+no se puede usar en esa misma transacción**. Con `node-pg-migrate` eso significa: el
+valor se agrega en una migración y se usa a partir de la siguiente.
+
+**Renombrar** un valor: `ALTER TYPE ... RENAME VALUE 'VIEJO' TO 'NUEVO'`.
+**Quitar** un valor no se puede hacer en el lugar: hay que crear un tipo nuevo,
+migrar la columna y borrar el viejo. Por eso conviene que los valores estén bien
+pensados antes de la primera migración que los usa, y por eso la decisión se escribe
+antes de la migración.
+
+## 6. Forma de un catálogo
+
+Los dos catálogos comparten la misma forma, para que el código que los consume sea
+uno solo:
+
+| Columna | Tipo | Para qué |
+| --- | --- | --- |
+| `id` | `int` PK | Lo que guarda la FK |
+| `code` | `varchar(40)` único | Identificador estable en inglés. Es lo que viaja en la API |
+| `name_es` | `varchar(80)` | Etiqueta para el portal. Es contenido, no mensaje de error |
+| `is_active` | `boolean` | Baja lógica de la fila |
+| `created_at`, `updated_at` | `timestamp` | Marcas de tiempo |
+
+**`code` es inmutable una vez que hay filas apuntándolo.** Mientras no haya datos, un
+`code` se corrige gratis; después, renombrarlo obliga a migrar datos y rompe a los
+clientes que lo guardaron. La API expone `code`, nunca el `id`.
+
+**La baja de un catálogo es `is_active`, no `deleted_at`.** Un obstáculo de 2019 sigue
+apuntando a su tipo aunque ese tipo ya no se ofrezca: la fila tiene que seguir
+existiendo y resolviendo. `is_active = false` la saca de los combos sin romper el
+historial.
+
+**`name_es` no contradice la regla del idioma.**
+[02](02-stack-y-estructura.md) §5 reserva el inglés para los valores de máquina de la
+API; el nombre de un tipo de barrera es contenido que el moderador edita, no un texto
+de error que cada cliente traduce.
+
+## 7. Convenciones de migración
+
+Las migraciones son **SQL puro** ([02](02-stack-y-estructura.md) §7), viven en
+`infra/migrations/` y las aplica `node-pg-migrate`. Un archivo es una unidad
+temática —las tablas que resuelve un mismo issue— y contiene el up y el down con los
+marcadores de la herramienta:
+
+```sql
+-- Up Migration
+...
+-- Down Migration
+...
+```
+
+| Convención | Regla |
+| --- | --- |
+| Nombre del archivo | `<timestamp>_<nombre>.sql`, generado con `pnpm exec node-pg-migrate create <nombre> --migration-file-language sql`. El nombre va en kebab-case, en inglés |
+| Marcas de tiempo | `timestamptz`, con `DEFAULT now()`. Nunca `timestamp` sin zona |
+| Identidad | `integer GENERATED ALWAYS AS IDENTITY`, no `serial`, que deja la secuencia sin dueño visible |
+| Geometrías | `geometry(<tipo>, 4326)` en la columna. El SRID no se repite en un `CHECK`: el tipo ya rechaza otro SRID. Ojo con el silencio: si la geometría no declara SRID, PostGIS le asigna 4326, así que un import con coordenadas proyectadas y sin SRID entra sin error |
+| Geometría en el código | El backend no la interpreta: se escribe con `ST_SetSRID(ST_MakePoint(lon, lat), 4326)` y se lee con `ST_AsGeoJSON(geom)`. No se selecciona una columna `geom` cruda, porque lo que llega es WKB en hexadecimal ([05](05-desarrollo.md) §8) |
+| `updated_at` | Lo mantiene el trigger `set_updated_at()`, no el cliente |
+| Nombres de constraints | Explícitos (`fk_<tabla>_<referencia>`, `<tabla>_<columna>_key`), para poder soltarlos en una migración futura |
+| Clave que no es una columna | Se declara como índice único de expresión, con el mismo nombre `<tabla>_<columnas>_key`: un `UNIQUE` de tabla no admite expresiones. La identidad del grafo es el caso ([11 §4](11-grafo-peatonal.md)) |
+| FK de una tabla de unión | `ON DELETE CASCADE` |
+| FK hacia un catálogo | `ON DELETE RESTRICT`: el catálogo se da de baja con `is_active`, no borrando filas |
+| Reversión | El down deja la base como estaba, en orden inverso y con `IF EXISTS` |
+| Extensiones | `postgis` y `pgrouting` **no** las crean las migraciones: las habilita `infra/initdb/` al inicializar el volumen en desarrollo, y un administrador una sola vez en el servidor ([03](03-despliegue-y-operacion.md) §8). Una base creada a mano con `createdb` no las tiene, y la migración falla con `type "geometry" does not exist` |
+| Tipos para Kysely | `src/db/types.ts` se genera con `pnpm db:types` desde la base, se versiona y **no se edita a mano**. Se regenera en el mismo cambio que la migración ([05](05-desarrollo.md) §8) |
+
+**`updated_at` va con trigger, no en el código.** La función `set_updated_at()` se crea
+en la primera migración y la reutilizan todas las tablas mutables: con dos sistemas
+escribiendo (backend y portal), "acordarse de tocar `updated_at`" es una regla que se
+rompe sola. La consecuencia a saber: el trigger es invisible para quien lee una query,
+así que un `UPDATE` mueve `updated_at` aunque no se lo mencione.
+
+**Una tabla cuyas columnas son todas inmutables no lleva `updated_at`.** `user_tutorials`
+es el caso: solo tiene las dos FK y `created_at`, así que no habría nada que
+actualizar y la columna sería peso muerto.
+
+## 8. Lo que este documento no decide
+
+- **Transiciones de estado.** Qué valores existen lo garantiza la base; qué
+  transiciones son válidas lo garantiza la máquina de estados en el servicio, con los
+  diagramas `05-est-*.mmd` como fuente y tests que las cubran. Que exista `RESOLVED` no
+  impide escribir `PENDING → RESOLVED`; eso no es trabajo del esquema.
+- **El valor de los factores de costo.** §4.7 fija la regla —las penalizaciones suman,
+  `NULL` se cobra como `PARTIAL`, `CRITICAL` bloquea— y un punto de partida para los
+  números. Ajustarlos es calibrar, y se hace midiendo rutas reales cuando exista el ruteo.
+- **Qué significa cada nivel en la calle.** §4.1 define el vocabulario y §4.7 cómo se
+  cobra; con qué observación se decide `FULL`, `PARTIAL` o `NONE` en el relevamiento, y
+  hasta dónde llega un `NONE`, está en [12 §4](12-relevamiento-de-accesibilidad.md).
+- **La identidad de los elementos derivados.** El esquema guarda las columnas que la
+  sostienen —la geometría de un nodo, los dos nodos de una arista—, pero la clave y su
+  restricción de unicidad se deciden en
+  [11 §4](11-grafo-peatonal.md) y las implementa la migración de índices únicos
+  ([#30](https://github.com/BLP-Technologies/rodando-x-mza/issues/30)). Lo que sigue sin
+  resolverse acá: partir una arista en el punto de un obstáculo (§4.7) choca todavía
+  con que el importador no puede respetar un nodo que no viene del extracto.
+
+## 9. Documentos relacionados
+
+- [01-diagramas.md](01-diagramas.md): el DER y los diagramas de estados.
+- [02-stack-y-estructura.md](02-stack-y-estructura.md): stack, acceso a datos y
+  convenciones de idioma (§5).
+- [05-desarrollo.md](05-desarrollo.md): puesta en marcha, incluida la base.
+- [07-plan-de-trabajo.md](07-plan-de-trabajo.md): cómo se derivan y se cierran las
+  tareas de modelo.
+- [10-datos-y-zona-piloto.md](10-datos-y-zona-piloto.md): la zona piloto, el extracto de
+  OpenStreetMap, qué se deriva de él —incluidas las veredas, que no vienen mapeadas— y qué
+  aporta el relevamiento de campo.
+- [11-grafo-peatonal.md](11-grafo-peatonal.md): cómo se convierte el extracto en el grafo
+  —nodos, tramos, veredas y cruces—, cómo se identifica cada elemento y qué casos de
+  OpenStreetMap no se pueden modelar.
+- [12-relevamiento-de-accesibilidad.md](12-relevamiento-de-accesibilidad.md): de dónde sale
+  el dato de accesibilidad, qué significa cada nivel en la calle y cómo se registra.

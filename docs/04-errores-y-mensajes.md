@@ -63,8 +63,20 @@ Códigos iniciales. Una funcionalidad agrega los suyos siguiendo §7.
 | `INTERNAL_ERROR` | 500 | error no esperado |
 
 Los `details` de `VALIDATION_ERROR` tienen la forma
-`[{ "field": "<campo>", "code": "<MOTIVO>" }]` (p. ej. `INVALID_EMAIL`,
-`REQUIRED`).
+`[{ "field": "<campo>", "code": "<MOTIVO>" }]`. `field` es la ruta del campo en el
+cuerpo (`origin`, `origin.lat`) y puede haber varios `details` en un mismo error.
+
+Los motivos son de dos clases, y la diferencia importa para no duplicarlos:
+
+| Clase | Motivos | Quién los produce |
+| --- | --- | --- |
+| **Genéricos** | `REQUIRED` (falta el campo), `INVALID` (está, pero no sirve) | Uno solo para toda la API: `backend/src/http/error-response.ts` |
+| **De dominio** | `OUTSIDE_SERVICE_AREA` y los que agregue cada funcionalidad | La funcionalidad, después de validar la forma |
+
+Los genéricos son política del catálogo: si cada módulo inventara los suyos, el cliente
+tendría que traducir un vocabulario distinto por endpoint. Los de dominio describen algo
+que sólo esa funcionalidad sabe —una punta fuera del perímetro, un email ya registrado— y
+viven con su caso de uso ([13 §8](13-api-de-ruteo.md#8-cómo-se-rechaza)).
 
 ## 5. Errores esperables y no esperables
 
@@ -117,7 +129,9 @@ el monorepo (ver [02](02-stack-y-estructura.md) §3).
 
 ## 8. Documentos relacionados
 
-- [00-reglas-documentacion.md](00-reglas-documentacion.md): reglas de la
-documentación.
+- [00-reglas-documentacion.md](00-reglas-documentacion.md): las reglas de la
+  documentación.
 - [02-stack-y-estructura.md](02-stack-y-estructura.md): convenciones de idioma y
   estructura del proyecto.
+- [13-api-de-ruteo.md](13-api-de-ruteo.md): el caso de uso que usa
+  `OUTSIDE_SERVICE_AREA` como motivo de validación.

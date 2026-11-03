@@ -1,0 +1,129 @@
+import { OpenAPIRegistry, OpenApiGeneratorV31 } from '@asteasolutions/zod-to-openapi';
+import { z } from 'zod';
+import { bboxParamSchema, graphResponseSchema, updateGraphElementBodySchema, graphElementSchema, elementKindSchema } from './graph/graph.schemas.js';
+import { errorResponseSchema } from './http/error-response.js';
+import { routeRequestSchema, routeResponseSchema } from './routing/routing.schemas.js';
+
+/**
+ * El documento `OpenAPI`, generado desde los esquemas Zod.
+ *
+ * El contrato se escribe una sola vez, en Zod, y de ahí salen el tipado del backend y el
+ * documento que consumen los clientes ([02 §6](../docs/02-stack-y-estructura.md)). Se
+ * genera al importar este módulo: es una constante, no un cálculo por pedido.
+ */
+const registry = new OpenAPIRegistry();
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/graph',
+  summary: 'Leer el grafo de un área',
+  description:
+    'Devuelve las veredas, los cruces y los cordones que intersecan el bbox, como una ' +
+    'FeatureCollection de GeoJSON, más las áreas de servicio activas en `service_areas`. ' +
+    'Sólo lee: no escribe ni cachea nada. Si el área tiene más de 2000 elementos, ' +
+    'devuelve las primeras y lo avisa con `truncated: true`; el tope no alcanza a las ' +
+    'áreas, que no se filtran por bbox. Ver docs/14-la-api-del-grafo.md.',
+  request: {
+    query: z.object({ bbox: bboxParamSchema }),
+  },
+  responses: {
+    200: {
+      description:
+        'Los elementos del área y las áreas de servicio activas. Una colección de ' +
+        'elementos vacía es una respuesta válida: esa zona no tiene grafo. También lo es ' +
+        'una base sin área activa: `service_areas.features` llega vacío y el grafo se ' +
+        'devuelve igual.',
+      content: { 'application/json': { schema: graphResponseSchema } },
+    },
+    400: {
+      description:
+        'El `bbox` no cumple el contrato: falta, no son cuatro números, está fuera de ' +
+        'rango o tiene las esquinas invertidas.',
+      content: { 'application/json': { schema: errorResponseSchema } },
+    },
+    500: {
+      description: 'Error no esperado.',
+      content: { 'application/json': { schema: errorResponseSchema } },
+    },
+  },
+});
+
+registry.registerPath({
+  method: 'patch',
+  path: '/api/graph/elements/{kind}/{id}',
+  summary: 'Cambiar el nivel de accesibilidad de un elemento',
+  description:
+    'Escribe `accessibility_level` de una vereda, un cruce o un cordón, y devuelve el ' +
+    'elemento como quedó, con la misma forma que una feature de GET /api/graph. ' +
+    '`is_verified` no se manda: queda en true si hay nivel y en false si se vuelve a ' +
+    '"sin dato" (`level: null`). El costo del ruteo no se recalcula: se deriva de la ' +
+    'vista, así que cambia en la próxima consulta. Ver docs/14-la-api-del-grafo.md §7.',
+  request: {
+    params: z.object({ kind: elementKindSchema, id: z.coerce.number().int().positive() }),
+    body: {
+      content: { 'application/json': { schema: updateGraphElementBodySchema } },
+    },
+  },
+  responses: {
+    200: {
+      description: 'El elemento con el nivel ya escrito.',
+      content: { 'application/json': { schema: graphElementSchema } },
+    },
+    400: {
+      description:
+        'La clase o el `id` de la ruta no cumplen el contrato, o el cuerpo no trae ' +
+        '`level`, lo trae fuera del enum o con un campo de más.',
+      content: { 'application/json': { schema: errorResponseSchema } },
+    },
+    404: {
+      description: 'No hay ningún elemento de esa clase con ese id.',
+      content: { 'application/json': { schema: errorResponseSchema } },
+    },
+    500: {
+      description: 'Error no esperado.',
+      content: { 'application/json': { schema: errorResponseSchema } },
+    },
+  },
+});
+
+registry.registerPath({
+  method: 'post',
+  path: '/api/routes/calculate',
+  summary: 'Calcular un recorrido accesible',
+  description:
+    'Recibe el origen y el destino en coordenadas y devuelve el recorrido que no pasa ' +
+    'por ningún tramo marcado como no accesible. Las dos puntas se validan contra el ' +
+    'perímetro de búsqueda y se pegan al cordón más cercano. Cuando no hay recorrido ' +
+    'responde 200 con `found: false`, que no es un error. Ver docs/13-api-de-ruteo.md.',
+  request: {
+    body: {
+      content: { 'application/json': { schema: routeRequestSchema } },
+    },
+  },
+  responses: {
+    200: {
+      description:
+        'El recorrido, o la respuesta sin recorrido cuando las dos puntas no están ' +
+        'conectadas por veredas accesibles.',
+      content: { 'application/json': { schema: routeResponseSchema } },
+    },
+    400: {
+      description:
+        'El pedido no cumple el contrato, o una punta está fuera del perímetro de búsqueda.',
+      content: { 'application/json': { schema: errorResponseSchema } },
+    },
+    500: {
+      description: 'Error no esperado.',
+      content: { 'application/json': { schema: errorResponseSchema } },
+    },
+  },
+});
+
+export const openApiDocument = new OpenApiGeneratorV31(registry.definitions).generateDocument({
+  openapi: '3.1.0',
+  info: {
+    title: 'Rodando x MZA',
+    version: '0.0.0',
+    description: 'API REST del grafo peatonal accesible del microcentro de Mendoza.',
+  },
+});

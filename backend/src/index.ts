@@ -4,7 +4,7 @@ import { getLogger } from './logger.js';
 
 const config = loadConfig();
 const logger = getLogger();
-const app = createApp();
+const app = createApp({ corsOrigins: config.CORS_ORIGINS });
 
 app.listen(config.PORT, () => {
   logger.info(`API escuchando en http://localhost:${config.PORT}`);

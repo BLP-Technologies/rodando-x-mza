@@ -151,7 +151,7 @@ export const MyRoutesScreen = () => {
           accessibilityRole="list"
           accessibilityLabel="Lista de recorridos guardados"
         >
-          {routes.map((routeItem) => (
+          {(Array.isArray(routes) ? routes : []).map((routeItem) => (
             <RouteCard
               key={routeItem.id}
               label={routeItem.name}
@@ -159,7 +159,7 @@ export const MyRoutesScreen = () => {
               destination={routeItem.destination.name}
               lastConsulted={formatLastConsulted(routeItem.updatedAt || routeItem.createdAt)}
               onSearchRoute={() => handleSearchRoute(routeItem)}
-              onDelete={() => handleDeleteRoute(routeItem.id)}
+              onDelete={() => handleDeleteRoute(String(routeItem.id))}
             />
           ))}
         </View>

@@ -1,0 +1,41 @@
+name: Portal
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: portal-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verificar:
+    name: Lint y build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: portal
+    steps:
+      - uses: actions/checkout@v4
+
+      # La versión de pnpm sale de packageManager en portal/package.json.
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: portal/package.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+          cache-dependency-path: portal/pnpm-lock.yaml
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm lint
+
+      # `next build` incluye el chequeo de tipos: no hace falta un `tsc` aparte.
+      - run: pnpm build

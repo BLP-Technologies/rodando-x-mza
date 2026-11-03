@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Platform } from 'react-native';
 import { useStyles, Theme } from '@/theme';
 
@@ -13,13 +13,14 @@ if (Platform.OS !== 'web') {
 
 interface Point {
   label: string;
-  latitude: number;
-  longitude: number;
+  latitude: number | null;
+  longitude: number | null;
 }
 
 interface OSMRouteMapProps {
   origin: Point;
   destination: Point;
+  coordinates?: [number, number][]; // Arreglo de [lat, lon] reales calculados
   height?: number;
 }
 
@@ -35,19 +36,35 @@ const escapeString = (str: string): string => {
 export const OSMRouteMap = ({
   origin,
   destination,
+  coordinates,
   height = 240,
 }: OSMRouteMapProps) => {
   const { styles } = useStyles(getStyles);
 
+  const origLat = origin.latitude ?? -32.8895;
+  const origLon = origin.longitude ?? -68.8458;
+  const destLat = destination.latitude ?? -32.8929;
+  const destLon = destination.longitude ?? -68.8420;
+
   const safeOriginLabel = escapeString(origin.label);
   const safeDestLabel = escapeString(destination.label);
 
-  // Centro geométrico entre ambos puntos
-  const centerLat = (origin.latitude + destination.latitude) / 2;
-  const centerLon = (origin.longitude + destination.longitude) / 2;
+  const centerLat = (origLat + destLat) / 2;
+  const centerLon = (origLon + destLon) / 2;
 
-  // HTML con Leaflet.js y azulejos oficiales de OpenStreetMap
-  const leafletHtml = `
+  // Si hay coordenadas calculadas por OSM las usamos, sino unimos origen y destino
+  const routePolylineCoords = useMemo(() => {
+    if (coordinates && coordinates.length > 0) {
+      return JSON.stringify(coordinates);
+    }
+    return JSON.stringify([
+      [origLat, origLon],
+      [destLat, destLon],
+    ]);
+  }, [coordinates, origLat, origLon, destLat, destLon]);
+
+  const leafletHtml = useMemo(
+    () => `
     <!DOCTYPE html>
     <html lang="es">
       <head>
@@ -70,34 +87,31 @@ export const OSMRouteMap = ({
             attribution: '© OpenStreetMap'
           }).addTo(map);
 
-          // Marcadores
-          const originMarker = L.marker([${origin.latitude}, ${origin.longitude}])
+          // Marcadores de origen y destino
+          const originMarker = L.marker([${origLat}, ${origLon}])
             .addTo(map)
             .bindPopup("<b>${safeOriginLabel}</b>");
 
-          const destMarker = L.marker([${destination.latitude}, ${destination.longitude}])
+          const destMarker = L.marker([${destLat}, ${destLon}])
             .addTo(map)
             .bindPopup("<b>${safeDestLabel}</b>");
 
-          // Trazado de ruta accesible (color Teal / Celeste Rodando)
-          const latlngs = [
-            [${origin.latitude}, ${origin.longitude}],
-            [${centerLat + 0.001}, ${centerLon - 0.001}],
-            [${destination.latitude}, ${destination.longitude}]
-          ];
+          // Trazado de ruta accesible con datos calculados
+          const latlngs = ${routePolylineCoords};
           const polyline = L.polyline(latlngs, {
             color: '#00838F',
             weight: 5,
-            opacity: 0.85,
-            dashArray: '8, 6'
+            opacity: 0.85
           }).addTo(map);
 
-          // Ajustar zoom para que encuadre ambos puntos
-          map.fitBounds(polyline.getBounds(), { padding: [30, 30] });
+          // Ajustar zoom para encuadrar todo el trazado con margen
+          map.fitBounds(polyline.getBounds(), { padding: [35, 35] });
         </script>
       </body>
     </html>
-  `;
+  `,
+    [centerLat, centerLon, origLat, origLon, destLat, destLon, safeOriginLabel, safeDestLabel, routePolylineCoords]
+  );
 
   return (
     <View

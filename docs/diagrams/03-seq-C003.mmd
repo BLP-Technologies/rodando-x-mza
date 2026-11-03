@@ -16,9 +16,9 @@ sequenceDiagram
     Note over B,DB: El Backend invoca la función de ruteo
 
     activate B
-    B ->> DB: SELECT pgr_dijkstra(...) <br/>(JOIN de veredas, accesibilidad y obstáculos activos)
+    B ->> DB: SELECT * FROM pgr_dijkstra('SELECT * FROM walkable_edges', ...)
 
-    Note over DB: La BD penaliza el peso de<br/>las veredas que tienen obstáculos
+    Note over DB: El costo de cada arista se calcula en la vista:<br/>metros × accesibilidad + penalizaciones<br/>(09 §4.7)
 
     activate DB
     DB -->> B: Retorna geometría de ruta accesible

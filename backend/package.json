@@ -4,6 +4,7 @@
   "private": true,
   "description": "API REST de Rodando x MZA",
   "type": "module",
+  "packageManager": "pnpm@12.4.1",
   "engines": {
     "node": ">=22"
   },
@@ -15,7 +16,10 @@
     "lint": "eslint .",
     "test": "vitest run",
     "migrate": "node-pg-migrate up --envPath .env -m ../infra/migrations",
-    "migrate:down": "node-pg-migrate down --envPath .env -m ../infra/migrations"
+    "migrate:down": "node-pg-migrate down --envPath .env -m ../infra/migrations",
+    "import:osm": "tsx --env-file-if-exists=.env src/importer/importer.cli.ts",
+    "db:types": "kysely-codegen",
+    "db:types:verify": "kysely-codegen --verify || { echo 'Los tipos de src/db/types.ts no coinciden con el esquema: corré pnpm db:types y commiteá el resultado.'; exit 1; }"
   },
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "^9.1.0",
@@ -26,6 +30,7 @@
     "multer": "^2.4.0",
     "pg": "^8.23.1",
     "pino": "^10.4.0",
+    "swagger-ui-dist": "^5.34.1",
     "zod": "^4.6.7"
   },
   "devDependencies": {
