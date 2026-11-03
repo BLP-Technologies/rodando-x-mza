@@ -1,15 +1,14 @@
 stateDiagram-v2
     accTitle: Ciclo de vida del obstáculo
-    accDescr: Estados del obstáculo que el moderador crea en el mapa a partir de un reporte aprobado, y su efecto sobre el costo del tramo afectado en el cálculo de recorridos accesibles.
+    accDescr: Estados del obstáculo que el moderador publica en el mapa —desde un reporte aprobado o desde la pantalla de obstáculos— y su efecto sobre el costo del tramo afectado en el cálculo de recorridos accesibles.
 
     state "ACTIVO" as ACTIVE
     state "RESUELTO" as RESOLVED
     state "ELIMINADO" as DELETED
 
-    [*] --> ACTIVE: el moderador crea el obstáculo desde un reporte aprobado (C012)
+    [*] --> ACTIVE: el moderador publica el obstáculo (C012), desde un reporte aprobado o desde el mapa
 
     ACTIVE --> RESOLVED: la barrera ya no está o fue reparada (C013)
-    RESOLVED --> ACTIVE: la barrera volvió a aparecer (C013)
     ACTIVE --> DELETED: baja lógica (deleted_at)
     RESOLVED --> DELETED: baja lógica (deleted_at)
 
@@ -29,11 +28,12 @@ stateDiagram-v2
     end note
 
     note left of RESOLVED
-        En el modelo de datos el estado se guarda con el
-        booleano obstacles.is_resolved, no con un estado
-        con nombre propio. Al resolverse deja de contar en
-        el costo: el de la arista se calcula en cada
-        consulta, así que no hay valor que revertir.
+        En el modelo de datos el estado se guarda con la
+        fecha obstacles.resolved_at: NULL es activo, y
+        con fecha es resuelto. No hay un booleano al
+        lado. Al resolverse deja de contar en el costo:
+        el de la arista se calcula en cada consulta, así
+        que no hay valor que revertir.
     end note
 
     note right of DELETED

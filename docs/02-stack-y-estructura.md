@@ -96,6 +96,7 @@ backend/src/
 ├── routes.ts     # compone los routers de cada funcionalidad
 ├── http/         # capa de transporte compartida (no es una funcionalidad)
 ├── db/           # conexión y tipos de la base
+├── obstacles/    # una funcionalidad: los obstáculos publicados
 └── auth/         # una funcionalidad (p. ej. C001/C002)
 ```
 
@@ -105,6 +106,7 @@ portal/src/
 ├── api/          # cliente HTTP tipado y contrato generado de la API
 ├── map/          # una funcionalidad: el mapa del grafo
 ├── reports/      # una funcionalidad: la pantalla de reportes
+├── obstacles/    # una funcionalidad: la pantalla de obstáculos
 ├── session/      # de dónde sale la sesión del portal
 └── config.ts     # valores por entorno y la caja del piloto
 ```
@@ -187,8 +189,8 @@ esquema, cambia el OpenAPI y los clientes se regeneran.
 
 El documento se publica en **`GET /api/openapi.json`**, generado al arrancar desde los
 esquemas registrados; hoy lo alimentan los contratos de ruteo ([13](13-api-de-ruteo.md)),
-de lectura y edición del grafo ([14](14-la-api-del-grafo.md)) y de reportes
-([17](17-la-api-de-reportes.md)).
+de lectura y edición del grafo ([14](14-la-api-del-grafo.md)), de reportes
+([17](17-la-api-de-reportes.md)) y de obstáculos ([18](18-la-api-de-obstaculos.md)).
 
 Para leerlo a ojo, el mismo documento se publica como página navegable en
 **`GET /api/docs`**: la página pide el documento al backend, que también le sirve la UI,

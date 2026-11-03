@@ -208,12 +208,13 @@ describe.skipIf(!process.env.DATABASE_URL)('readReports contra la base', () => {
     );
     if (feature === undefined) throw new Error('the pending report is missing from the read');
 
-    // Las ocho propiedades, ni una más ni una menos ([17 §7]).
+    // Las nueve propiedades, ni una más ni una menos ([17 §7]).
     expect(Object.keys(feature.properties).sort()).toEqual([
       'created_at',
       'description',
       'id',
       'image_url',
+      'obstacle_id',
       'severity',
       'status',
       'type',
@@ -229,6 +230,8 @@ describe.skipIf(!process.env.DATABASE_URL)('readReports contra la base', () => {
     expect(feature.properties.severity).toBe('MODERATE');
     expect(feature.properties.description).toBe(BASE_REPORT.description);
     expect(feature.properties.image_url).toBeNull();
+    // Un reporte pendiente todavía no creó ningún obstáculo ([18 §6]).
+    expect(feature.properties.obstacle_id).toBeNull();
 
     // La fecha viaja en ISO, no en la forma del driver.
     const createdAt = new Date(feature.properties.created_at);

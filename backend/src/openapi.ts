@@ -3,7 +3,16 @@ import { z } from 'zod';
 import { bboxParamSchema, graphResponseSchema, updateGraphElementBodySchema, graphElementSchema, elementKindSchema } from './graph/graph.schemas.js';
 import { errorResponseSchema } from './http/error-response.js';
 import {
+  createObstacleRequestSchema,
+  obstacleFeatureSchema,
+  obstaclesResponseSchema,
+  obstacleStatusFilterSchema,
+} from './obstacles/obstacles.schemas.js';
+import {
+  approveReportRequestSchema,
+  approveReportResponseSchema,
   createReportRequestSchema,
+  reportDecisionSchema,
   reportImageSchema,
   reportSchema,
   reportsResponseSchema,
@@ -238,6 +247,198 @@ registry.registerPath({
     400: {
       description:
         'No vino el archivo, o el archivo no es PNG, JPEG o WebP, o pesa más de 5 MB.',
+      content: { 'application/json': { schema: errorResponseSchema } },
+    },
+    500: {
+      description: 'Error no esperado.',
+      content: { 'application/json': { schema: errorResponseSchema } },
+    },
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/obstacles',
+  summary: 'Leer los obstáculos de un estado',
+  description:
+    'Devuelve los obstáculos publicados, como una FeatureCollection de GeoJSON, con el ' +
+    'punto de cada uno, su tipo y su nombre, la severidad, la fecha de resolución —' +
+    '`null` si sigue activo—, el elemento del grafo al que está pegado y cuántos ' +
+    'reportes lo apuntan. Al lado de las features viaja `obstacle_types`, el catálogo de ' +
+    'tipos activos sin `OTHER`, que es la lista del formulario del portal. El filtro por ' +
+    'estado es del servidor y tiene `ACTIVE` por defecto; un obstáculo activo es el que ' +
+    'no tiene `resolved_at`. Los dados de baja no aparecen en ningún estado. Si hay más ' +
+    'de 2000, devuelve los más nuevos y lo avisa con `truncated: true`. ' +
+    'Ver docs/18-la-api-de-obstaculos.md §4.',
+  request: {
+    query: z.object({
+      // El default viaja en la descripción y no como `default` del parámetro: el
+      // esquema es un `$ref` al enum y el documento no repite su forma.
+      status: obstacleStatusFilterSchema.default('ACTIVE').meta({
+        description:
+          'Qué obstáculos se devuelven: los activos, los resueltos o todos. Si falta, ' +
+          'se devuelven los activos (`ACTIVE`).',
+      }),
+    }),
+  },
+  responses: {
+    200: {
+      description:
+        'Los obstáculos del estado pedido, del más nuevo al más antiguo, con el catálogo ' +
+        'de tipos activos en `obstacle_types`. Una colección vacía es una respuesta ' +
+        'válida: no hay obstáculos en ese estado.',
+      content: { 'application/json': { schema: obstaclesResponseSchema } },
+    },
+    400: {
+      description:
+        'El estado no es uno del enum, o la query trae un parámetro que el contrato no ' +
+        'tiene.',
+      content: { 'application/json': { schema: errorResponseSchema } },
+    },
+    500: {
+      description: 'Error no esperado.',
+      content: { 'application/json': { schema: errorResponseSchema } },
+    },
+  },
+});
+
+registry.registerPath({
+  method: 'post',
+  path: '/api/obstacles',
+  summary: 'Crear un obstáculo',
+  description:
+    'Publica un obstáculo: el código de tipo del catálogo, la severidad y el punto. El ' +
+    'cuerpo no trae el elemento del grafo al que se cuelga: lo decide el servidor, ' +
+    'pegando el punto al más cercano entre veredas, cruces y cordones. Si no hay ningún ' +
+    'elemento cerca responde 400 con el motivo `NO_NEARBY_ELEMENT`, y si el tipo no ' +
+    'existe, está inactivo o es `OTHER` responde 400 con el campo `type`. El punto de la ' +
+    'respuesta es el que mandó el cliente. El obstáculo nace activo y el ruteo lo cobra ' +
+    'en la consulta siguiente. Ver docs/18-la-api-de-obstaculos.md §3.',
+  request: {
+    body: { content: { 'application/json': { schema: createObstacleRequestSchema } } },
+  },
+  responses: {
+    201: {
+      description:
+        'El obstáculo creado, con la misma forma que una feature de GET /api/obstacles.',
+      content: { 'application/json': { schema: obstacleFeatureSchema } },
+    },
+    400: {
+      description:
+        'El cuerpo no cumple el contrato, el código de tipo no sirve como obstáculo o ' +
+        'no hay ningún elemento del grafo dentro del radio de pegamento.',
+      content: { 'application/json': { schema: errorResponseSchema } },
+    },
+    500: {
+      description: 'Error no esperado.',
+      content: { 'application/json': { schema: errorResponseSchema } },
+    },
+  },
+});
+
+registry.registerPath({
+  method: 'post',
+  path: '/api/obstacles/{id}/resolve',
+  summary: 'Resolver un obstáculo',
+  description:
+    'Marca el obstáculo como resuelto escribiendo `resolved_at`, y desde la consulta ' +
+    'siguiente deja de sumar en el ruteo. No lleva cuerpo y es idempotente: resolver un ' +
+    'obstáculo ya resuelto responde 200 con el mismo obstáculo y no cambia la fecha. ' +
+    'Responde 404 si el id no existe o está dado de baja. No toca los reportes que lo ' +
+    'apuntan. Ver docs/18-la-api-de-obstaculos.md §5.',
+  request: {
+    params: z.object({ id: z.coerce.number().int().positive() }),
+  },
+  responses: {
+    200: {
+      description: 'El obstáculo resuelto, con la misma forma que una feature de la lectura.',
+      content: { 'application/json': { schema: obstacleFeatureSchema } },
+    },
+    400: {
+      description: 'El `id` de la ruta no es un entero positivo.',
+      content: { 'application/json': { schema: errorResponseSchema } },
+    },
+    404: {
+      description: 'No hay ningún obstáculo con ese id, o está dado de baja.',
+      content: { 'application/json': { schema: errorResponseSchema } },
+    },
+    500: {
+      description: 'Error no esperado.',
+      content: { 'application/json': { schema: errorResponseSchema } },
+    },
+  },
+});
+
+registry.registerPath({
+  method: 'post',
+  path: '/api/reports/{id}/approve',
+  summary: 'Aprobar un reporte',
+  description:
+    'Publica el obstáculo de un reporte con la clasificación que decide el moderador y ' +
+    'marca el reporte como `APPROVED` apuntándolo al obstáculo nuevo. El punto sale del ' +
+    'reporte: aprobar no mueve el pin. Todo ocurre en una transacción, en este orden: ' +
+    'bloquear el reporte, pegar su punto al elemento del grafo más cercano, insertar el ' +
+    'obstáculo y marcar el reporte. Si no hay ningún elemento cerca responde 400 con ' +
+    '`NO_NEARBY_ELEMENT` y el reporte sigue `PENDING`. Ver ' +
+    'docs/18-la-api-de-obstaculos.md §6.',
+  request: {
+    params: z.object({ id: z.coerce.number().int().positive() }),
+    body: { content: { 'application/json': { schema: approveReportRequestSchema } } },
+  },
+  responses: {
+    201: {
+      description:
+        'El obstáculo creado y el reporte marcado, que son los dos recursos que cambiaron.',
+      content: { 'application/json': { schema: approveReportResponseSchema } },
+    },
+    400: {
+      description:
+        'El cuerpo no cumple el contrato, el código de tipo no sirve como obstáculo o no ' +
+        'hay ningún elemento del grafo cerca del punto del reporte.',
+      content: { 'application/json': { schema: errorResponseSchema } },
+    },
+    404: {
+      description: 'No hay ningún reporte con ese id, o está dado de baja.',
+      content: { 'application/json': { schema: errorResponseSchema } },
+    },
+    409: {
+      description: 'El reporte ya no está `PENDING`: alguien lo aprobó o lo descartó.',
+      content: { 'application/json': { schema: errorResponseSchema } },
+    },
+    500: {
+      description: 'Error no esperado.',
+      content: { 'application/json': { schema: errorResponseSchema } },
+    },
+  },
+});
+
+registry.registerPath({
+  method: 'post',
+  path: '/api/reports/{id}/reject',
+  summary: 'Descartar un reporte',
+  description:
+    'Marca un reporte como `REJECTED` sin crear nada, en una transacción. No lleva ' +
+    'cuerpo. Es la salida para un duplicado o para lo que no corresponde a un obstáculo. ' +
+    'La decisión se toma una sola vez: un reporte que ya no está `PENDING` responde 409, y ' +
+    'uno inexistente o dado de baja, 404. Ver docs/18-la-api-de-obstaculos.md §6.',
+  request: {
+    params: z.object({ id: z.coerce.number().int().positive() }),
+  },
+  responses: {
+    200: {
+      description: 'El reporte descartado: su id, el estado `REJECTED` y `obstacle_id` nulo.',
+      content: { 'application/json': { schema: reportDecisionSchema } },
+    },
+    400: {
+      description: 'El `id` de la ruta no es un entero positivo.',
+      content: { 'application/json': { schema: errorResponseSchema } },
+    },
+    404: {
+      description: 'No hay ningún reporte con ese id, o está dado de baja.',
+      content: { 'application/json': { schema: errorResponseSchema } },
+    },
+    409: {
+      description: 'El reporte ya no está `PENDING`: alguien lo aprobó o lo descartó.',
       content: { 'application/json': { schema: errorResponseSchema } },
     },
     500: {

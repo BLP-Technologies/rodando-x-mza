@@ -67,6 +67,7 @@ export type ReportFeatureRow = {
   severity: ReportSeverity;
   description: string;
   imageUrl: string | null;
+  obstacleId: number | null;
   createdAt: Date;
   geometry: string;
 };
@@ -102,11 +103,12 @@ export async function findReports(
     severity: ReportSeverity;
     description: string;
     image_url: string | null;
+    obstacle_id: number | null;
     created_at: Date;
     geometry: string;
   }>`
     SELECT report.id, report.status, catalogue.code AS type, catalogue.name_es AS type_name,
-           report.severity, report.description, report.image_url,
+           report.severity, report.description, report.image_url, report.obstacle_id,
            report.created_at, ST_AsGeoJSON(report.geom) AS geometry
     FROM reports report
     JOIN obstacle_types catalogue ON catalogue.id = report.type_id
@@ -123,7 +125,88 @@ export async function findReports(
     severity: row.severity,
     description: row.description,
     imageUrl: row.image_url,
+    obstacleId: row.obstacle_id,
     createdAt: row.created_at,
     geometry: row.geometry,
   }));
+}
+
+/** El reporte que se está moderando: su estado y el punto que hereda el obstáculo. */
+export type LockedReport = { id: number; status: ReportStatus; lon: number; lat: number };
+
+/**
+ * Lee el reporte dejándolo bloqueado hasta el final de la transacción.
+ *
+ * `FOR UPDATE` es lo que evita dos moderaciones simultáneas del mismo reporte: la segunda
+ * espera, y cuando entra ve el estado que dejó la primera y responde `409` en vez de crear
+ * un segundo obstáculo ([18 §6](../../../docs/18-la-api-de-obstaculos.md)). Sin el bloqueo,
+ * las dos leerían `PENDING` y las dos publicarían.
+ *
+ * `deleted_at IS NULL` va en el mismo `SELECT`: un reporte dado de baja no es moderable, y
+ * para el cliente es el mismo `404` que un id inexistente.
+ */
+export async function lockReportForUpdate(
+  db: Kysely<DB>,
+  id: number,
+): Promise<LockedReport | null> {
+  const result = await sql<{
+    id: number;
+    status: ReportStatus;
+    lon: number;
+    lat: number;
+  }>`
+    SELECT id, status, ST_X(geom) AS lon, ST_Y(geom) AS lat
+    FROM reports
+    WHERE id = ${id} AND deleted_at IS NULL
+    FOR UPDATE
+  `.execute(db);
+
+  return result.rows[0] ?? null;
+}
+
+/**
+ * Marca el reporte como aprobado y lo apunta al obstáculo que se creó.
+ *
+ * Es la segunda mitad de la transición: aprobar es crear el obstáculo, así que no hay estado
+ * aprobado sin obstáculo ([09 §4.5](../../../docs/09-modelo-de-datos.md)).
+ */
+export async function markReportApproved(
+  db: Kysely<DB>,
+  id: number,
+  obstacleId: number,
+): Promise<{ id: number; status: ReportStatus; obstacleId: number | null }> {
+  return setReportDecision(db, id, 'APPROVED', obstacleId);
+}
+
+/** Marca el reporte como descartado: la baja del reporte y el rechazo son cosas distintas. */
+export async function markReportRejected(
+  db: Kysely<DB>,
+  id: number,
+): Promise<{ id: number; status: ReportStatus; obstacleId: number | null }> {
+  return setReportDecision(db, id, 'REJECTED', null);
+}
+
+/**
+ * Escribe la decisión y devuelve la fila como quedó, sin un `SELECT` de más.
+ *
+ * La fila ya está bloqueada por `lockReportForUpdate`, así que el `UPDATE` no puede no
+ * encontrar nada; si lo hiciera, es un error del programa y no un 404.
+ */
+async function setReportDecision(
+  db: Kysely<DB>,
+  id: number,
+  status: ReportStatus,
+  obstacleId: number | null,
+): Promise<{ id: number; status: ReportStatus; obstacleId: number | null }> {
+  const result = await sql<{ id: number; status: ReportStatus; obstacle_id: number | null }>`
+    UPDATE reports
+    SET status = ${status}::report_status, obstacle_id = ${obstacleId}
+    WHERE id = ${id}
+    RETURNING id, status, obstacle_id
+  `.execute(db);
+
+  const row = result.rows[0];
+  if (row === undefined) throw new Error(`report ${id} vanished while moderating it`);
+
+  return { id: row.id, status: row.status, obstacleId: row.obstacle_id };
 }
