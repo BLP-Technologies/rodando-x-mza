@@ -90,6 +90,23 @@ describe('GET /api/openapi.json', () => {
     // la colección: un solo componente para las dos caras (docs/14 §7).
     expect(Object.keys(document.components.schemas)).toContain('GraphElement');
   });
+
+  it('publica las áreas de servicio como componente propio de la respuesta', async () => {
+    const res = await request(app).get('/api/openapi.json');
+
+    expect(res.status).toBe(200);
+
+    const document = res.body as {
+      components: { schemas: Record<string, { properties?: Record<string, unknown> }> };
+    };
+
+    // El área tiene nombre propio por el mismo mecanismo que `GraphElement`: el cliente
+    // necesita el tipo del conjunto, no un objeto anidado anónimo (docs/14 §5.2).
+    expect(Object.keys(document.components.schemas)).toContain('ServiceAreaCollection');
+
+    const collection = document.components.schemas.GraphFeatureCollection;
+    expect(collection?.properties).toHaveProperty('service_areas');
+  });
 });
 
 describe('PATCH /api/graph/elements/:kind/:id', () => {

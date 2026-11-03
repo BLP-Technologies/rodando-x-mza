@@ -67,3 +67,26 @@ export function pointStyle(
     bubblingMouseEvents: false,
   };
 }
+
+/**
+ * El borde del área de servicio activa: una línea de guiones, sin relleno.
+ *
+ * El azul es el quinto color, fuera de la paleta de niveles (verde, ámbar, rojo
+ * y gris), para que el borde no se lea como un dato de accesibilidad: es el
+ * límite de la zona, no el estado de un elemento ([16 §5.7](../../docs/16-el-portal.md)).
+ *
+ * `interactive: false` es lo que hace que **no capture clics**: Leaflet le pone
+ * `pointer-events: none` a la capa, así el clic sigue llegando a la vereda de
+ * abajo o al fondo del mapa, que suelta la selección.
+ */
+export function serviceAreaStyle(): PathOptions {
+  return {
+    color: "#1d4ed8",
+    weight: 4,
+    dashArray: "6 8",
+    fill: false,
+    opacity: 0.8,
+    interactive: false,
+    bubblingMouseEvents: false,
+  };
+}

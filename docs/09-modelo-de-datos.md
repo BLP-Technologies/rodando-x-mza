@@ -523,7 +523,7 @@ devolvía un camino que empezaba en el borde del grafo y parecía válido.
 
 | Columna | Tipo | Para qué |
 | --- | --- | --- |
-| `id` | `int` PK | Nunca se expone: las filas se identifican por `name` |
+| `id` | `int` PK | Clave estable de la fila; viaja en la respuesta del grafo como identidad del área |
 | `name` | `varchar(100)` único | Identifica el área en el código y en la operación |
 | `geom` | `geometry(Polygon, 4326)` | El perímetro de búsqueda |
 | `is_active` | `boolean` | Baja lógica de la fila |
@@ -554,6 +554,11 @@ baja lógica que conservar, la fila vieja se descarta.
 esquinas en ángulo recto** (`ST_Buffer(...::geography, 50, 'join=mitre')`). El método y el
 WKT quedan en la migración `1793503685017_create-service-areas.sql`, que es donde se puede
 reproducir.
+
+**La lectura de las activas la hace `GET /api/graph`.** La respuesta trae las áreas
+vigentes en `service_areas`, con su `id`, su nombre y su polígono, y el contrato está en
+[14 §5.2](14-la-api-del-grafo.md). No hay endpoint propio del área: es un polígono fijo
+que el mapa dibuja junto con el grafo que ya pide.
 
 **No está en el camino del ruteo.** El área limita **las puntas** de una consulta, no el
 recorrido: el camino sigue siendo todo el grafo, y por eso no hay ninguna arista que se

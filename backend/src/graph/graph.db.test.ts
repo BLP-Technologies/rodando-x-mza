@@ -147,6 +147,52 @@ async function insertKerbFlood(trx: Transaction<DB>): Promise<void> {
   `.execute(trx);
 }
 
+/**
+ * Un polígono chico y válido adentro del piloto, con el anillo cerrado.
+ *
+ * El anillo repite el primer vértice al final porque un `POLYGON` de PostGIS que no
+ * cierra es inválido, y el contrato de la respuesta no tiene cómo representarlo.
+ */
+const AREA_WKT =
+  'POLYGON((-68.8450 -32.8900,-68.8440 -32.8900,-68.8440 -32.8910,-68.8450 -32.8910,-68.8450 -32.8900))';
+
+/** Inserta un área de servicio con nombre propio, activa o no, dentro de la transacción. */
+async function insertServiceArea(
+  trx: Transaction<DB>,
+  name: string,
+  isActive: boolean,
+): Promise<void> {
+  await sql`
+    INSERT INTO service_areas (name, geom, is_active)
+    VALUES (${name}, ST_GeomFromText(${AREA_WKT}, 4326), ${isActive})
+  `.execute(trx);
+}
+
+/**
+ * Un `id` que existe como cordón y seguro no como vereda.
+ *
+ * Se construye y no se busca: los `id` de cada tabla salen de su propia secuencia, así
+ * que en una base con el piloto importado los números se pisan y en una recién migrada
+ * no. Tomar el `id` de la primera vereda daba por sentado que ese número no era cordón,
+ * y en la base de desarrollo lo es (329 veredas contra 378 cordones), así que el test
+ * pasaba o fallaba según los datos. Acá el cordón se inserta por encima de todas las
+ * veredas, así que el número existe como cordón y no puede existir como vereda.
+ */
+async function insertKerbAboveSidewalks(trx: Transaction<DB>): Promise<number> {
+  const result = await sql<{ id: number }>`
+    INSERT INTO kerb_nodes (id, geom) OVERRIDING SYSTEM VALUE
+    SELECT greatest(coalesce((SELECT max(id) FROM kerb_nodes), 0),
+                    coalesce((SELECT max(id) FROM sidewalks), 0)) + 1,
+           ST_SetSRID(ST_MakePoint(-68.81, -32.91), 4326)
+    RETURNING id
+  `.execute(trx);
+
+  const row = result.rows[0];
+  if (row === undefined) throw new Error('the kerb above the sidewalks could not be inserted');
+
+  return row.id;
+}
+
 // Sin base no hay grafo que leer: el resto de la suite no la necesita.
 describe.skipIf(!process.env.DATABASE_URL)('readGraph contra la base', () => {
   afterAll(async () => {
@@ -324,15 +370,103 @@ describe.skipIf(!process.env.DATABASE_URL)('readGraph contra la base', () => {
     const error = await inRolledBackTransaction(async (trx) => {
       await importOsm(FIXTURE, trx);
 
-      const area = await firstSidewalkArea(trx);
+      // Ese id es de un cordón: como vereda no existe, y para quien pregunta el elemento
+      // tampoco, sin importar que el número esté en la tabla de al lado ([14 §7]).
+      const kerbId = await insertKerbAboveSidewalks(trx);
 
-      // Ese id es de una vereda: como cordón no existe, y para quien pregunta el
-      // elemento tampoco.
-      return updateGraphElement(trx, 'kerb', area.id, 'FULL').catch(
+      return updateGraphElement(trx, 'sidewalk', kerbId, 'FULL').catch(
         (thrown: unknown) => thrown,
       );
     });
 
     expect(error).toMatchObject({ status: 404, code: 'NOT_FOUND' });
+  });
+
+  it('devuelve el área de servicio activa como polígono cerrado', async () => {
+    const graph = await inRolledBackTransaction(async (trx) => {
+      await importOsm(FIXTURE, trx);
+
+      return readGraph(trx, await graphExtent(trx));
+    });
+
+    const area = graph.service_areas.features.find(
+      (candidate) => candidate.properties.name === 'Zona piloto Fase 1',
+    );
+    if (area === undefined) throw new Error('the active service area is missing');
+
+    // El área viaja con su `id` como clave estable y con su nombre (docs/09 §4.8).
+    expect(area.properties.id).toBeGreaterThan(0);
+    expect(area.geometry.type).toBe('Polygon');
+
+    // El anillo exterior está cerrado: el primer vértice y el último son el mismo.
+    const ring = area.geometry.coordinates[0];
+    if (ring === undefined) throw new Error('the service area has no outer ring');
+    expect(ring.length).toBeGreaterThan(3);
+    expect(ring[0]).toEqual(ring[ring.length - 1]);
+  });
+
+  it('filtra por is_active y no por id', async () => {
+    const graph = await inRolledBackTransaction(async (trx) => {
+      await importOsm(FIXTURE, trx);
+
+      // Dos áreas nuevas: el filtro no puede depender de cuál es la fila sembrada.
+      await insertServiceArea(trx, 'Zona de prueba activa', true);
+      await insertServiceArea(trx, 'Zona de prueba inactiva', false);
+
+      return readGraph(trx, await graphExtent(trx));
+    });
+
+    const names = graph.service_areas.features.map((area) => area.properties.name);
+    expect(names).toContain('Zona de prueba activa');
+    expect(names).not.toContain('Zona de prueba inactiva');
+
+    // La sembrada por la migración sigue estando: activar otra no reemplaza a la primera.
+    expect(names).toContain('Zona piloto Fase 1');
+  });
+
+  it('devuelve el área aunque el bbox no toque el grafo', async () => {
+    const graph = await inRolledBackTransaction(async (trx) => {
+      await importOsm(FIXTURE, trx);
+
+      return readGraph(trx, EMPTY_BBOX);
+    });
+
+    // El área es el contexto de la zona y no un elemento del área pedida: no se filtra
+    // por bbox (docs/14 §5.2).
+    expect(graph.features).toEqual([]);
+    expect(
+      graph.service_areas.features.map((area) => area.properties.name),
+    ).toContain('Zona piloto Fase 1');
+  });
+
+  it('no consume el tope de 2000 features', async () => {
+    const graph = await inRolledBackTransaction(async (trx) => {
+      await importOsm(FIXTURE, trx);
+      await insertKerbFlood(trx);
+
+      return readGraph(trx, FLOOD.bbox);
+    });
+
+    // El tope es de `features` y el área viaja afuera: aun recortado, el mapa tiene el
+    // borde de la zona.
+    expect(graph.truncated).toBe(true);
+    expect(graph.features).toHaveLength(2000);
+    expect(
+      graph.service_areas.features.map((area) => area.properties.name),
+    ).toContain('Zona piloto Fase 1');
+  });
+
+  it('devuelve una colección de áreas vacía si no hay ninguna activa', async () => {
+    const graph = await inRolledBackTransaction(async (trx) => {
+      await importOsm(FIXTURE, trx);
+
+      // Una base sin área activa no rompe la lectura: el ruteo sí la necesita (docs/13).
+      await sql`UPDATE service_areas SET is_active = false`.execute(trx);
+
+      return readGraph(trx, await graphExtent(trx));
+    });
+
+    expect(graph.service_areas).toEqual({ type: 'FeatureCollection', features: [] });
+    expect(graph.features.length).toBeGreaterThan(0);
   });
 });

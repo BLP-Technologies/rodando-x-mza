@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 /**
  * El mapa del grafo peatonal, sobre Leaflet.
@@ -13,44 +13,46 @@
  * `fetch` de prerender.
  */
 
-import 'leaflet/dist/leaflet.css';
+import "leaflet/dist/leaflet.css";
 
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import type { LatLngBounds, LatLngBoundsLiteral } from 'leaflet';
+import { useEffect, useMemo, useRef, useState } from "react";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import type { LatLngBounds, LatLngBoundsLiteral } from "leaflet";
 import {
   CircleMarker,
   MapContainer,
+  Polygon,
   Polyline,
   TileLayer,
   useMap,
   useMapEvents,
-} from 'react-leaflet';
+} from "react-leaflet";
 
-import { describeApiError } from '@/api/error-messages';
+import { describeApiError } from "@/api/error-messages";
 import {
   graphQueryKey,
   readGraph,
   roundBBox,
   type GraphFeature,
-} from '@/api/graph';
-import { PILOT_BOUNDS, type BBox } from '@/config';
-import { FeatureDetails } from './feature-details';
-import { lineStyle, pointStyle } from './feature-style';
+  type ServiceArea,
+} from "@/api/graph";
+import { PILOT_BOUNDS, type BBox } from "@/config";
+import { FeatureDetails } from "./feature-details";
+import { lineStyle, pointStyle, serviceAreaStyle } from "./feature-style";
 
 /** Cuánto se espera después de un paneo antes de pedir el área nueva. */
 const DEBOUNCE_MS = 300;
 
 /** Las veredas y los cruces son líneas; los cordones, puntos. */
-type LineFeature = Extract<GraphFeature, { geometry: { type: 'LineString' } }>;
-type PointFeature = Extract<GraphFeature, { geometry: { type: 'Point' } }>;
+type LineFeature = Extract<GraphFeature, { geometry: { type: "LineString" } }>;
+type PointFeature = Extract<GraphFeature, { geometry: { type: "Point" } }>;
 
 function isLineFeature(feature: GraphFeature): feature is LineFeature {
-  return feature.geometry.type === 'LineString';
+  return feature.geometry.type === "LineString";
 }
 
 function isPointFeature(feature: GraphFeature): feature is PointFeature {
-  return feature.geometry.type === 'Point';
+  return feature.geometry.type === "Point";
 }
 
 /** La clave de selección: identifica el elemento sin depender del objeto. */
@@ -63,8 +65,21 @@ function toLatLng([lon, lat]: [number, number]): [number, number] {
   return [lat, lon];
 }
 
+/**
+ * El anillo exterior de un área, en `[lat, lon]`.
+ *
+ * Los huecos de un polígono no se dibujan: el área es un perímetro y no una
+ * zona con exclusiones, y `ST_Buffer` del piloto devuelve un anillo solo.
+ */
+function areaRing(area: ServiceArea): [number, number][] {
+  const ring = area.geometry.coordinates[0] ?? [];
+  return ring.map(toLatLng);
+}
+
 /** La caja que contiene todas las features, o `null` si no hay ninguna. */
-function boundsOf(features: readonly GraphFeature[]): LatLngBoundsLiteral | null {
+function boundsOf(
+  features: readonly GraphFeature[],
+): LatLngBoundsLiteral | null {
   let minLon = Infinity;
   let minLat = Infinity;
   let maxLon = -Infinity;
@@ -72,7 +87,7 @@ function boundsOf(features: readonly GraphFeature[]): LatLngBoundsLiteral | null
 
   for (const feature of features) {
     const coordinates =
-      feature.geometry.type === 'Point'
+      feature.geometry.type === "Point"
         ? [feature.geometry.coordinates]
         : feature.geometry.coordinates;
 
@@ -98,7 +113,7 @@ const PILOT_VIEW: LatLngBoundsLiteral = [
   [PILOT_BOUNDS.maxLat, PILOT_BOUNDS.maxLon],
 ];
 
-const TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+const TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
 
 /**
  * El texto de atribución de OSM. Leaflet lo dibuja en su control de atribución
@@ -190,6 +205,10 @@ export default function GraphMap() {
 
   const features = data?.features ?? [];
   const truncated = data?.truncated ?? false;
+  const serviceAreas = data?.service_areas.features ?? [];
+
+  /** Los nombres de las áreas activas, para la leyenda del mapa. */
+  const areaNames = serviceAreas.map((area) => area.properties.name).join(", ");
 
   const selected =
     features.find((feature) => featureId(feature) === selectedId) ?? null;
@@ -237,16 +256,39 @@ export default function GraphMap() {
           maxZoom={19}
           className="h-full w-full"
         >
-          <TileLayer url={TILE_URL} attribution={OSM_ATTRIBUTION} maxZoom={19} />
+          <TileLayer
+            url={TILE_URL}
+            attribution={OSM_ATTRIBUTION}
+            maxZoom={19}
+          />
 
-          <FitBounds bounds={firstBounds} suppressMoveEndRef={suppressMoveEnd} />
-          <MapEvents onMoveEnd={onMoveEnd} onMapClick={() => setSelectedId(null)} />
+          <FitBounds
+            bounds={firstBounds}
+            suppressMoveEndRef={suppressMoveEnd}
+          />
+          <MapEvents
+            onMoveEnd={onMoveEnd}
+            onMapClick={() => setSelectedId(null)}
+          />
+
+          {/* Los polígonos van antes del grafo: en Leaflet el orden de montaje es
+              el orden de pintado, así el área queda por debajo de las líneas. */}
+          {serviceAreas.map((area) => (
+            <Polygon
+              key={area.properties.id}
+              positions={areaRing(area)}
+              pathOptions={serviceAreaStyle()}
+            />
+          ))}
 
           {lines.map((feature) => (
             <Polyline
               key={featureId(feature)}
               positions={feature.geometry.coordinates.map(toLatLng)}
-              pathOptions={lineStyle(feature.properties.level, featureId(feature) === selectedId)}
+              pathOptions={lineStyle(
+                feature.properties.level,
+                featureId(feature) === selectedId,
+              )}
               eventHandlers={{ click: () => setSelectedId(featureId(feature)) }}
             />
           ))}
@@ -255,11 +297,21 @@ export default function GraphMap() {
             <CircleMarker
               key={featureId(feature)}
               center={toLatLng(feature.geometry.coordinates)}
-              pathOptions={pointStyle(feature.properties.level, featureId(feature) === selectedId)}
+              pathOptions={pointStyle(
+                feature.properties.level,
+                featureId(feature) === selectedId,
+              )}
               eventHandlers={{ click: () => setSelectedId(featureId(feature)) }}
             />
           ))}
         </MapContainer>
+
+        {serviceAreas.length > 0 && (
+          <p className="pointer-events-none absolute left-12 top-3 z-[1100] flex items-center gap-2 rounded bg-white/95 px-3 py-1.5 text-sm text-slate-700 shadow">
+            <span className="w-4 shrink-0 border-t-2 border-dashed border-blue-700" />
+            <span>Zona: {areaNames}</span>
+          </p>
+        )}
 
         {isPending && (
           <p className="absolute left-1/2 top-3 z-[1100] -translate-x-1/2 rounded bg-white/95 px-3 py-1.5 text-sm text-slate-600 shadow">
@@ -288,14 +340,17 @@ export default function GraphMap() {
             role="status"
             className="absolute bottom-6 left-3 z-[1100] max-w-sm rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 shadow"
           >
-            El área tiene más de 2000 elementos y la API devolvió sólo los primeros.
-            Acercate para verlos todos.
+            El área tiene más de 2000 elementos y la API devolvió sólo los
+            primeros. Acercate para verlos todos.
           </p>
         )}
       </div>
 
       <aside className="w-80 shrink-0 overflow-y-auto border-l border-slate-200 bg-white p-4">
-        <FeatureDetails feature={selected} onClear={() => setSelectedId(null)} />
+        <FeatureDetails
+          feature={selected}
+          onClear={() => setSelectedId(null)}
+        />
       </aside>
     </div>
   );
