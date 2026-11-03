@@ -14,7 +14,8 @@ Este documento responde:
 
 - **Con qué entrada** se lee el grafo, y por qué un bbox (§3).
 - **Qué significa "interseca"** en el filtro (§4).
-- **Qué devuelve**, campo por campo, y cómo avisa que recortó (§5).
+- **Qué devuelve**, campo por campo, cómo avisa que recortó y qué área de servicio activa
+  incluye (§5).
 - **Cómo se rechaza** un pedido (§6).
 - **Cómo se escribe** el nivel de un elemento, y qué queda verificado (§7).
 
@@ -96,6 +97,27 @@ consultas que el servicio tenga que juntar.
 {
   "type": "FeatureCollection",
   "truncated": false,
+  "service_areas": {
+    "type": "FeatureCollection",
+    "features": [
+      {
+        "type": "Feature",
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            [
+              [-68.84788777, -32.8852519],
+              [-68.83923548, -32.88685409],
+              [-68.84113316, -32.89416301],
+              [-68.84980259, -32.89256194],
+              [-68.84788777, -32.8852519]
+            ]
+          ]
+        },
+        "properties": { "id": 1, "name": "Zona piloto Fase 1" }
+      }
+    ]
+  },
   "features": [
     {
       "type": "Feature",
@@ -133,12 +155,16 @@ consultas que el servicio tenga que juntar.
 | --- | --- |
 | `type` | `FeatureCollection`, para que un cliente de GeoJSON lo lea sin condicionales |
 | `truncated` | Si la respuesta trae **todas** las features del área o sólo las primeras (§5.1). No es parte de GeoJSON |
+| `service_areas` | Las áreas de servicio activas, como su propia `FeatureCollection` (§5.2). No consume el tope de §5.1 ni se filtra por bbox |
 | `features[].geometry` | La geometría guardada, vía `ST_AsGeoJSON`, en orden `[lon, lat]`: `LineString` en veredas y cruces, `Point` en cordones |
 | `features[].properties.element_kind` | De qué clase es el elemento: `sidewalk`, `crossing` o `kerb` |
 | `features[].properties.element_id` | El `id` de su fila. Es la clave con la que el portal pide o edita el elemento: junto con `element_kind` identifica un elemento del grafo (§7) |
 | `features[].properties.level` | El nivel **guardado** del elemento: `FULL`, `PARTIAL`, `NONE`, o `null` si nadie lo relevó ([09 §4.1](09-modelo-de-datos.md)) |
 | `features[].properties.is_verified` | Si alguien miró lo que decidió ese nivel ([09 §4.1](09-modelo-de-datos.md)) |
 | `features[].properties.street_name` | El nombre de la calle. **Sólo en veredas**, y puede ser `null`: hay filas del import sin nombre |
+| `service_areas.features[].geometry` | El perímetro del área activa, vía `ST_AsGeoJSON`: siempre un `Polygon`, en orden `[lon, lat]` |
+| `service_areas.features[].properties.id` | El `id` de la fila en `service_areas`. Es la clave estable del área en la respuesta |
+| `service_areas.features[].properties.name` | El nombre del área, el mismo que la operación usa para nombrarla |
 
 Cinco decisiones detrás de esa forma:
 
@@ -156,11 +182,18 @@ Cinco decisiones detrás de esa forma:
 - **No se expone el largo ni el costo.** Los metros de una arista y su costo son del
   ruteo ([09 §4.7](09-modelo-de-datos.md)); si el cliente necesita un largo, lo mide de
   la geometría que ya tiene.
+- **El área de servicio es hermana de `type`, no una feature más.** No es un elemento del
+  grafo: no la recorta el tope de 2000 (§5.1), no la filtra el bbox (§4) y el cliente la
+  dibuja distinto. Metida en `features`, el cliente tendría que separarla por tipo antes
+  de dibujar y el recorte podría dejarla afuera (§5.2).
 
 ### 5.1 El tope de 2000, y el aviso de que se recortó
 
 La respuesta trae **como mucho 2000 features**. Si el área tiene más, devuelve las
 primeras y `"truncated": true`.
+
+El tope es de `features` y no alcanza a `service_areas`: el área activa viaja siempre,
+entera, aunque el grafo venga recortado (§5.2).
 
 - **El tope no es una regla de negocio, es una red.** El piloto entero son 977 features
   (329 veredas, 270 cruces, 378 cordones) y en un pedido normal no se llega; el número
@@ -186,6 +219,26 @@ filas): el cuello es armar y transferir la respuesta, no la base. Es el costo ac
 devolver geometría real, y no hay caché que lo esconda (§1). Los números dependen de la
 máquina; se vuelven a medir con el backend arriba y un `curl -w '%{time_total}'`.
 
+### 5.2 El área de servicio
+
+`service_areas` devuelve **las áreas de servicio activas**, con su polígono y su nombre.
+La fila es la de [09 §4.8](09-modelo-de-datos.md): el perímetro dentro del que el ruteo
+acepta las puntas de una consulta, que hoy es la zona piloto corrida 50 m hacia afuera.
+
+- **Se devuelven las activas, y se filtra por `is_active` y no por `id`.** El `id` de la
+  zona vigente puede cambiar sin que el cliente se entere: reemplazar un perímetro es
+  desactivar el viejo y activar el nuevo, y filtrar por `id` obligaría a fijar de antemano
+  cuál es la fila buena ([09 §4.8](09-modelo-de-datos.md)).
+- **Una colección vacía es válida.** Una base sin área activa no rompe la lectura: el grafo
+  se devuelve igual y `service_areas.features` llega vacío. El ruteo sí la necesita y
+  responde `500` sin ella ([13](13-api-de-ruteo.md)).
+- **Viaja acá y no en un endpoint propio.** Es un polígono fijo que el mapa dibuja junto
+  con lo que ya pide: un `GET /api/service-areas` agregaría un segundo viaje por pantalla
+  para un dato que cabe en la respuesta que ya está en camino.
+- **Si algún día hay muchas zonas, se filtra por bbox y se pagina aparte.** Hoy hay una y
+  el cliente las dibuja todas; cuando sean muchas, el recorte por área vuelve a tener
+  sentido y el dato se pide solo.
+
 ## 6. Cómo se rechaza
 
 | Situación | Status | Respuesta |
@@ -195,6 +248,7 @@ máquina; se vuelven a medir con el backend arriba y un `curl -w '%{time_total}'
 | Una coordenada fuera de rango | 400 | `VALIDATION_ERROR` con `details: [{ field: "bbox", code: "INVALID" }]` |
 | Esquinas invertidas o de área cero | 400 | `VALIDATION_ERROR` con `details: [{ field: "bbox", code: "INVALID" }]` |
 | El área no tiene grafo | 200 | Una `FeatureCollection` con `features: []`. No es un error |
+| No hay área activa en `service_areas` | 200 | `service_areas.features: []`; el grafo se devuelve igual |
 | Cualquier fallo de la base | 500 | `INTERNAL_ERROR`, sin detalles ([04 §5](04-errores-y-mensajes.md)) |
 
 **Un solo `INVALID` para los tres motivos, y no un `INVALID_RANGE` propio.** Los cuatro
@@ -279,6 +333,13 @@ hay versión ni `If-Match`, y agregarlos no es del MVP.
   ([09 §4.7](09-modelo-de-datos.md)), no un campo más acá.
 - **La proyección y el estilo del mapa.** Cada cliente decide cómo lo dibuja; la API no
   manda colores ni simplificación.
+- **Un endpoint propio del área de servicio.** Viaja en la respuesta del grafo (§5.2), que
+  es lo que el mapa ya pide al moverse.
+- **El filtro de las áreas por bbox.** Se devuelven todas las activas: el área es el
+  contexto de la zona y no un elemento del área pedida (§5.2).
+- **Las áreas multiparte.** El tipo es `Polygon` y no `MultiPolygon`: una zona partida
+  sería una migración **y** un cambio de tipo en el contrato, y hoy rompería la validación
+  con un `500` porque el esquema Zod no la acepta.
 - **El texto que ve el moderador.** Lo escribe el portal a partir de los códigos y de los
   elementos ([04 §6](04-errores-y-mensajes.md)).
 

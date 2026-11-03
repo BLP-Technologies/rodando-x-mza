@@ -1,5 +1,5 @@
 /**
- * `GET /api/graph`: el grafo peatonal de un área
+ * `GET /api/graph`: el grafo peatonal de un área y las áreas de servicio activas
  * ([14](../../docs/14-la-api-del-grafo.md)).
  *
  * Los tipos salen de `schema.d.ts`, generado desde `/api/openapi.json`: acá no
@@ -12,6 +12,12 @@ import { apiGet, apiPatch } from './client';
 import type { components } from './schema';
 
 export type GraphFeatureCollection = components['schemas']['GraphFeatureCollection'];
+
+/** El conjunto de áreas activas que viaja al lado de las features. */
+export type ServiceAreaCollection = components['schemas']['ServiceAreaCollection'];
+
+/** Una zona: un polígono con nombre, que el mapa dibuja como contexto. */
+export type ServiceArea = ServiceAreaCollection['features'][number];
 
 export type GraphFeature = GraphFeatureCollection['features'][number];
 
@@ -70,10 +76,13 @@ export function graphQueryKey(bbox: BBox) {
 }
 
 /**
- * Lee las veredas, los cruces y los cordones que intersecan el área.
+ * Lee las veredas, los cruces y los cordones que intersecan el área, más las
+ * áreas de servicio activas.
  *
  * `truncated` viene al lado de las features y no adentro: si es `true`, el área
  * tenía más de 2000 elementos y la respuesta está recortada ([14 §5.1]).
+ * `service_areas` también: el área es contexto de la zona, no un elemento del
+ * grafo, y por eso no la recorta el tope ni la filtra el bbox ([14 §5.2]).
  */
 export async function readGraph(bbox: BBox): Promise<GraphFeatureCollection> {
   const query = new URLSearchParams({ bbox: formatBBox(bbox) });

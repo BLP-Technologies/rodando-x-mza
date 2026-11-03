@@ -2,16 +2,24 @@ import type { Kysely } from 'kysely';
 import type { AccessibilityLevel, DB } from '../db/types.js';
 import { ERROR_CODES } from '../http/error-codes.js';
 import { HttpError } from '../http/errors.js';
-import { findGraphFeatures, updateElementLevel, type GraphFeatureRow } from './graph.sql.js';
+import {
+  findActiveServiceAreas,
+  findGraphFeatures,
+  updateElementLevel,
+  type GraphFeatureRow,
+  type ServiceAreaRow,
+} from './graph.sql.js';
 import {
   graphResponseSchema,
   lineStringGeometrySchema,
   pointGeometrySchema,
+  polygonGeometrySchema,
   type BBox,
   type ElementKind,
   type GraphElement,
   type GraphFeature,
   type GraphResponse,
+  type ServiceAreaFeature,
 } from './graph.schemas.js';
 
 /**
@@ -25,21 +33,29 @@ import {
 const MAX_FEATURES = 2000;
 
 /**
- * Lee el grafo de un área, como `FeatureCollection`.
+ * Lee el grafo de un área, como `FeatureCollection`, con las áreas de servicio activas al
+ * lado.
  *
  * Sólo lee: no hay caché ni nada que recordar entre pedidos, así que dos pedidos iguales
  * devuelven lo mismo mientras el dato no cambie
  * ([14 §1](../../../docs/14-la-api-del-grafo.md)). Una `FeatureCollection` vacía es una
- * respuesta válida: el área no tiene grafo, no es un error.
+ * respuesta válida: el área no tiene grafo, no es un error. Lo mismo vale para
+ * `service_areas`: una base sin área activa no rompe la lectura ([14 §5.2](../../../docs/14-la-api-del-grafo.md)).
  */
 export async function readGraph(db: Kysely<DB>, bbox: BBox): Promise<GraphResponse> {
-  // Se pide una de más para distinguir "entraron justo 2000" de "había más".
-  const rows = await findGraphFeatures(db, bbox, MAX_FEATURES + 1);
+  // Las dos consultas son independientes: el área no se filtra por bbox ni compite por el
+  // tope, así que no hay motivo para esperar una antes de pedir la otra.
+  const [rows, areas] = await Promise.all([
+    // Se pide una de más para distinguir "entraron justo 2000" de "había más".
+    findGraphFeatures(db, bbox, MAX_FEATURES + 1),
+    findActiveServiceAreas(db),
+  ]);
   const truncated = rows.length > MAX_FEATURES;
 
   return graphResponseSchema.parse({
     type: 'FeatureCollection',
     truncated,
+    service_areas: { type: 'FeatureCollection', features: areas.map(toServiceAreaFeature) },
     features: (truncated ? rows.slice(0, MAX_FEATURES) : rows).map(toFeature),
   });
 }
@@ -108,4 +124,20 @@ function toFeature(row: GraphFeatureRow): GraphFeature {
         properties: { element_kind: 'kerb', ...properties },
       };
   }
+}
+
+/**
+ * Un área de servicio, con la forma que tiene en la respuesta.
+ *
+ * Misma regla del borde que `toFeature`: el GeoJSON sale de la base como texto y se
+ * valida antes de entrar al tipado, en vez de afirmarlo.
+ */
+function toServiceAreaFeature(row: ServiceAreaRow): ServiceAreaFeature {
+  const geometry: unknown = JSON.parse(row.geometry);
+
+  return {
+    type: 'Feature',
+    geometry: polygonGeometrySchema.parse(geometry),
+    properties: { id: row.id, name: row.name },
+  };
 }

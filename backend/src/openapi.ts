@@ -19,17 +19,20 @@ registry.registerPath({
   summary: 'Leer el grafo de un área',
   description:
     'Devuelve las veredas, los cruces y los cordones que intersecan el bbox, como una ' +
-    'FeatureCollection de GeoJSON. Sólo lee: no escribe ni cachea nada. Si el área tiene ' +
-    'más de 2000 elementos, devuelve las primeras y lo avisa con `truncated: true`. ' +
-    'Ver docs/14-la-api-del-grafo.md.',
+    'FeatureCollection de GeoJSON, más las áreas de servicio activas en `service_areas`. ' +
+    'Sólo lee: no escribe ni cachea nada. Si el área tiene más de 2000 elementos, ' +
+    'devuelve las primeras y lo avisa con `truncated: true`; el tope no alcanza a las ' +
+    'áreas, que no se filtran por bbox. Ver docs/14-la-api-del-grafo.md.',
   request: {
     query: z.object({ bbox: bboxParamSchema }),
   },
   responses: {
     200: {
       description:
-        'Los elementos del área. Una colección vacía es una respuesta válida: esa zona ' +
-        'no tiene grafo.',
+        'Los elementos del área y las áreas de servicio activas. Una colección de ' +
+        'elementos vacía es una respuesta válida: esa zona no tiene grafo. También lo es ' +
+        'una base sin área activa: `service_areas.features` llega vacío y el grafo se ' +
+        'devuelve igual.',
       content: { 'application/json': { schema: graphResponseSchema } },
     },
     400: {

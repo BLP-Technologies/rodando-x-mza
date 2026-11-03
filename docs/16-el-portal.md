@@ -46,6 +46,8 @@ cómo está**, y **corregir el nivel**— con estas cosas:
 dato", con un `PATCH` que escribe una sola columna y deja el elemento verificado (§5.6).
 - **Avisa** cuando la API recortó la respuesta por el tope de 2000 (§5.4) y
   cuando no responde.
+- **Dibuja el borde del área de servicio activa** como una línea de guiones, con
+  su nombre en una leyenda, para que el moderador vea dónde termina la zona (§5.7).
 
 Lo que **no** hace todavía: crear ni resolver obstáculos (C012–C013), listar ni resolver
 reportes, buscar una calle y autenticar personas (la sesión es simulada, §4).
@@ -210,9 +212,11 @@ hay que coordinar nada a mano.
 
 - **La vista inicial es la caja del piloto**, con las cuatro esquinas de
   [`data/pilot-zone.geojson`](../data/pilot-zone.geojson)
-  ([10 §2](10-datos-y-zona-piloto.md)) como constantes en `src/config.ts`. Es una
-  constante y no una consulta porque la API no expone `service_areas`: cuando lo
-  haga, la caja se lee y la constante se va.
+  ([10 §2](10-datos-y-zona-piloto.md)) como constantes en `src/config.ts`. La
+  API ya expone `service_areas`, pero la constante se queda: el primer pedido
+  necesita un bbox antes de tener cualquier respuesta, y el área activa es la
+  zona corrida 50 m hacia afuera, no la caja del piloto. Encima, encuadrar al
+  área metería en pantalla un borde que el grafo no llena.
 - **La primera respuesta reencuadra el mapa** al grafo recibido, una sola vez por
   montaje. Después manda el usuario: reencuadrar en cada paneo haría imposible
   panear. El `fitBounds` suprime el `moveend` que él mismo dispara, o se pediría
@@ -283,6 +287,32 @@ separados de los de lectura ([15 §6](15-integracion-con-el-cliente.md)).
 relevado: la edición **es** el forzado explícito
 ([12 §8.2](12-relevamiento-de-accesibilidad.md)).
 
+### 5.7 El área de servicio
+
+El mapa dibuja el **borde del área activa** con una línea de guiones azul, sin relleno
+(`serviceAreaStyle()` en `map/feature-style.ts`), y su nombre en una leyenda arriba a la
+izquierda. El dato viene en `service_areas` de la respuesta del grafo
+([14 §5.2](14-la-api-del-grafo.md)).
+
+- **Azul, 4 px, guiones, sin relleno.** El azul es el quinto color, fuera de la paleta de
+  niveles (§5.3), para que el borde no se lea como un dato de accesibilidad: es el límite
+  de la zona, no el estado de un elemento.
+- **Va por debajo del grafo.** En Leaflet el orden de montaje de las capas es el orden de
+  pintado, así que los polígonos van antes que las líneas y los puntos en el JSX. El área
+  es contexto: no puede tapar lo que el moderador tiene que mirar.
+- **`interactive: false` es lo que hace que no capture clics.** Leaflet le pone
+  `pointer-events: none` a la capa, así el clic sigue llegando a la vereda de abajo o al
+  fondo del mapa, que es el que suelta la selección. Por eso la leyenda es un `<p>` del
+  contenedor y no un tooltip: un tooltip exigiría una capa interactiva.
+- **La leyenda muestra el nombre.** Arriba a la izquierda, fuera del centro donde viven el
+  cartel de carga y el de error, con `pointer-events-none` para no tapar el mapa. Se
+  dibuja sólo si hay al menos un área. Con varias, el texto las lista separadas por coma.
+- **No entra en el encuadre inicial.** El `fitBounds` y el aviso de tope miran sólo las
+  features del grafo (§5.4): el área es la zona corrida 50 m hacia afuera, y encuadrarla
+  achicaría el grafo sin motivo.
+- **Se dibujan todas, sin conmutación por capa.** Prender y apagar capas desde una lista es
+  trabajo de otra tarea; hoy el único control del mapa es el paneo.
+
 ## 6. El cliente HTTP y el contrato
 
 - **Los tipos no se escriben a mano.** `openapi-typescript` es una dependencia de
@@ -300,7 +330,7 @@ relevado: la edición **es** el forzado explícito
   igual —quien lo muestre cae al mensaje genérico
   ([15 §6](15-integracion-con-el-cliente.md))—.
 - **`src/api/graph.ts`** es la única función que conoce `GET /api/graph`: recibe
-  el bbox y devuelve las features y `truncated`, tipados con el esquema
+  el bbox y devuelve las features, `truncated` y las áreas activas, tipados con el esquema
   generado.
 - **`src/api/error-messages.ts`** es el mapeo `código → texto en español`, que es
   trabajo de cada cliente ([04](04-errores-y-mensajes.md)).
