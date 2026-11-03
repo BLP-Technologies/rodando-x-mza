@@ -5,15 +5,20 @@
  * ([04](../../docs/04-errores-y-mensajes.md)); traducirlos es trabajo de cada
  * cliente ([15 §6](../../docs/15-integracion-con-el-cliente.md)). Un código que
  * este archivo no conoce cae al mensaje genérico y no rompe nada.
+ *
+ * Los textos de lectura **no nombran una pantalla**: el mismo `INTERNAL_ERROR`
+ * llega leyendo el grafo y leyendo los reportes, y decir "el grafo" en la lista de
+ * reportes sería mentir sobre lo que falló (mismo código, mismo mensaje). Lo que sí
+ * puede nombrar su objeto es el guardado del nivel, que ocurre en un solo lugar.
  */
 
 import { ApiError, NETWORK_ERROR } from './client';
 
 const MESSAGES: Record<string, string> = {
   [NETWORK_ERROR]: 'No se pudo conectar con la API. Revisá que el backend esté levantado.',
-  VALIDATION_ERROR: 'La API rechazó el área del mapa.',
-  NOT_FOUND: 'Ese elemento ya no está en el grafo. Se recargó el mapa.',
-  INTERNAL_ERROR: 'La API falló al leer el grafo. Probá de nuevo.',
+  VALIDATION_ERROR: 'La API rechazó el pedido.',
+  NOT_FOUND: 'Ese dato ya no está disponible.',
+  INTERNAL_ERROR: 'La API falló al leer los datos. Probá de nuevo.',
 };
 
 /** Los errores del guardado del nivel, que no son los de la lectura del grafo. */
@@ -25,7 +30,7 @@ const SAVE_MESSAGES: Record<string, string> = {
   INTERNAL_ERROR: 'La API falló al guardar. Probá de nuevo.',
 };
 
-const GENERIC_MESSAGE = 'No se pudo leer el grafo.';
+const GENERIC_MESSAGE = 'No se pudieron leer los datos.';
 const GENERIC_SAVE_MESSAGE = 'No se pudo guardar el nivel.';
 
 /** El texto que ve la persona para un error de la API. */

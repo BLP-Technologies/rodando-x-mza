@@ -205,7 +205,51 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * Leer los reportes de un estado
+         * @description Devuelve los reportes ciudadanos de un estado, como una FeatureCollection de GeoJSON, con el punto reportado y ocho propiedades por informe: el código y el nombre del tipo, la severidad, la descripción, la foto si hay y la fecha en ISO. El filtro por estado es del servidor y tiene PENDING por defecto, que es la cola de trabajo del moderador. Los reportes dados de baja no aparecen en ningún estado. Si hay más de 2000, devuelve los más nuevos y lo avisa con `truncated: true`. Ver docs/17-la-api-de-reportes.md §7.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Estado por el que se filtra, con los valores del enum del ciclo de moderación. Si falta, se devuelven los pendientes (`PENDING`). */
+                    status?: "PENDING" | "APPROVED" | "UNDER_REPAIR" | "RESOLVED" | "REJECTED";
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Los reportes del estado pedido, del más nuevo al más antiguo. Una colección vacía es una respuesta válida: no hay reportes en ese estado. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ReportFeatureCollection"];
+                    };
+                };
+                /** @description El estado no es uno del enum, o la query trae un parámetro que el contrato no tiene. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description Error no esperado. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
         put?: never;
         /**
          * Reportar un obstáculo
@@ -505,9 +549,13 @@ export interface components {
             type: string;
             /** @enum {string} */
             severity: "MINOR" | "MODERATE" | "CRITICAL";
-            /** @enum {string} */
-            status: "PENDING" | "APPROVED" | "UNDER_REPAIR" | "RESOLVED" | "REJECTED";
+            status: components["schemas"]["ReportStatus"];
         };
+        /**
+         * @description El estado del reporte dentro del ciclo de moderación. El POST siempre lo crea en PENDING.
+         * @enum {string}
+         */
+        ReportStatus: "PENDING" | "APPROVED" | "UNDER_REPAIR" | "RESOLVED" | "REJECTED";
         /**
          * @description El reporte de un obstáculo, con la severidad que percibió quien lo manda.
          * @example {
@@ -532,6 +580,35 @@ export interface components {
             };
             /** Format: uri */
             image_url?: string;
+        };
+        ReportFeatureCollection: {
+            /** @enum {string} */
+            type: "FeatureCollection";
+            truncated: boolean;
+            features: components["schemas"]["ReportFeature"][];
+        };
+        ReportFeature: {
+            /** @enum {string} */
+            type: "Feature";
+            geometry: {
+                /** @enum {string} */
+                type: "Point";
+                coordinates: [
+                    number,
+                    number
+                ];
+            };
+            properties: {
+                id: number;
+                status: components["schemas"]["ReportStatus"];
+                type: string;
+                type_name: string;
+                /** @enum {string} */
+                severity: "MINOR" | "MODERATE" | "CRITICAL";
+                description: string;
+                image_url: string | null;
+                created_at: string;
+            };
         };
         ReportImage: {
             url: string;

@@ -6,6 +6,8 @@ import {
   createReportRequestSchema,
   reportImageSchema,
   reportSchema,
+  reportsResponseSchema,
+  reportStatusSchema,
 } from './reports/reports.schemas.js';
 import { routeRequestSchema, routeResponseSchema } from './routing/routing.schemas.js';
 
@@ -153,6 +155,49 @@ registry.registerPath({
       description:
         'El cuerpo no cumple el contrato, o el código de tipo no existe entre los ' +
         'activos.',
+      content: { 'application/json': { schema: errorResponseSchema } },
+    },
+    500: {
+      description: 'Error no esperado.',
+      content: { 'application/json': { schema: errorResponseSchema } },
+    },
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/reports',
+  summary: 'Leer los reportes de un estado',
+  description:
+    'Devuelve los reportes ciudadanos de un estado, como una FeatureCollection de ' +
+    'GeoJSON, con el punto reportado y ocho propiedades por informe: el código y el ' +
+    'nombre del tipo, la severidad, la descripción, la foto si hay y la fecha en ISO. ' +
+    'El filtro por estado es del servidor y tiene PENDING por defecto, que es la cola ' +
+    'de trabajo del moderador. Los reportes dados de baja no aparecen en ningún ' +
+    'estado. Si hay más de 2000, devuelve los más nuevos y lo avisa con ' +
+    '`truncated: true`. Ver docs/17-la-api-de-reportes.md §7.',
+  request: {
+    query: z.object({
+      // El default viaja en la descripción y no como `default` del parámetro: el
+      // esquema es un `$ref` al enum y el documento no repite su forma.
+      status: reportStatusSchema.default('PENDING').meta({
+        description:
+          'Estado por el que se filtra, con los valores del enum del ciclo de ' +
+          'moderación. Si falta, se devuelven los pendientes (`PENDING`).',
+      }),
+    }),
+  },
+  responses: {
+    200: {
+      description:
+        'Los reportes del estado pedido, del más nuevo al más antiguo. Una colección ' +
+        'vacía es una respuesta válida: no hay reportes en ese estado.',
+      content: { 'application/json': { schema: reportsResponseSchema } },
+    },
+    400: {
+      description:
+        'El estado no es uno del enum, o la query trae un parámetro que el contrato ' +
+        'no tiene.',
       content: { 'application/json': { schema: errorResponseSchema } },
     },
     500: {

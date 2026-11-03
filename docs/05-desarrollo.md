@@ -222,6 +222,22 @@ contrato completo, que es lo que consume el cliente.
 **Los `id` de nodo y de elemento son de la base de cada uno**: si el grafo se importó en
 otro orden, no coinciden con los de otro entorno, pero los metros y los niveles sí.
 
+### Datos de prueba de reportes
+
+La pantalla `/reports` del portal se prueba con datos cargados a mano, y esos datos son
+un comando del backend:
+
+```sh
+cd backend
+pnpm seed:reports
+```
+
+Escribe **diez reportes** en la base que diga `DATABASE_URL`, dentro de la zona piloto y
+con los tres estados que el selector necesita (pendientes, aprobados y rechazados).
+**Agrega en cada corrida**: dos corridas dejan veinte. Para volver a cero, `DELETE FROM
+reports`. No hay endpoint que los cree ni los borre: es una herramienta de desarrollo
+([17 §7](17-la-api-de-reportes.md)).
+
 ## 8. Comandos frecuentes
 
 Desde `backend/`:
@@ -237,6 +253,7 @@ Desde `backend/`:
 | `pnpm migrate:down` | revierte la última migración |
 | `pnpm db:types` | regenera `src/db/types.ts` desde la base (requiere la base levantada) |
 | `pnpm db:types:verify` | falla si los tipos generados no coinciden con el esquema |
+| `pnpm seed:reports` | carga diez reportes de prueba para la pantalla de reportes |
 
 Desde `portal/`:
 

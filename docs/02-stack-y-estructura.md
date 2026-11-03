@@ -104,6 +104,7 @@ portal/src/
 ├── app/          # rutas y layouts: orquestan, no implementan
 ├── api/          # cliente HTTP tipado y contrato generado de la API
 ├── map/          # una funcionalidad: el mapa del grafo
+├── reports/      # una funcionalidad: la pantalla de reportes
 ├── session/      # de dónde sale la sesión del portal
 └── config.ts     # valores por entorno y la caja del piloto
 ```

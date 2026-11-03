@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { pointGeometrySchema } from '../graph/graph.schemas.js';
 
 /**
  * El contrato de `POST /api/reports` y el de la subida de imágenes, en esquemas
@@ -21,13 +22,14 @@ export type ReportSeverity = z.infer<typeof reportSeveritySchema>;
  * El `POST` siempre lo crea en `PENDING`; el enum completo es el de la columna,
  * porque es lo que una lectura del recurso tiene que poder describir.
  */
-export const reportStatusSchema = z.enum([
-  'PENDING',
-  'APPROVED',
-  'UNDER_REPAIR',
-  'RESOLVED',
-  'REJECTED',
-]);
+export const reportStatusSchema = z
+  .enum(['PENDING', 'APPROVED', 'UNDER_REPAIR', 'RESOLVED', 'REJECTED'])
+  .meta({
+    id: 'ReportStatus',
+    description:
+      'El estado del reporte dentro del ciclo de moderación. El POST siempre lo crea ' +
+      'en PENDING.',
+  });
 
 /**
  * Un punto en WGS 84, con el mismo rango que el bbox del grafo.
@@ -109,3 +111,72 @@ export const reportImageSchema = z
   .meta({ id: 'ReportImage' });
 
 export type ReportImage = z.infer<typeof reportImageSchema>;
+
+/**
+ * El pedido de `GET /api/reports` ([17 §7](../../../docs/17-la-api-de-reportes.md)).
+ *
+ * `status` tiene default `PENDING` porque es la cola de trabajo del moderador: lo que
+ * alguien reportó y nadie miró todavía es lo que la pantalla abre sin pedir nada.
+ *
+ * El objeto es **estricto** a propósito: un parámetro mal escrito (`?staus=PENDING`) es
+ * un 400 que lo nombra, no un silencio que devuelve los pendientes como si el filtro se
+ * hubiera aplicado. Por eso la ruta valida `req.query` tal cual llega y no un objeto
+ * armado con los campos que se esperan.
+ */
+export const reportsQuerySchema = z.strictObject({
+  status: reportStatusSchema.default('PENDING'),
+});
+
+/**
+ * Un reporte leído, como `Feature` de GeoJSON.
+ *
+ * La geometría reusa `pointGeometrySchema` del grafo en vez de definir otra copia: sale
+ * de `ST_AsGeoJSON`, que devuelve el mismo `[lon, lat]`, y dos esquemas iguales serían
+ * dos lugares donde arreglar el mismo borde ([14 §5](../../../docs/14-la-api-del-grafo.md)).
+ *
+ * Los ocho campos de `properties` no son un reflejo de la tabla
+ * ([09 §4.5](../../../docs/09-modelo-de-datos.md)):
+ *
+ * - `id` es la referencia del reporte, la misma que devuelve el `POST`.
+ * - `status` y `severity` viajan como enum y no como `id`, igual que en el pedido.
+ * - `type` es el código del catálogo, para el cliente; `type_name` es el nombre en
+ *   español, para la persona que modera.
+ * - `image_url` es nullable porque la columna lo es: un reporte sin foto es completo.
+ * - `created_at` viaja en ISO para que el cliente no tenga que interpretar la zona
+ *   horaria del driver.
+ */
+export const reportFeatureSchema = z
+  .object({
+    type: z.literal('Feature'),
+    geometry: pointGeometrySchema,
+    properties: z.object({
+      id: z.number().int(),
+      status: reportStatusSchema,
+      type: z.string(),
+      type_name: z.string(),
+      severity: reportSeveritySchema,
+      description: z.string(),
+      image_url: z.string().nullable(),
+      created_at: z.string(),
+    }),
+  })
+  .meta({ id: 'ReportFeature' });
+
+export type ReportFeature = z.infer<typeof reportFeatureSchema>;
+
+/**
+ * La respuesta de `GET /api/reports`: una `FeatureCollection` como la del grafo, con el
+ * mismo aviso de recorte al lado de `type` ([17 §7](../../../docs/17-la-api-de-reportes.md)).
+ *
+ * `truncated` no es parte de GeoJSON y va en la raíz justamente para que el recorte se
+ * vea sin abrir las features.
+ */
+export const reportsResponseSchema = z
+  .object({
+    type: z.literal('FeatureCollection'),
+    truncated: z.boolean(),
+    features: z.array(reportFeatureSchema),
+  })
+  .meta({ id: 'ReportFeatureCollection' });
+
+export type ReportsResponse = z.infer<typeof reportsResponseSchema>;
