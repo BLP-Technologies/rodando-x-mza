@@ -3,10 +3,18 @@ import { getDb } from '../db/index.js';
 import { ERROR_CODES } from '../http/error-codes.js';
 import { validationDetails } from '../http/error-response.js';
 import { HttpError } from '../http/errors.js';
-import { graphQuerySchema } from './graph.schemas.js';
-import { readGraph } from './graph.service.js';
+import {
+  graphElementParamsSchema,
+  graphQuerySchema,
+  updateGraphElementBodySchema,
+} from './graph.schemas.js';
+import { readGraph, updateGraphElement } from './graph.service.js';
 
-/** Rutas de lectura del grafo, montadas en `/api/graph`. */
+/** Rutas del grafo, montadas en `/api/graph`.
+ *
+ * Hay una lectura y una escritura, y la escritura es la única del sistema: el nivel de
+ * un elemento, desde el portal ([14 §7](../../../docs/14-la-api-del-grafo.md)).
+ */
 export const graphRouter = Router();
 
 /**
@@ -30,4 +38,41 @@ graphRouter.get('/', async (req, res) => {
   }
 
   res.json(await readGraph(getDb(), parsed.data.bbox));
+});
+
+/**
+ * Cambia el nivel de accesibilidad de un elemento.
+ *
+ * El pedido se valida en dos pasos, la ruta primero: sin una clase y un id válidos no
+ * hay nada que actualizar. El cuerpo exige `level` (un nivel del enum o `null` para
+ * "sin dato") y rechaza cualquier campo de más, incluido `is_verified`, que lo decide
+ * el servidor ([14 §7](../../../docs/14-la-api-del-grafo.md)).
+ */
+graphRouter.patch('/elements/:kind/:id', async (req, res) => {
+  const params = { kind: req.params.kind, id: req.params.id };
+  const parsedParams = graphElementParamsSchema.safeParse(params);
+
+  if (!parsedParams.success) {
+    throw new HttpError(
+      400,
+      ERROR_CODES.VALIDATION_ERROR,
+      'invalid graph element params',
+      validationDetails(parsedParams.error, params),
+    );
+  }
+
+  const body: unknown = req.body ?? {};
+  const parsedBody = updateGraphElementBodySchema.safeParse(body);
+
+  if (!parsedBody.success) {
+    throw new HttpError(
+      400,
+      ERROR_CODES.VALIDATION_ERROR,
+      'invalid graph element update',
+      validationDetails(parsedBody.error, body),
+    );
+  }
+
+  const { kind, id } = parsedParams.data;
+  res.json(await updateGraphElement(getDb(), kind, id, parsedBody.data.level));
 });

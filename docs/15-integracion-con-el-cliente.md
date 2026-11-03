@@ -70,8 +70,10 @@ no se usa el paquete `cors`. Las reglas, que son las que un cliente percibe:
   tiene autenticación (§4). Mandar cookies o tokens desde el navegador es una decisión
   aparte, y llegado el caso se toma sobre esta misma allowlist, más estricta.
 - **El preflight `OPTIONS` se responde antes del ruteo**, con `204` sin cuerpo,
-  `GET, POST, OPTIONS` como métodos, `Content-Type` como único encabezado permitido y
-  `Access-Control-Max-Age` para que el navegador cachee el resultado.
+  `GET, POST, PATCH, OPTIONS` como métodos, `Content-Type` como único encabezado
+  permitido y `Access-Control-Max-Age` para que el navegador cachee el resultado. Un
+  método nuevo de la API se agrega a esa lista en `backend/src/http/cors.ts`, o el
+  navegador bloquea el pedido aunque la ruta exista.
 - **La comparación normaliza el origen**: mayúsculas y barra final no importan, así que
   `http://localhost:3000/` y `http://localhost:3000` son el mismo origen. Una entrada con
   ruta o query no matchea nunca, así que el backend la rechaza al arrancar en vez de

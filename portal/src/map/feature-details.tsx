@@ -7,6 +7,7 @@
 
 import type { GraphFeature } from '@/api/graph';
 import { levelLabel } from './feature-style';
+import { LevelForm } from './level-form';
 
 const KIND_LABELS: Record<GraphFeature['properties']['element_kind'], string> = {
   sidewalk: 'Vereda',
@@ -74,6 +75,13 @@ export function FeatureDetails({
           <Row label="street_name">{streetName ?? 'Sin nombre'}</Row>
         )}
       </dl>
+
+      {/* `key` por elemento: al cambiar la selección el formulario arranca en el nivel
+          del elemento nuevo y no en el que se estaba eligiendo. */}
+      <LevelForm
+        key={`${properties.element_kind}:${properties.element_id}`}
+        feature={feature}
+      />
     </div>
   );
 }

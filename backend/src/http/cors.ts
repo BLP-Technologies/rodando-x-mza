@@ -1,7 +1,7 @@
 import type { RequestHandler } from 'express';
 
 /** Métodos que la API acepta hoy; uno nuevo se agrega acá. */
-const ALLOWED_METHODS = 'GET, POST, OPTIONS';
+const ALLOWED_METHODS = 'GET, POST, PATCH, OPTIONS';
 
 /** Encabezados que el cliente puede mandar en un pedido simple o JSON. */
 const ALLOWED_HEADERS = 'Content-Type';

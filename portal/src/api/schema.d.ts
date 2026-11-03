@@ -13,7 +13,7 @@ export interface paths {
         };
         /**
          * Leer el grafo de un área
-         * @description Devuelve las veredas, los cruces y los cordones que intersecan el bbox, como una FeatureCollection de GeoJSON. Sólo lee: no escribe ni cachea nada. Si el área tiene más de 2000 elementos, devuelve las primeras y lo avisa con `truncated: true`. Ver docs/14-la-api-del-grafo.md.
+         * @description Devuelve las veredas, los cruces y los cordones que intersecan el bbox, como una FeatureCollection de GeoJSON, más las áreas de servicio activas en `service_areas`. Sólo lee: no escribe ni cachea nada. Si el área tiene más de 2000 elementos, devuelve las primeras y lo avisa con `truncated: true`; el tope no alcanza a las áreas, que no se filtran por bbox. Ver docs/14-la-api-del-grafo.md.
          */
         get: {
             parameters: {
@@ -27,7 +27,7 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description Los elementos del área. Una colección vacía es una respuesta válida: esa zona no tiene grafo. */
+                /** @description Los elementos del área y las áreas de servicio activas. Una colección de elementos vacía es una respuesta válida: esa zona no tiene grafo. También lo es una base sin área activa: `service_areas.features` llega vacío y el grafo se devuelve igual. */
                 200: {
                     headers: {
                         [name: string]: unknown;
@@ -62,6 +62,79 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/graph/elements/{kind}/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Cambiar el nivel de accesibilidad de un elemento
+         * @description Escribe `accessibility_level` de una vereda, un cruce o un cordón, y devuelve el elemento como quedó, con la misma forma que una feature de GET /api/graph. `is_verified` no se manda: queda en true si hay nivel y en false si se vuelve a "sin dato" (`level: null`). El costo del ruteo no se recalcula: se deriva de la vista, así que cambia en la próxima consulta. Ver docs/14-la-api-del-grafo.md §7.
+         */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    kind: components["schemas"]["GraphElementKind"];
+                    id: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["UpdateGraphElementRequest"];
+                };
+            };
+            responses: {
+                /** @description El elemento con el nivel ya escrito. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["GraphElement"];
+                    };
+                };
+                /** @description La clase o el `id` de la ruta no cumplen el contrato, o el cuerpo no trae `level`, lo trae fuera del enum o con un campo de más. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description No hay ningún elemento de esa clase con ese id. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description Error no esperado. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
         trace?: never;
     };
     "/api/routes/calculate": {
@@ -125,6 +198,175 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Leer los reportes de un estado
+         * @description Devuelve los reportes ciudadanos de un estado, como una FeatureCollection de GeoJSON, con el punto reportado y ocho propiedades por informe: el código y el nombre del tipo, la severidad, la descripción, la foto si hay y la fecha en ISO. El filtro por estado es del servidor y tiene PENDING por defecto, que es la cola de trabajo del moderador. Los reportes dados de baja no aparecen en ningún estado. Si hay más de 2000, devuelve los más nuevos y lo avisa con `truncated: true`. Ver docs/17-la-api-de-reportes.md §7.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Estado por el que se filtra, con los valores del enum del ciclo de moderación. Si falta, se devuelven los pendientes (`PENDING`). */
+                    status?: "PENDING" | "APPROVED" | "UNDER_REPAIR" | "RESOLVED" | "REJECTED";
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Los reportes del estado pedido, del más nuevo al más antiguo. Una colección vacía es una respuesta válida: no hay reportes en ese estado. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ReportFeatureCollection"];
+                    };
+                };
+                /** @description El estado no es uno del enum, o la query trae un parámetro que el contrato no tiene. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description Error no esperado. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /**
+         * Reportar un obstáculo
+         * @description Guarda la percepción de quien reporta: el código de tipo del catálogo, la severidad, una descripción y el punto. El `type` es el **código** del catálogo `obstacle_types` (`POTHOLE`, `OTHER`, …), no su id; `OTHER` se acepta como cualquier otro. El punto no se valida contra las áreas de servicio: un reporte fuera del piloto se guarda igual. El reporte es anónimo mientras no haya autenticación, y nace en `PENDING`: las transiciones de estado son de la moderación. La imagen se sube antes con POST /api/reports/images y viaja en `image_url`. Ver docs/17-la-api-de-reportes.md.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["CreateReportRequest"];
+                };
+            };
+            responses: {
+                /** @description El reporte guardado: su id, el tipo y la severidad que se pidieron, y el estado con el que nace (`PENDING`). */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Report"];
+                    };
+                };
+                /** @description El cuerpo no cumple el contrato, o el código de tipo no existe entre los activos. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description Error no esperado. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reports/images": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Subir la imagen de un reporte
+         * @description Recibe una imagen en multipart (`file`) y devuelve su URL, que después va en `image_url` al crear el reporte. Se aceptan PNG, JPEG y WebP de hasta 5 MB; SVG no, porque puede llevar script y se sirve desde el mismo dominio. Es un paso aparte del reporte para que el contrato del reporte siga siendo JSON y una imagen sin reporte sea un archivo huérfano. Ver docs/17-la-api-de-reportes.md §4.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "multipart/form-data": {
+                        /** Format: binary */
+                        file: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description La imagen guardada, con la URL que se usa en el reporte. */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ReportImage"];
+                    };
+                };
+                /** @description No vino el archivo, o el archivo no es PNG, JPEG o WebP, o pesa más de 5 MB. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description Error no esperado. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -133,65 +375,87 @@ export interface components {
             /** @enum {string} */
             type: "FeatureCollection";
             truncated: boolean;
-            features: ({
+            service_areas: components["schemas"]["ServiceAreaCollection"];
+            features: components["schemas"]["GraphElement"][];
+        };
+        ServiceAreaCollection: {
+            /** @enum {string} */
+            type: "FeatureCollection";
+            features: {
                 /** @enum {string} */
                 type: "Feature";
                 geometry: {
                     /** @enum {string} */
-                    type: "LineString";
+                    type: "Polygon";
                     coordinates: [
                         number,
                         number
-                    ][];
+                    ][][];
                 };
                 properties: {
-                    /** @enum {string} */
-                    element_kind: "sidewalk";
-                    element_id: number;
-                    /** @enum {string|null} */
-                    level: "FULL" | "PARTIAL" | "NONE" | null;
-                    is_verified: boolean;
-                    street_name: string | null;
+                    id: number;
+                    name: string;
                 };
-            } | {
+            }[];
+        };
+        GraphElement: {
+            /** @enum {string} */
+            type: "Feature";
+            geometry: {
                 /** @enum {string} */
-                type: "Feature";
-                geometry: {
-                    /** @enum {string} */
-                    type: "LineString";
-                    coordinates: [
-                        number,
-                        number
-                    ][];
-                };
-                properties: {
-                    /** @enum {string} */
-                    element_kind: "crossing";
-                    element_id: number;
-                    /** @enum {string|null} */
-                    level: "FULL" | "PARTIAL" | "NONE" | null;
-                    is_verified: boolean;
-                };
-            } | {
+                type: "LineString";
+                coordinates: [
+                    number,
+                    number
+                ][];
+            };
+            properties: {
                 /** @enum {string} */
-                type: "Feature";
-                geometry: {
-                    /** @enum {string} */
-                    type: "Point";
-                    coordinates: [
-                        number,
-                        number
-                    ];
-                };
-                properties: {
-                    /** @enum {string} */
-                    element_kind: "kerb";
-                    element_id: number;
-                    /** @enum {string|null} */
-                    level: "FULL" | "PARTIAL" | "NONE" | null;
-                    is_verified: boolean;
-                };
-            })[];
+                element_kind: "sidewalk";
+                element_id: number;
+                /** @enum {string|null} */
+                level: "FULL" | "PARTIAL" | "NONE" | null;
+                is_verified: boolean;
+                street_name: string | null;
+            };
+        } | {
+            /** @enum {string} */
+            type: "Feature";
+            geometry: {
+                /** @enum {string} */
+                type: "LineString";
+                coordinates: [
+                    number,
+                    number
+                ][];
+            };
+            properties: {
+                /** @enum {string} */
+                element_kind: "crossing";
+                element_id: number;
+                /** @enum {string|null} */
+                level: "FULL" | "PARTIAL" | "NONE" | null;
+                is_verified: boolean;
+            };
+        } | {
+            /** @enum {string} */
+            type: "Feature";
+            geometry: {
+                /** @enum {string} */
+                type: "Point";
+                coordinates: [
+                    number,
+                    number
+                ];
+            };
+            properties: {
+                /** @enum {string} */
+                element_kind: "kerb";
+                element_id: number;
+                /** @enum {string|null} */
+                level: "FULL" | "PARTIAL" | "NONE" | null;
+                is_verified: boolean;
+            };
         };
         ErrorResponse: {
             error: {
@@ -207,6 +471,12 @@ export interface components {
          * @example -68.8472,-32.8937,-68.8420,-32.8897
          */
         GraphBBox: string;
+        /** @enum {string} */
+        GraphElementKind: "sidewalk" | "crossing" | "kerb";
+        UpdateGraphElementRequest: {
+            /** @enum {string|null} */
+            level: "FULL" | "PARTIAL" | "NONE" | null;
+        };
         RouteResponse: {
             /** @enum {boolean} */
             found: true;
@@ -273,6 +543,75 @@ export interface components {
                 lat: number;
                 lon: number;
             };
+        };
+        Report: {
+            id: number;
+            type: string;
+            /** @enum {string} */
+            severity: "MINOR" | "MODERATE" | "CRITICAL";
+            status: components["schemas"]["ReportStatus"];
+        };
+        /**
+         * @description El estado del reporte dentro del ciclo de moderación. El POST siempre lo crea en PENDING.
+         * @enum {string}
+         */
+        ReportStatus: "PENDING" | "APPROVED" | "UNDER_REPAIR" | "RESOLVED" | "REJECTED";
+        /**
+         * @description El reporte de un obstáculo, con la severidad que percibió quien lo manda.
+         * @example {
+         *       "type": "POTHOLE",
+         *       "severity": "MODERATE",
+         *       "description": "Pozo profundo en la esquina",
+         *       "geom": {
+         *         "lon": -68.8444,
+         *         "lat": -32.8897
+         *       },
+         *       "image_url": "http://localhost:3001/uploads/2f1c6c1e-0f6c-4a4e-9d3a-0c5b1b2f7a11.jpg"
+         *     }
+         */
+        CreateReportRequest: {
+            type: string;
+            /** @enum {string} */
+            severity: "MINOR" | "MODERATE" | "CRITICAL";
+            description: string;
+            geom: {
+                lon: number;
+                lat: number;
+            };
+            /** Format: uri */
+            image_url?: string;
+        };
+        ReportFeatureCollection: {
+            /** @enum {string} */
+            type: "FeatureCollection";
+            truncated: boolean;
+            features: components["schemas"]["ReportFeature"][];
+        };
+        ReportFeature: {
+            /** @enum {string} */
+            type: "Feature";
+            geometry: {
+                /** @enum {string} */
+                type: "Point";
+                coordinates: [
+                    number,
+                    number
+                ];
+            };
+            properties: {
+                id: number;
+                status: components["schemas"]["ReportStatus"];
+                type: string;
+                type_name: string;
+                /** @enum {string} */
+                severity: "MINOR" | "MODERATE" | "CRITICAL";
+                description: string;
+                image_url: string | null;
+                created_at: string;
+            };
+        };
+        ReportImage: {
+            url: string;
         };
     };
     responses: never;

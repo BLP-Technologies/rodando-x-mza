@@ -8,6 +8,7 @@
 
 import { redirect } from 'next/navigation';
 import { getSession } from '@/session/session';
+import { Nav } from './nav';
 import { Providers } from './providers';
 
 export default async function PortalLayout({ children }: LayoutProps<'/'>) {
@@ -22,6 +23,8 @@ export default async function PortalLayout({ children }: LayoutProps<'/'>) {
           <h1 className="text-lg font-semibold text-slate-800">Portal de moderación</h1>
           <p className="text-xs text-slate-500">Grafo peatonal del microcentro</p>
         </div>
+
+        <Nav />
 
         <div className="flex items-center gap-3 text-sm text-slate-600">
           <span>{session.name}</span>

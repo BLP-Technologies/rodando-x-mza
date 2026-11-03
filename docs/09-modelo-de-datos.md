@@ -112,8 +112,15 @@ carga del relevamiento no pisa un elemento verificado salvo que se fuerce, y la 
 del portal lo pisa porque es el forzado explícito: la regla lee esta columna y no otra
 ([12 §8.2](12-relevamiento-de-accesibilidad.md)). El MVP no agrega una columna de
 procedencia ni de autor: lo que pisó una carga forzada queda en el reporte de la corrida.
-Si el portal tiene que mostrar autoría, son `verified_at` y `verified_by`, y se deciden
-con #49.
+
+**En el MVP `is_verified` se deriva de `level`.** La edición del portal escribe
+`is_verified` como `level IS NOT NULL`: un nivel guardado es un nivel que alguien miró, y
+"sin dato" no es un valor confirmado, así que devuelve el elemento al estado de recién
+importado ([14 §7](14-la-api-del-grafo.md)). Hoy no hay ninguna fuente que produzca un
+nivel sin verificar, así que las dos columnas no se contradicen nunca; el día que exista
+(si alguna vez se importa un nivel de OSM, por ejemplo), vuelven a ser dos ejes
+genuinamente separados. El precio de no guardar autor está aceptado por el MVP
+([12 §8.3](12-relevamiento-de-accesibilidad.md)).
 
 **`report_status` no incluye la baja.** La baja de un reporte es `deleted_at`, no un
 estado: si `DELETED` fuera un valor del enum, habría dos fuentes de verdad para "este
@@ -287,6 +294,15 @@ en cambio, puede tener **varios** reportes apuntándolo: varias personas reporta
 mismo pozo. Entonces la columna vive en el lado que se repite —`reports.obstacle_id`,
 nullable y sin `UNIQUE`— y no al revés. Un único `obstacles.report_id` no podría
 representar dos reportes del mismo obstáculo sin duplicar el obstáculo.
+
+**El autor.** `reports.user_id` es **nullable**, aunque la columna nació `NOT NULL`
+con FK a `users`. La razón es de fase: no hay autenticación (Fase 3) ni una sola fila
+en `users`, así que exigir el autor haría imposible el único caso que existe hoy, que
+alguien reporte un pozo sin tener cuenta. Un reporte anónimo es legítimo mientras no
+haya login; cuando lo haya, el reporte autenticado vuelve a completar el campo. La
+alternativa descartada —sembrar un usuario "ciudadano"— deja una fila de mentira que
+después hay que deshacer con un `UPDATE` masivo
+([17 §6](17-la-api-de-reportes.md#6-el-reporte-anónimo)).
 
 **El flujo de aprobación** (C012) crea el obstáculo y, en la misma transacción, marca
 el reporte: `status = 'APPROVED'` y `obstacle_id` con el id nuevo. Aprobar significa
@@ -516,7 +532,7 @@ devolvía un camino que empezaba en el borde del grafo y parecía válido.
 
 | Columna | Tipo | Para qué |
 | --- | --- | --- |
-| `id` | `int` PK | Nunca se expone: las filas se identifican por `name` |
+| `id` | `int` PK | Clave estable de la fila; viaja en la respuesta del grafo como identidad del área |
 | `name` | `varchar(100)` único | Identifica el área en el código y en la operación |
 | `geom` | `geometry(Polygon, 4326)` | El perímetro de búsqueda |
 | `is_active` | `boolean` | Baja lógica de la fila |
@@ -547,6 +563,11 @@ baja lógica que conservar, la fila vieja se descarta.
 esquinas en ángulo recto** (`ST_Buffer(...::geography, 50, 'join=mitre')`). El método y el
 WKT quedan en la migración `1793503685017_create-service-areas.sql`, que es donde se puede
 reproducir.
+
+**La lectura de las activas la hace `GET /api/graph`.** La respuesta trae las áreas
+vigentes en `service_areas`, con su `id`, su nombre y su polígono, y el contrato está en
+[14 §5.2](14-la-api-del-grafo.md). No hay endpoint propio del área: es un polígono fijo
+que el mapa dibuja junto con el grafo que ya pide.
 
 **No está en el camino del ruteo.** El área limita **las puntas** de una consulta, no el
 recorrido: el camino sigue siendo todo el grafo, y por eso no hay ninguna arista que se
