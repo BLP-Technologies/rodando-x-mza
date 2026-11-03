@@ -115,6 +115,7 @@ La misma regla decide el destino en las dos aplicaciones:
 | ¿Habla HTTP/Express pero no del dominio? | `http/` |
 | ¿Es una capacidad del negocio? | su carpeta de funcionalidad (`auth/`, `reports/`, …) |
 | ¿Es acceso a datos genérico? | `db/` |
+| ¿Guarda los bytes de un archivo? | `storage/` |
 
 Dentro de una funcionalidad, el rol del archivo se marca en el nombre:
 `auth.router.ts`, `auth.schemas.ts`, `auth.service.ts`, `auth.repository.ts`. El
@@ -184,8 +185,9 @@ Esto evita mantener a mano la forma de la API en tres lugares. Cuando cambia un
 esquema, cambia el OpenAPI y los clientes se regeneran.
 
 El documento se publica en **`GET /api/openapi.json`**, generado al arrancar desde los
-esquemas registrados; hoy lo alimentan los contratos de ruteo ([13](13-api-de-ruteo.md)) y
-de lectura del grafo ([14](14-la-api-del-grafo.md)).
+esquemas registrados; hoy lo alimentan los contratos de ruteo ([13](13-api-de-ruteo.md)),
+de lectura y edición del grafo ([14](14-la-api-del-grafo.md)) y de reportes
+([17](17-la-api-de-reportes.md)).
 
 Para leerlo a ojo, el mismo documento se publica como página navegable en
 **`GET /api/docs`**: la página pide el documento al backend, que también le sirve la UI,

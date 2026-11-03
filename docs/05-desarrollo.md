@@ -107,6 +107,14 @@ navegador bloquea la respuesta del grafo aunque la API conteste `200`
 ([15 §3](15-integracion-con-el-cliente.md)). Qué muestra y cómo está armado el
 portal es de [16](16-el-portal.md).
 
+Las imágenes de los reportes se guardan en **`backend/uploads/`** (o en el
+`UPLOAD_DIR` que se configure), que el backend crea si no existe. La URL con la que
+se devuelve cada imagen sale de `UPLOAD_BASE_URL`, y el backend sirve esos bytes en
+**`/uploads`**, fuera de `/api`: los archivos no son un recurso de la API y así el
+día que los sirva el proxy el cliente no cambia de URL
+([17 §4](17-la-api-de-reportes.md#4-las-imágenes)). Las dos variables están en
+`backend/.env.example`.
+
 ## 5. Reiniciar la base desde cero
 
 En desarrollo el esquema cambia mucho: una migración a medio escribir, un archivo de
