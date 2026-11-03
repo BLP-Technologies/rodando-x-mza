@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../app.js';
+import { reportsQuerySchema } from './reports.schemas.js';
 
 const app = createApp();
 
@@ -165,6 +166,55 @@ describe('POST /api/reports', () => {
   });
 });
 
+describe('GET /api/reports', () => {
+  it('rechaza un estado fuera del enum', async () => {
+    const res = await request(app).get('/api/reports?status=NOPE');
+
+    expect(res.status).toBe(400);
+    expect(res.body as unknown).toEqual({
+      error: {
+        code: 'VALIDATION_ERROR',
+        details: [{ field: 'status', code: 'INVALID' }],
+      },
+    });
+  });
+
+  it('rechaza un estado vacío en vez de caer al default', async () => {
+    // `?status=` es un valor presente y vacío, no un parámetro ausente: tiene que
+    // ser un 400 y no los pendientes como si nada.
+    const res = await request(app).get('/api/reports?status=');
+
+    expect(res.status).toBe(400);
+    expect(res.body as unknown).toEqual({
+      error: {
+        code: 'VALIDATION_ERROR',
+        details: [{ field: 'status', code: 'INVALID' }],
+      },
+    });
+  });
+
+  it('rechaza un parámetro de más y lo nombra', async () => {
+    // El silencio acá sería lo peor: `?staus=PENDING` devolvería los pendientes y
+    // quien lo escribió creería que el filtro se aplicó ([17 §7]).
+    const res = await request(app).get('/api/reports?staus=PENDING');
+
+    expect(res.status).toBe(400);
+    expect(res.body as unknown).toEqual({
+      error: {
+        code: 'VALIDATION_ERROR',
+        details: [{ field: 'staus', code: 'INVALID' }],
+      },
+    });
+  });
+
+  it('tiene PENDING por defecto', () => {
+    // Se afirma sobre el esquema y no sobre un pedido: uno válido iría a la base y
+    // esta suite corre sin base.
+    expect(reportsQuerySchema.parse({}).status).toBe('PENDING');
+    expect(reportsQuerySchema.parse({ status: 'APPROVED' }).status).toBe('APPROVED');
+  });
+});
+
 describe('POST /api/reports/images', () => {
   let uploadDir: string;
   const savedEnv: Record<string, string | undefined> = {};
@@ -272,5 +322,20 @@ describe('GET /api/openapi.json', () => {
     // cliente genera y usa ([17 §2 y §3]).
     expect(Object.keys(document.components.schemas)).toContain('CreateReportRequest');
     expect(Object.keys(document.components.schemas)).toContain('Report');
+  });
+
+  it('publica la lectura de reportes con su colección con nombre propio', async () => {
+    const res = await request(app).get('/api/openapi.json');
+
+    const document = res.body as {
+      paths: Record<string, { get?: unknown }>;
+      components: { schemas: Record<string, unknown> };
+    };
+
+    expect(document.paths['/api/reports']?.get).toBeDefined();
+    // Con nombre propio porque es el tipo que el cliente genera y usa
+    // ([17 §7], [16 §6]).
+    expect(Object.keys(document.components.schemas)).toContain('ReportFeatureCollection');
+    expect(Object.keys(document.components.schemas)).toContain('ReportFeature');
   });
 });

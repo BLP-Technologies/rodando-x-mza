@@ -18,15 +18,18 @@ Este documento responde:
 - **Cómo viaja la foto**, y dónde quedan los bytes (§4).
 - **Cómo se rechaza** un pedido (§5).
 - **Por qué el reporte no tiene autor** todavía (§6).
+- **Cómo se leen** los reportes que ya están guardados (§7).
 
-La API de reportes son **dos endpoints que hacen una cosa cada uno**:
+La API de reportes son **tres endpoints que hacen una cosa cada uno**:
 
 - `POST /api/reports` guarda el reporte.
 - `POST /api/reports/images` guarda una imagen y devuelve su URL.
+- `GET /api/reports` lista los reportes de un estado (§7).
 
 No crea el obstáculo: eso es la moderación (#47), y hasta que exista, un reporte no
-cambia el mapa ni el ruteo ([09 §4.5](09-modelo-de-datos.md)). Tampoco lista los
-reportes (#65), no autentica (Fase 3) y no agrupa duplicados.
+cambia el mapa ni el ruteo ([09 §4.5](09-modelo-de-datos.md)). La lectura **no
+escribe** —aprobar, rechazar o resolver siguen siendo de #47— y tampoco autentica
+(Fase 3) ni agrupa duplicados.
 
 **El punto no se valida contra `service_areas`.** El ruteo rechaza una punta fuera
 del perímetro porque el pedido es "llevenme de A a B"
@@ -99,9 +102,8 @@ hace visible cuál es cuál.
 | `status` | El estado con el que nace: siempre `PENDING` |
 
 **Esos cuatro y ninguno más.** `created_at` y el resto del reporte son del listado y
-de la ficha del portal (#65): mandarlos acá adelantaría la forma de un recurso que
-todavía no se puede leer, y el `POST` tiene que devolver lo justo para confirmar que
-se guardó.
+de la ficha del portal (#65, §7): repetirlos acá sería un segundo contrato del mismo
+dato, y el `POST` tiene que devolver lo justo para confirmar que se guardó.
 
 **El reporte nace `PENDING`.** El `status` lo pone la base con su default y la
 respuesta lo devuelve tal como quedó guardado, no como el código supone que quedó.
@@ -209,15 +211,106 @@ masivo, y mientras tanto miente sobre quién reportó.
 anónimo sigue siendo posible o se rechaza, según lo decida el caso de uso. Nada de
 este contrato cambia: el autor no viaja en el cuerpo, sale de la sesión.
 
-## 7. Lo que este documento no decide
+## 7. La lectura de reportes
+
+`GET /api/reports?status=PENDING`
+
+Es la otra mitad del recurso: el `POST` guarda la percepción de quien reporta y esta
+lectura la devuelve para que el moderador la vea sin entrar a `psql`. La forma es la
+misma que la del grafo —una `FeatureCollection` de GeoJSON con `truncated` al lado de
+`type`— porque el consumidor es el mismo portal que ya sabe leer una
+([14 §5](14-la-api-del-grafo.md)).
+
+```json
+{
+  "type": "FeatureCollection",
+  "truncated": false,
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-68.8444, -32.8897] },
+      "properties": {
+        "id": 1,
+        "status": "PENDING",
+        "type": "POTHOLE",
+        "type_name": "Pozo",
+        "severity": "MODERATE",
+        "description": "Pozo profundo en la esquina",
+        "image_url": "http://localhost:3001/uploads/2f1c6c1e-0f6c-4a4e-9d3a-0c5b1b2f7a11.jpg",
+        "created_at": "2026-02-27T15:03:51.123Z"
+      }
+    }
+  ]
+}
+```
+
+| Campo | Para qué |
+| --- | --- |
+| `type` | `FeatureCollection`, igual que el grafo |
+| `truncated` | Si la respuesta trae todos los reportes del estado o sólo los más nuevos (§7, el tope) |
+| `features[].geometry` | El punto reportado, vía `ST_AsGeoJSON`, en orden `[lon, lat]` |
+| `features[].properties.id` | La referencia del reporte, la misma que devolvió el `POST` (§3) |
+| `features[].properties.status` | El estado guardado: el enum completo, no sólo el que se pidió |
+| `features[].properties.type` | El **código** del catálogo (`POTHOLE`), para el cliente: es lo que se puede comparar y programar |
+| `features[].properties.type_name` | El nombre en español (`Pozo`), para la persona que modera: sin él, la tabla mostraría códigos |
+| `features[].properties.severity` | La severidad que percibió quien reporta |
+| `features[].properties.description` | Lo que escribió quien reporta, entero: recortarlo al listarlo es del cliente |
+| `features[].properties.image_url` | La foto, o `null` si el reporte no tiene: un reporte sin foto es completo (§2) |
+| `features[].properties.created_at` | La fecha, en ISO 8601 con zona: el cliente no tiene que interpretar la zona horaria del driver |
+
+**El código y el nombre viajan juntos, y no es redundancia.** `type` es el nombre
+estable del catálogo, el que ya usa el `POST` (§2) y el que un cliente compara; `type_name`
+es el texto que la persona lee. Mandar sólo el código obligaría a cada cliente a
+replicar la traducción, y una segunda copia del catálogo se desincroniza cada vez que
+se agrega un tipo.
+
+**El filtro por estado es del servidor.** `status` va en la consulta y no se descarta
+en el cliente: la lectura devuelve un estado por vez porque traerlos todos y filtrar en
+el navegador crecería con lo que la moderación acumule, y la pantalla de reportes
+necesita un estado por vez de todas formas. El default es `PENDING`, que es la cola de
+trabajo del moderador: lo que alguien reportó y nadie miró todavía es lo que la
+pantalla abre sin pedir nada.
+
+**La query es estricta.** Un estado fuera del enum, un `?status=` vacío o un parámetro
+que el contrato no tiene (`?staus=PENDING`) son `400 VALIDATION_ERROR` con el campo
+nombrado (§5). Aceptar el parámetro mal escrito y devolver los pendientes sería peor
+que un error: quien lo escribió creería que el filtro se aplicó.
+
+**El tope y el recorte son los del grafo.** La respuesta trae como mucho **2000**
+features y avisa con `"truncated": true` cuando había más
+([14 §5.1](14-la-api-del-grafo.md)). El número no es una regla de negocio —la cola real
+son decenas de reportes— sino la misma red: que un pedido no arme una respuesta de
+decenas de megabytes. El orden es **determinístico**, `created_at DESC, id DESC`: de
+él depende qué entran cuando la respuesta se recorta, así que dos pedidos iguales
+recortan en el mismo lugar y lo que se ve primero es siempre lo más nuevo.
+
+**No hay `bbox`.** El grafo lo tiene porque la unidad de trabajo del moderador es el
+área; la de los reportes es la fila: se revisan en una lista y uno por vez, y el mapa
+del grafo no los dibuja ([16 §8](16-el-portal.md)). Se revisa el día que la lista deje
+de ser una cola de un solo estado y haya que mirar reportes de una zona: ahí el área
+vuelve a tener sentido y se pide como en el grafo.
+
+**Los dados de baja no aparecen, en ningún estado y sin parámetro.** La baja de un
+reporte es `deleted_at`, no un estado del enum ([09 §4.5](09-modelo-de-datos.md)), así
+que la consulta la excluye siempre: un reporte dado de baja no es "otro estado del
+reporte", es un reporte que ya no está. No hay `?include_deleted`: nadie lo pidió y
+sería una segunda forma de leer lo mismo.
+
+**La lectura no escribe nada.** No hay caché ni tabla intermedia: dos pedidos iguales
+devuelven lo mismo mientras el dato no cambie. Las transiciones de estado son de la
+moderación (#47), que es quien va a invalidar la lista del portal
+([16 §8](16-el-portal.md)).
+
+## 8. Lo que este documento no decide
 
 - **La autenticación y el autor del reporte.** Es Fase 3; hoy no hay usuario
   ([07 §3](07-plan-de-trabajo.md)).
 - **La moderación y las transiciones de `status`.** Aprobar, rechazar, marcar
   duplicado y crear el obstáculo son de #47
   ([09 §4.5](09-modelo-de-datos.md#45-reporte-y-obstáculo)).
-- **La lista de reportes del portal.** `GET /api/reports` es #65; por eso la
-  respuesta del `POST` no adelanta su forma (§3).
+- **El detalle de un reporte como recurso propio.** El portal muestra lo que devuelve
+  la lectura (§7); un `GET /api/reports/{id}` con el historial de moderación no
+  existe todavía.
 - **Agrupar duplicados.** El MVP no detecta dos reportes del mismo pozo; el moderador
   aprueba uno y rechaza el resto ([09 §4.5](09-modelo-de-datos.md#45-reporte-y-obstáculo)).
 - **Un límite de pedidos por IP.** No hay rate limit: hoy no hay tráfico que lo pida,
@@ -231,7 +324,7 @@ este contrato cambia: el autor no viaja en el cuerpo, sale de la sesión.
 - **La validación del contenido del archivo.** Se confía en el MIME declarado: no se
   abren los bytes para verificar que el PNG sea un PNG.
 
-## 8. Documentos relacionados
+## 9. Documentos relacionados
 
 - [09-modelo-de-datos.md](09-modelo-de-datos.md): el reporte, el obstáculo y su
   relación.
@@ -243,4 +336,5 @@ este contrato cambia: el autor no viaja en el cuerpo, sale de la sesión.
   contra el perímetro y no validarlo (§1).
 - [14-la-api-del-grafo.md](14-la-api-del-grafo.md): el otro contrato de escritura de
   la API.
+- [16-el-portal.md](16-el-portal.md): la pantalla que lee esta lista (§7).
 - [07-plan-de-trabajo.md](07-plan-de-trabajo.md): fases y casos de uso.

@@ -19,6 +19,8 @@ Este documento responde:
 - **Cómo el mapa** lee el grafo, lo dibuja y avisa lo que no puede mostrar (§5).
 - **De dónde salen** los tipos del contrato y la dirección de la API (§6).
 - **Cómo se corre** y dónde están los comandos (§7).
+- **Qué hace la pantalla de reportes**, y por qué es una pantalla aparte del mapa
+  (§8).
 
 No decide el contrato de cada endpoint —es de
 [14](14-la-api-del-grafo.md) y de [13](13-api-de-ruteo.md)—, ni las reglas de
@@ -26,14 +28,15 @@ la integración —URL como configuración, CORS y traducción de errores, que s
 [15](15-integracion-con-el-cliente.md)—, ni la puesta en marcha completa, que es
 de [05 §4](05-desarrollo.md).
 
-## 2. Qué hace hoy: el grafo en pantalla
+## 2. Qué hace hoy: el grafo y los reportes
 
 El portal es una aplicación **aparte del backend**, en `portal/`: Next.js 16,
 React 19, Tailwind 4 y TypeScript (`package.json`). Se sirve en el puerto 3000 y
 habla con la API por HTTP, igual que va a hacerlo la app mobile.
 
 Hoy resuelve las dos primeras preguntas del moderador en la zona piloto —**qué hay y
-cómo está**, y **corregir el nivel**— con estas cosas:
+cómo está**, y **corregir el nivel**— y abre la cola de reportes para revisarla, con
+estas cosas:
 
 - **Dibuja el grafo** que devuelve `GET /api/graph`: veredas y cruces como
   líneas, cordones como puntos, y el nivel de accesibilidad como color (§5.3).
@@ -48,8 +51,12 @@ dato", con un `PATCH` que escribe una sola columna y deja el elemento verificado
   cuando no responde.
 - **Dibuja el borde del área de servicio activa** como una línea de guiones, con
   su nombre en una leyenda, para que el moderador vea dónde termina la zona (§5.7).
+- **Lista los reportes ciudadanos** en una pantalla propia, `/reports`: una tabla del
+  estado elegido —tipo, severidad, fecha— y, al costado, el detalle del seleccionado
+  con su foto y un minimapa del punto (§8). El mapa del grafo **no** los dibuja: son
+  otro objeto de trabajo.
 
-Lo que **no** hace todavía: crear ni resolver obstáculos (C012–C013), listar ni resolver
+Lo que **no** hace todavía: crear ni resolver obstáculos (C012–C013), resolver
 reportes, buscar una calle y autenticar personas (la sesión es simulada, §4).
 
 **Por qué el mapa y no una tabla.** La unidad de trabajo del portal es el área,
@@ -67,6 +74,7 @@ portal/src/
 ├── app/       # rutas: orquestan, no implementan
 ├── api/       # el cliente HTTP tipado y el contrato generado
 ├── map/       # la funcionalidad del mapa
+├── reports/   # la pantalla de reportes
 ├── session/   # la sesión del portal
 └── config.ts  # la URL de la API y la caja del piloto
 ```
@@ -75,6 +83,7 @@ portal/src/
 | --- | --- |
 | ¿Es una ruta o un layout? | `app/` |
 | ¿Es la pantalla del mapa o una parte suya? | `map/` |
+| ¿Es la pantalla de reportes o una parte suya? | `reports/` |
 | ¿Habla con la API? | `api/` |
 | ¿Responde quién es la persona que modera? | `session/` |
 | ¿Es un valor que cambia entre entornos? | `config.ts` |
@@ -151,11 +160,22 @@ moderador" por componentes y guardas: ahí el reemplazo deja de ser un archivo.
 
 ### 5.1 Librería
 
-**Leaflet 1.9 con `react-leaflet` 5** y tiles raster de OpenStreetMap, sin
-claves de API. Un mapa de vectores (MapLibre, OpenLayers) resolvería cosas que
-acá no hacen falta —estilos por capa desde un servidor de tiles, millones de
-features, proyecciones exóticas— a cambio de una configuración que el piloto no
-paga: lo que se dibuja son ~1000 elementos sobre un recorte de 0,5 km².
+**Leaflet 1.9 y tiles raster de OpenStreetMap**, sin claves de API. Un mapa de
+vectores (MapLibre, OpenLayers) resolvería cosas que acá no hacen falta —estilos
+por capa desde un servidor de tiles, millones de features, proyecciones
+exóticas— a cambio de una configuración que el piloto no paga: lo que se dibuja
+son ~1000 elementos sobre un recorte de 0,5 km².
+
+**El mapa se monta a mano, sin `react-leaflet`.** La librería envolvía bien el
+caso de "un mapa que se dibuja y no se toca", pero su `MapContainer` crea el mapa
+una vez y lo destruye en el cleanup de su efecto **sin volver a crearlo** cuando
+React re-monta el componente: como `Map.remove()` vacía los panes de Leaflet, las
+capas que se le seguían agregando reventaban en `getPane(...).appendChild` al
+volver al grafo desde otra pantalla. Con el ciclo en nuestras manos, cada montaje
+crea un mapa y lo destruye al desmontarse
+([`graph-map.tsx`](../portal/src/map/graph-map.tsx)), y las capas se dibujan en
+efectos sobre esa instancia: no hay un mapa que sobreviva a su propio `remove()`.
+El costo es una veintena de líneas de `new L.Polyline(...)` en vez de componentes.
 
 ### 5.2 Leaflet no existe en el servidor
 
@@ -176,6 +196,12 @@ página. Está en la documentación del paquete
 
 El contenedor del mapa y la atribución, en cambio, **sí** salen en el HTML del
 servidor: la página se puede leer y auditar sin JavaScript.
+
+**El mapa se monta y se destruye con el montaje del componente.** No hay una
+instancia que viva más que el efecto que la creó: al desmontar se vacían las
+capas, se sueltan los listeners y se llama a `map.remove()`
+([16 §5.1](#51-librería)). Eso es lo que hace que volver al grafo desde otra
+pantalla arme un mapa sano, que era lo que fallaba con `react-leaflet`.
 
 **Los datos se piden desde el navegador.** El build del portal corre en CI, donde
 no hay backend: un `fetch` del grafo en el servidor fallaría el build o —peor—
@@ -297,8 +323,8 @@ izquierda. El dato viene en `service_areas` de la respuesta del grafo
 - **Azul, 4 px, guiones, sin relleno.** El azul es el quinto color, fuera de la paleta de
   niveles (§5.3), para que el borde no se lea como un dato de accesibilidad: es el límite
   de la zona, no el estado de un elemento.
-- **Va por debajo del grafo.** En Leaflet el orden de montaje de las capas es el orden de
-  pintado, así que los polígonos van antes que las líneas y los puntos en el JSX. El área
+- **Va por debajo del grafo.** En Leaflet el orden en que se agregan las capas es el
+  orden de pintado, así que el área se agrega antes que las líneas y los puntos. El área
   es contexto: no puede tapar lo que el moderador tiene que mirar.
 - **`interactive: false` es lo que hace que no capture clics.** Leaflet le pone
   `pointer-events: none` a la capa, así el clic sigue llegando a la vereda de abajo o al
@@ -351,7 +377,63 @@ aunque la API conteste `200`—. Los pasos completos, con la base y el backend,
 están en [05 §4](05-desarrollo.md); los del portal solo, en
 [`portal/README.md`](../portal/README.md).
 
-## 8. Lo que este documento no decide
+## 8. La pantalla de reportes
+
+`/reports` es una pantalla nueva y `/` sigue siendo el mapa del grafo, sin cambios
+([17 §7](17-la-api-de-reportes.md)).
+
+**Una pantalla por objeto de trabajo.** El portal tiene dos objetos —el grafo y los
+reportes— y cada uno tiene la pantalla que le sirve: el grafo es un mapa porque la
+pregunta es dónde está el paso (§2), y los reportes son una lista porque la pregunta es
+cuál miro ahora. Los reportes **no se dibujan sobre el mapa**: son puntos que esperan
+una decisión, se revisan de a uno y su estado no es un dato de accesibilidad, así que
+meterlos en el mapa mezclaría dos escalas de trabajo y una capa más que apagar (§5.7).
+
+**La tabla y el detalle.** La pantalla es una tabla a la izquierda y un detalle de 320
+píxeles al costado (`reports/reports-screen.tsx`):
+
+- **Arriba de la tabla**, el selector de estado —los cinco—, el orden por fecha y el
+  contador de reportes. El estado es estado de interfaz y no del servidor: cambiarlo
+  cambia la clave de la query y trae esa cola.
+- **Cada fila se selecciona con un botón** en su primera celda: una tabla no admite un
+  control que abarque celdas, así que el botón es la acción de la fila. La tabla es un
+  `<table>` real con `<thead>`/`<tbody>`, se recorre con el teclado, el foco se ve y la
+  fila elegida se marca con fondo y su botón con `aria-current`.
+- **La descripción se recorta al dibujar**, con `truncate` sobre el texto completo: el
+  dato viaja entero y el detalle lo muestra entero. Recortarlo en el servidor obligaría
+  a una segunda lectura para leerlo.
+- **La fecha se formatea en el navegador**, con `Intl.DateTimeFormat('es-AR')` sobre el
+  ISO que devuelve la API: es componente de cliente, así que no hay desajuste de
+  hidratación, y el servidor no tiene que saber en qué zona lee la persona.
+- **El detalle** (320 px, `reports/report-details.tsx`) muestra el tipo con su nombre en
+  español, el `id`, la severidad, el estado, la fecha completa, la descripción entera y
+  la foto si hay (`alt` que describe el reporte). Aclara en una línea que la severidad es
+  la **percepción del ciudadano**, no la decisión del moderador
+  ([09 §4.5](09-modelo-de-datos.md)): sin eso, el detalle se lee como un diagnóstico.
+
+**La frontera `ssr: false`, otra vez.** `reports/reports-panel.tsx` es un componente de
+cliente que monta la pantalla con `next/dynamic` y `ssr: false`, exactamente como
+`map-panel.tsx` (§5.2). No es por Leaflet —la tabla no lo necesita— sino por la misma
+razón de fondo: el build corre en CI sin backend, y una `useQuery` prerenderizada lee el
+reloj y puede romper el build (`cacheComponents`, §5.4). Así `/reports` queda estática
+(`○`) y los datos se piden desde el navegador, igual que el grafo.
+
+**La segunda query.** `reports/reports-screen.tsx` usa `useQuery` con la clave
+`['reports', status]` (`reportQueryKey` en `api/reports.ts`) y `readReports(status)`
+como `queryFn`, con `placeholderData: keepPreviousData` y `retry: 1` como el mapa: al
+cambiar de estado la tabla anterior se queda hasta que llega la nueva, y con la API
+caída el error aparece en un par de segundos. `REPORTS_QUERY_PREFIX` es el prefijo que
+va a invalidar la moderación cuando escriba (#47), igual que `['graph']` después de
+guardar un nivel (§5.6).
+
+**El minimapa no dibuja el grafo ni el área de servicio.** `reports/report-minimap.tsx`
+es un mapa chico y quieto —`h-56`, zoom 17, `scrollWheelZoom={false}`, tiles de OSM con
+la atribución obligatoria (§5.5)— con un `CircleMarker` en el punto reportado. Se
+remonta con `key` sobre el `id` del reporte, que es la forma más simple de recentrarlo:
+mover la vista en un efecto sería código para deshacer lo que el remontaje ya hace. El
+grafo y el área no entran porque acá el punto es lo único que se pregunta ([17 §7]).
+
+## 9. Lo que este documento no decide
 
 - **El contrato de la API.** Vive en cada documento de caso de uso, hoy
   [14](14-la-api-del-grafo.md) y [13](13-api-de-ruteo.md).
@@ -367,7 +449,7 @@ están en [05 §4](05-desarrollo.md); los del portal solo, en
   de [04](04-errores-y-mensajes.md).
 - **La puesta en marcha completa.** Es de [05](05-desarrollo.md).
 
-## 9. Documentos relacionados
+## 10. Documentos relacionados
 
 - [02-stack-y-estructura.md](02-stack-y-estructura.md): el stack y la estructura
   interna de cada aplicación.
