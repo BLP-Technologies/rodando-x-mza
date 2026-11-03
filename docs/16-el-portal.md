@@ -266,9 +266,10 @@ si el valor cambió.
   ([14 §7](14-la-api-del-grafo.md)), con la identidad que ya está en las propiedades del
 elemento: el formulario no arma ni adivina ninguna clave.
 - **`is_verified` no se manda.** Lo decide el servidor como `level IS NOT NULL`, así que
-guardar un nivel verifica el elemento y "sin dato" lo desvirefica
-  ([12 §8.2](12-relevamiento-de-accesibilidad.md)). El formulario lo dice cuando se elige
-"sin dato": *queda sin verificar, el relevamiento lo va a poder completar*.
+  guardar un nivel verifica el elemento y "sin dato" lo desverifica
+  ([12 §8.2](12-relevamiento-de-accesibilidad.md)). Por eso la ficha no necesita
+  advertir nada al elegir "sin dato": lo que muestra es el resultado, que es el
+  `is_verified` que devolvió el servidor después de guardar.
 - **Después de guardar se invalida el grafo** (`invalidateQueries` sobre el prefijo
 `['graph']`): sólo el área que está en pantalla se vuelve a pedir, la arista se repinta
 con su color nuevo y la ficha muestra el `is_verified` que puso el servidor. No hace

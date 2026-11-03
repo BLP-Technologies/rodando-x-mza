@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 /**
  * El formulario del nivel de accesibilidad de un elemento: la edición manual (C014).
@@ -13,22 +13,22 @@
  * ([12 §8.2](../../docs/12-relevamiento-de-accesibilidad.md)).
  */
 
-import { useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { describeSaveError } from '@/api/error-messages';
+import { useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { describeSaveError } from "@/api/error-messages";
 import {
   GRAPH_QUERY_PREFIX,
   updateElementLevel,
   type GraphFeature,
   type GraphLevel,
-} from '@/api/graph';
+} from "@/api/graph";
 
 /** Las cuatro opciones, en el orden de menos a más restrictiva, con "sin dato" al final. */
 const OPTIONS: { value: GraphLevel; label: string }[] = [
-  { value: 'FULL', label: 'Accesible' },
-  { value: 'PARTIAL', label: 'Accesible con dificultad' },
-  { value: 'NONE', label: 'No accesible' },
-  { value: null, label: 'Sin dato' },
+  { value: "FULL", label: "Accesible" },
+  { value: "PARTIAL", label: "Accesible con dificultad" },
+  { value: "NONE", label: "No accesible" },
+  { value: null, label: "Sin dato" },
 ];
 
 export function LevelForm({ feature }: { feature: GraphFeature }) {
@@ -62,7 +62,7 @@ export function LevelForm({ feature }: { feature: GraphFeature }) {
         <div className="flex flex-col gap-1.5">
           {OPTIONS.map((option) => (
             <label
-              key={option.value ?? 'none'}
+              key={option.value ?? "none"}
               className="flex cursor-pointer items-center gap-2 text-sm text-slate-700"
             >
               <input
@@ -81,19 +81,12 @@ export function LevelForm({ feature }: { feature: GraphFeature }) {
           disabled={!changed || save.isPending}
           className="mt-3 w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {save.isPending ? 'Guardando…' : 'Guardar'}
+          {save.isPending ? "Guardando…" : "Guardar"}
         </button>
-
-        {level === null && (
-          <p className="mt-2 text-xs text-slate-500">
-            Queda sin verificar: el relevamiento lo va a poder completar.
-          </p>
-        )}
 
         {save.isSuccess && !changed && (
           <p role="status" className="mt-2 text-xs text-green-700">
-            Nivel guardado. La arista ya se repintó y el ruteo lo toma en la próxima
-            consulta.
+            Nivel guardado. El resultado ya impacta en el próximo ruteo.
           </p>
         )}
 
