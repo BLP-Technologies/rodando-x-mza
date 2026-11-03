@@ -164,11 +164,19 @@ export const ProfileScreen = () => {
             {/* Tarjeta de bienvenida con Avatar y botón Editar datos */}
             <View style={styles.welcomeCard}>
               <View style={styles.userInfoRow}>
-                <View style={styles.avatarCircleAuth}>
+                <View 
+                  style={styles.avatarCircleAuth}
+                  accessible={false} 
+                  importantForAccessibility="no"
+                >
                   <Text style={styles.avatarAuthText}>{userInitial}</Text>
                 </View>
 
-                <View style={styles.userDetailsCol}>
+                <View 
+                  style={styles.userDetailsCol}
+                  accessible={true}
+                  accessibilityLabel={`¡Hola! ${user?.nombre || 'Visitante'}. Correo: ${user?.email || 'Sin correo asociado'}`}
+                >
                   <Text style={styles.greetingText}>¡Hola! 👋</Text>
                   <Text style={styles.userNameText}>{user?.nombre || 'Visitante'}</Text>
                   <Text style={styles.userEmailText}>{user?.email || 'Sin correo asociado'}</Text>
@@ -249,17 +257,23 @@ export const ProfileScreen = () => {
             {/* Tarjeta de bienvenida de invitado */}
             <View style={styles.welcomeCard}>
               <View style={styles.userInfoRow}>
-                <View style={styles.avatarCircleGuest}>
+                <View 
+                  style={styles.avatarCircleGuest}
+                  accessible={false} 
+                  importantForAccessibility="no"
+                >
                   <Text style={styles.avatarGuestText}>A</Text>
                 </View>
 
-                <View style={styles.userDetailsCol}>
-                  <Text style={styles.greetingText}>¡Hola! 👋</Text>
-                  <Text style={styles.userNameText}>Visitante</Text>
-                  <Text style={styles.guestStatusText}>
-                    Estás usando la aplicación sin cuenta.
-                  </Text>
-                </View>
+                  <View 
+                    style={styles.userDetailsCol}
+                    accessible={true}
+                    accessibilityLabel={`¡Hola! ${user?.nombre || 'Visitante'}. Correo: ${user?.email || 'Sin correo asociado'}`}
+                  >
+                    <Text style={styles.greetingText}>¡Hola! 👋</Text>
+                    <Text style={styles.userNameText}>{user?.nombre || 'Visitante'}</Text>
+                    <Text style={styles.userEmailText}>{user?.email || 'Sin correo asociado'}</Text>
+                  </View>
               </View>
             </View>
 
@@ -297,12 +311,26 @@ export const ProfileScreen = () => {
         {/* ============================================================== */}
         {/* PREFERENCIAS DE ACCESIBILIDAD (Comunes a ambos estados)       */}
         {/* ============================================================== */}
-        <Text style={styles.sectionHeader}>Preferencias de accesibilidad</Text>
+        <Text 
+          style={styles.sectionHeader}
+          accessible={true}
+          accessibilityLabel="Preferencias de accesibilidad"
+          accessibilityRole="header"
+        >
+          Preferencias de accesibilidad
+        </Text>
 
         <View style={styles.settingsGroup}>
           {/* Lectura en voz alta */}
-          <View style={styles.settingRow}>
-            <View style={styles.settingTextCol}>
+          <View
+            accessible={true}
+            accessibilityRole="switch"
+            accessibilityLabel="Lectura en voz alta. Escuchá indicaciones y mensajes importantes"
+            accessibilityState={{ checked: preferences.screenReaderEnabled }}
+            accessibilityHint="Toca dos veces para activar o desactivar"
+            style={styles.settingRow}
+          >
+            <View style={styles.settingTextCol} importantForAccessibility="no-hide-descendants">
               <Text style={styles.settingTitle}>Lectura en voz alta</Text>
               <Text style={styles.settingDescription}>
                 Escuchá indicaciones y mensajes importantes.
@@ -313,9 +341,8 @@ export const ProfileScreen = () => {
               onValueChange={handleToggleVoiceReading}
               trackColor={{ false: '#D1D5DB', true: theme.colors.brand.teal }}
               thumbColor="#FFFFFF"
-              accessibilityRole="switch"
-              accessibilityLabel="Lectura en voz alta"
-              accessibilityState={{ checked: preferences.screenReaderEnabled }}
+              importantForAccessibility="no"
+              accessible={false}
             />
           </View>
 
@@ -334,6 +361,7 @@ export const ProfileScreen = () => {
               onValueChange={setHighContrast}
               trackColor={{ false: '#D1D5DB', true: theme.colors.brand.teal }}
               thumbColor="#FFFFFF"
+              accessible={true}
               accessibilityRole="switch"
               accessibilityLabel="Modo alto contraste"
               accessibilityState={{ checked: preferences.highContrast }}
@@ -380,6 +408,7 @@ export const ProfileScreen = () => {
               onValueChange={setReadingGuide}
               trackColor={{ false: '#D1D5DB', true: theme.colors.brand.teal }}
               thumbColor="#FFFFFF"
+              accessible={true}
               accessibilityRole="switch"
               accessibilityLabel="Guía de lectura"
               accessibilityState={{ checked: preferences.readingGuide }}
@@ -401,6 +430,7 @@ export const ProfileScreen = () => {
               onValueChange={setReduceMotion}
               trackColor={{ false: '#D1D5DB', true: theme.colors.brand.teal }}
               thumbColor="#FFFFFF"
+              
               accessibilityRole="switch"
               accessibilityLabel="Reducir movimiento"
               accessibilityState={{ checked: preferences.reduceMotion }}
