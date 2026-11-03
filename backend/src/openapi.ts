@@ -1,6 +1,6 @@
 import { OpenAPIRegistry, OpenApiGeneratorV31 } from '@asteasolutions/zod-to-openapi';
 import { z } from 'zod';
-import { bboxParamSchema, graphResponseSchema } from './graph/graph.schemas.js';
+import { bboxParamSchema, graphResponseSchema, updateGraphElementBodySchema, graphElementSchema, elementKindSchema } from './graph/graph.schemas.js';
 import { errorResponseSchema } from './http/error-response.js';
 import { routeRequestSchema, routeResponseSchema } from './routing/routing.schemas.js';
 
@@ -36,6 +36,44 @@ registry.registerPath({
       description:
         'El `bbox` no cumple el contrato: falta, no son cuatro números, está fuera de ' +
         'rango o tiene las esquinas invertidas.',
+      content: { 'application/json': { schema: errorResponseSchema } },
+    },
+    500: {
+      description: 'Error no esperado.',
+      content: { 'application/json': { schema: errorResponseSchema } },
+    },
+  },
+});
+
+registry.registerPath({
+  method: 'patch',
+  path: '/api/graph/elements/{kind}/{id}',
+  summary: 'Cambiar el nivel de accesibilidad de un elemento',
+  description:
+    'Escribe `accessibility_level` de una vereda, un cruce o un cordón, y devuelve el ' +
+    'elemento como quedó, con la misma forma que una feature de GET /api/graph. ' +
+    '`is_verified` no se manda: queda en true si hay nivel y en false si se vuelve a ' +
+    '"sin dato" (`level: null`). El costo del ruteo no se recalcula: se deriva de la ' +
+    'vista, así que cambia en la próxima consulta. Ver docs/14-la-api-del-grafo.md §7.',
+  request: {
+    params: z.object({ kind: elementKindSchema, id: z.coerce.number().int().positive() }),
+    body: {
+      content: { 'application/json': { schema: updateGraphElementBodySchema } },
+    },
+  },
+  responses: {
+    200: {
+      description: 'El elemento con el nivel ya escrito.',
+      content: { 'application/json': { schema: graphElementSchema } },
+    },
+    400: {
+      description:
+        'La clase o el `id` de la ruta no cumplen el contrato, o el cuerpo no trae ' +
+        '`level`, lo trae fuera del enum o con un campo de más.',
+      content: { 'application/json': { schema: errorResponseSchema } },
+    },
+    404: {
+      description: 'No hay ningún elemento de esa clase con ese id.',
       content: { 'application/json': { schema: errorResponseSchema } },
     },
     500: {

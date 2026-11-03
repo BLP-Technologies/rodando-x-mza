@@ -98,7 +98,7 @@ export const lineStringGeometrySchema = z.object({
 });
 
 /** El nivel de accesibilidad de un elemento; `null` es "nadie lo relevó" ([09 §4.1]). */
-const levelSchema = z.enum(['FULL', 'PARTIAL', 'NONE']).nullable();
+export const graphLevelSchema = z.enum(['FULL', 'PARTIAL', 'NONE']).nullable();
 
 /** Una vereda: la única clase que tiene nombre de calle. */
 const sidewalkFeatureSchema = z.object({
@@ -107,7 +107,7 @@ const sidewalkFeatureSchema = z.object({
   properties: z.object({
     element_kind: z.literal('sidewalk'),
     element_id: z.number().int(),
-    level: levelSchema,
+    level: graphLevelSchema,
     is_verified: z.boolean(),
     street_name: z.string().nullable(),
   }),
@@ -120,7 +120,7 @@ const crossingFeatureSchema = z.object({
   properties: z.object({
     element_kind: z.literal('crossing'),
     element_id: z.number().int(),
-    level: levelSchema,
+    level: graphLevelSchema,
     is_verified: z.boolean(),
   }),
 });
@@ -132,7 +132,7 @@ const kerbFeatureSchema = z.object({
   properties: z.object({
     element_kind: z.literal('kerb'),
     element_id: z.number().int(),
-    level: levelSchema,
+    level: graphLevelSchema,
     is_verified: z.boolean(),
   }),
 });
@@ -140,12 +140,15 @@ const kerbFeatureSchema = z.object({
 /**
  * Un elemento del grafo. La clase decide la geometría y, en la vereda, el nombre de calle:
  * no hay un `street_name` que en los cruces diga `null` por no aplicarse.
+ *
+ * Tiene nombre propio en OpenAPI (`GraphElement`) porque es a la vez una feature de la
+ * `FeatureCollection` y la respuesta del `PATCH` de un elemento ([14 §7]): un solo
+ * componente para las dos caras evita que el cliente traduzca entre dos formas del
+ * mismo dato.
  */
-const graphFeatureSchema = z.union([
-  sidewalkFeatureSchema,
-  crossingFeatureSchema,
-  kerbFeatureSchema,
-]);
+export const graphElementSchema = z
+  .union([sidewalkFeatureSchema, crossingFeatureSchema, kerbFeatureSchema])
+  .meta({ id: 'GraphElement' });
 
 /**
  * La respuesta: una `FeatureCollection` de GeoJSON, con un aviso propio si se recortó.
@@ -157,9 +160,43 @@ export const graphResponseSchema = z
   .object({
     type: z.literal('FeatureCollection'),
     truncated: z.boolean(),
-    features: z.array(graphFeatureSchema),
+    features: z.array(graphElementSchema),
   })
   .meta({ id: 'GraphFeatureCollection' });
 
-export type GraphFeature = z.infer<typeof graphFeatureSchema>;
+export type GraphElement = z.infer<typeof graphElementSchema>;
+export type GraphFeature = GraphElement;
 export type GraphResponse = z.infer<typeof graphResponseSchema>;
+
+/**
+ * La clase de un elemento del grafo, tal como viaja en la ruta del `PATCH`.
+ *
+ * Es un enum cerrado y no un texto libre: una clase desconocida es un pedido que la API
+ * no ofrece, no un recurso que falta ([14 §6]).
+ */
+export const elementKindSchema = z.enum(['sidewalk', 'crossing', 'kerb']).meta({
+  id: 'GraphElementKind',
+});
+
+export type ElementKind = z.infer<typeof elementKindSchema>;
+
+/** Los parámetros de `/api/graph/elements/:kind/:id`; el `id` llega como texto. */
+export const graphElementParamsSchema = z.object({
+  kind: elementKindSchema,
+  id: z.coerce.number().int().positive(),
+});
+
+/**
+ * El cuerpo del `PATCH` de un elemento ([14 §7]).
+ *
+ * `level` es **obligatorio y nullable**: el cuerpo tiene un solo campo, así que no hay
+ * forma de distinguir "no lo mandé" de "lo mando en `null`" — y esa distinción es
+ * justamente la que no puede quedar librada a una omisión, porque `null` borra el nivel
+ * y desmarca la verificación. Omitirlo es un error, no un "no toques nada".
+ *
+ * Es estricto a propósito: `is_verified` no se manda, lo pone el servidor en la misma
+ * escritura. Aceptarlo y descartarlo dejaría creyendo al cliente que puede decidirlo.
+ */
+export const updateGraphElementBodySchema = z
+  .strictObject({ level: graphLevelSchema })
+  .meta({ id: 'UpdateGraphElementRequest' });

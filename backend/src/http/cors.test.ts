@@ -39,7 +39,7 @@ describe('cors', () => {
     expect(res.status).toBe(204);
     expect(res.text).toBe('');
     expect(res.headers['access-control-allow-origin']).toBe(PORTAL_ORIGIN);
-    expect(res.headers['access-control-allow-methods']).toBe('GET, POST, OPTIONS');
+    expect(res.headers['access-control-allow-methods']).toBe('GET, POST, PATCH, OPTIONS');
     expect(res.headers['access-control-allow-headers']).toBe('Content-Type');
     expect(res.headers['access-control-max-age']).toBe(String(PREFLIGHT_MAX_AGE_SECONDS));
   });

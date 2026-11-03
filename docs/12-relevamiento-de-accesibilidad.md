@@ -248,7 +248,7 @@ import ([11 §2](11-grafo-peatonal.md)).
 | --- | --- | --- | --- |
 | Import de OpenStreetMap | no | no lo toca | no participa |
 | Carga del relevamiento | sí | verdadero | **saltea lo verificado** |
-| Portal (C014) | sí, incluido el `NULL` de "sin dato" | verdadero | **fuerza por definición** |
+| Portal (C014) | sí | `level IS NOT NULL` | **fuerza por definición** |
 
 **La regla.** Un elemento con `is_verified` en verdadero **no se pisa**. `is_verified`
 quiere decir que alguien del equipo miró el elemento (§5): no es un casillero vacío, y
@@ -256,9 +256,17 @@ una planilla no puede borrar ese trabajo sin dejar rastro. La carga escribe la f
 cuando el elemento no está verificado, y la saltea cuando lo está.
 
 **La edición del portal no es una excepción: es el forzado.** Un moderador mirando el
-elemento y guardando el nivel *es* el acto explícito, y la edición ya deja `is_verified`
-en verdadero. Por eso el portal no consulta la regla ni pide una confirmación aparte por
-estar pisando dato relevado: escribir ahí es responder por el cambio.
+elemento y guardando el nivel *es* el acto explícito. Por eso el portal no consulta la
+regla ni pide una confirmación aparte por estar pisando dato relevado: escribir ahí es
+responder por el cambio.
+
+**Pero el forzado necesita un valor que forzar.** El portal escribe
+`is_verified = (level IS NOT NULL)`: un nivel guardado queda verificado, y **"sin dato"
+no**. Volver un elemento a "sin dato" no es afirmar una ausencia, es retirar el dato
+anterior; el elemento queda como recién importado y la carga del relevamiento **sí** lo
+puede completar. Si en cambio dejara `is_verified` en verdadero, ese clic lo blindaría
+contra la planilla para siempre, y nadie sabría por qué la vereda nunca se actualiza
+([14 §7](14-la-api-del-grafo.md)).
 
 **Cómo se fuerza la carga.** Con `--force` en el comando de carga, que aplica todas las
 filas aunque el elemento esté verificado y deja en el reporte el nivel que pisó. Forzar
@@ -299,18 +307,26 @@ edición del portal de ayer. Para el MVP se acepta, y el forzado queda en el rep
 **No se agrega ninguna columna.** `is_verified` es todo lo que la regla necesita leer, y
 la procedencia de una corrida vive en su reporte, igual que la del importador
 ([11 §4.1](11-grafo-peatonal.md)): un artefacto que se lee, no una columna que hay que
-mantener. Si el portal alguna vez tiene que contestar "quién cambió esto y cuándo", son
-dos columnas —`verified_at timestamptz` y `verified_by integer` con FK a `users`, en
-`NULL` para lo que venga de la planilla, que trae un nombre y no un id— y se deciden con
-#49, cuando exista la pantalla que las usa. Una migración es barata hasta ese día.
+mantener. La autoría se decidió con el portal: **el MVP no la guarda**
+([09 §4.1](09-modelo-de-datos.md)).
+Si alguna vez hace falta contestar "quién cambió esto y cuándo", son dos columnas
+—`verified_at timestamptz` y `verified_by integer` con FK a `users`, en `NULL` para lo
+que venga de la planilla, que trae un nombre y no un id—, y se decide con una tarea
+propia. Una migración es barata hasta ese día.
+
+**Tampoco dice cuál de dos observaciones es más nueva**, y eso tiene una consecuencia
+que conviene tener presente: un elemento que el portal volvió a "sin dato" queda sin
+verificar y la planilla lo puede completar, pero un elemento que el portal puso en
+`PARTIAL` la planilla lo va a saltear aunque la planilla sea posterior. La fecha está en
+los dos lados —la del relevamiento en la planilla, la de la edición en `updated_at`— y
+nadie las compara: para el MVP la regla es la precedencia explícita, no la cronología.
 
 ## 9. Lo que este documento no decide
 
 - **El mecanismo de carga** y quién lo opera: #14. Su precedencia frente al portal ya
   está fijada (§8.2); lo abierto es con qué comando o pantalla se carga.
-- **La autoría de un cambio de nivel.** El MVP no guarda quién lo cambió ni cuándo
-  (§8.3): lo que pisó una carga forzada queda en el reporte de la corrida. Vuelve con
-  #49 si el portal tiene que mostrar autoría.
+- **La autoría de un cambio de nivel.** Decidido en §8.3: el MVP no guarda quién lo
+  cambió ni cuándo, y lo que pisó una carga forzada queda en el reporte de la corrida.
 - **El valor de los factores de costo** de cada nivel: es calibración, y vive en
   [09 §4.7](09-modelo-de-datos.md).
 - **Los umbrales físicos** (ancho, pendiente, escalón). Hoy no existen porque no se
