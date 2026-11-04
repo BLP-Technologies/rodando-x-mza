@@ -18,6 +18,7 @@
     "migrate": "node-pg-migrate up --envPath .env",
     "migrate:down": "node-pg-migrate down --envPath .env",
     "import:osm": "tsx --env-file-if-exists=.env src/importer/importer.cli.ts",
+    "import:osm:dist": "node --env-file-if-exists=.env dist/importer/importer.cli.js",
     "seed:reports": "tsx --env-file-if-exists=.env src/reports/reports.seed.cli.ts",
     "db:types": "kysely-codegen",
     "db:types:verify": "kysely-codegen --verify || { echo 'Los tipos de src/db/types.ts no coinciden con el esquema: corré pnpm db:types y commiteá el resultado.'; exit 1; }"
