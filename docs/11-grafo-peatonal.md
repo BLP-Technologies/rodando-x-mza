@@ -460,7 +460,7 @@ coordenadas del extracto no se tocan: ésas ya vienen con su precisión.
 No hace falta una columna `key`. El par de nodos ya está en la tabla, y un hash
 guardado sería un dato derivado que hay que recalcular y que depende de la función de
 hash, no del grafo. La restricción que lo vuelve clave está en
-`infra/migrations/1793486697815_add-graph-unique-indexes.sql`, con su
+`backend/migrations/1793486697815_add-graph-unique-indexes.sql`, con su
 `Down Migration` ([#30](https://github.com/BLP-Technologies/rodando-x-mza/issues/30)), y
 es lo que el importador usa para el `ON CONFLICT`.
 
@@ -485,9 +485,13 @@ Las tres protecciones que acompañan al upsert:
 
 1. **Reanclaje por geometría.** Si un obstáculo apunta a un elemento que la nueva
    corrida no generó, se busca la vereda más cercana a su `geom` (a menos de ~5 m).
-2. **Sin vínculo antes que vínculo falso.** Si no hay ninguna cerca, el obstáculo
-   queda sin vínculo: en [09 §4.5](09-modelo-de-datos.md#45-reporte-y-obstáculo)
-   colgar un obstáculo de cero elementos es válido y su `geom` es la fuente de verdad.
+2. **Sin vínculo es una excepción que se avisa.** El alta de la API no crea un obstáculo
+   sin elemento: el punto se pega al más cercano y, si no hay ninguno, se rechaza
+   ([09 §4.5](09-modelo-de-datos.md#45-reporte-y-obstáculo),
+   [18 §3](18-la-api-de-obstaculos.md#3-el-alta)). Una fila vieja que perdió su elemento en
+   una reimportación no puede rechazarse sola, así que queda sin vínculo —el `geom` sigue
+   siendo la fuente de verdad de dónde está— y se reporta como aviso para que el moderador la
+   vuelva a publicar. El `CHECK` del esquema lo permite; lo que no lo permite es el alta.
 3. **Reporte de la corrida.** Cuántos nodos, veredas y cruces se crearon, se
    actualizaron y se reanclaron, cuántos quedaron sin vínculo, y los avisos de §3.2,
    §3.6 y §3.7. Es lo que convierte una imperfección del extracto en algo visible.
@@ -508,9 +512,11 @@ pnpm import:osm [ruta]                    # por defecto ../data/pilot-zone.osm
 ```
 
 La base es la del `docker compose -f infra/docker-compose.yml up -d db`, que ya trae
-PostGIS y pgRouting. El extracto **no se versiona** (10 §4): se genera con
-`node scripts/fetch-pilot-zone-osm.mjs`. Si la ruta no existe o el archivo no trae
-vías, el comando falla con un mensaje que dice eso, y no deja nada escrito.
+PostGIS y pgRouting. El extracto **se versiona** como snapshot (10 §4): el archivo
+commiteado es el que alimenta el grafo del MVP, y regenerarlo con
+`node scripts/fetch-pilot-zone-osm.mjs` es un cambio deliberado. Si la ruta no existe
+o el archivo no trae vías, el comando falla con un mensaje que dice eso, y no deja
+nada escrito.
 
 El **reporte de la corrida** sale por la salida estándar con el logger del backend, y
 es lo que hay que leer antes de mirar el grafo: vías leídas, incluidas y descartadas por

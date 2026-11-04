@@ -17,10 +17,13 @@ erDiagram
     %%   - CHECK: en veredas y cruces start_node_id <> end_node_id (sin bucles);
     %%     en obstaculos num_nonnulls(sidewalk_id, kerb_node_id, crossing_id) <= 1.
     %%   - Defaults con significado: is_active de los catalogos en true; is_moderator,
-    %%     is_verified e is_resolved en false; reports.status en PENDING.
+    %%     is_verified en false; resolved_at en NULL (obstaculo activo, docs/09 §4.5);
+    %%     reports.status en PENDING.
     %%   - on delete: CASCADE en lo que cuelga del usuario como dato personal (lugares,
     %%     rutas guardadas, tutoriales guardados); RESTRICT para reports.user_id, para
     %%     los catalogos y para los elementos del grafo.
+    %%   - Nullable con significado: reports.user_id, porque no hay autenticacion
+    %%     todavia y el reporte anonimo es un caso legitimo (docs/09 §4.5).
 
     USERS {
         int id PK
@@ -109,7 +112,7 @@ erDiagram
         int type_id FK
         obstacle_severity severity "MINOR, MODERATE, CRITICAL"
         geometry(Point,4326) geom
-        boolean is_resolved
+        timestamptz? resolved_at "NULL = activo (docs/09 §4.5)"
         timestamptz created_at
         timestamptz updated_at
         timestamptz? deleted_at
@@ -128,7 +131,7 @@ erDiagram
     %% Reporte de obstáculos. No crea el obstáculo %%
     REPORTS {
         int id PK
-        int user_id FK
+        int? user_id FK "Anonimo mientras no haya auth (docs/09 §4.5)"
         int type_id FK "Percepción del ciudadano"
         obstacle_severity severity "Percepción del ciudadano"
         varchar(300) description
@@ -179,7 +182,7 @@ erDiagram
     CROSSINGS ||--o{ OBSTACLES: "Puede tener obstáculos"
     OBSTACLE_TYPES ||--o{ OBSTACLES: "Clasifica"
     OBSTACLE_TYPES ||--o{ REPORTS: "Clasifica la percepción"
-    USERS ||--o{ REPORTS: "Puede reportar obstáculos"
+    USERS |o--o{ REPORTS: "Puede reportar obstáculos"
     OBSTACLES ||--o{ REPORTS: "Reporta un obstáculo"
     TUTORIAL_CATEGORIES ||--o{ TUTORIALS: "Agrupa"
     USERS ||--o{ USER_TUTORIALS: "Tiene tutoriales guardados"

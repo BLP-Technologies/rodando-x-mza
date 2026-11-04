@@ -112,8 +112,15 @@ carga del relevamiento no pisa un elemento verificado salvo que se fuerce, y la 
 del portal lo pisa porque es el forzado explícito: la regla lee esta columna y no otra
 ([12 §8.2](12-relevamiento-de-accesibilidad.md)). El MVP no agrega una columna de
 procedencia ni de autor: lo que pisó una carga forzada queda en el reporte de la corrida.
-Si el portal tiene que mostrar autoría, son `verified_at` y `verified_by`, y se deciden
-con #49.
+
+**En el MVP `is_verified` se deriva de `level`.** La edición del portal escribe
+`is_verified` como `level IS NOT NULL`: un nivel guardado es un nivel que alguien miró, y
+"sin dato" no es un valor confirmado, así que devuelve el elemento al estado de recién
+importado ([14 §7](14-la-api-del-grafo.md)). Hoy no hay ninguna fuente que produzca un
+nivel sin verificar, así que las dos columnas no se contradicen nunca; el día que exista
+(si alguna vez se importa un nivel de OSM, por ejemplo), vuelven a ser dos ejes
+genuinamente separados. El precio de no guardar autor está aceptado por el MVP
+([12 §8.3](12-relevamiento-de-accesibilidad.md)).
 
 **`report_status` no incluye la baja.** La baja de un reporte es `deleted_at`, no un
 estado: si `DELETED` fuera un valor del enum, habría dos fuentes de verdad para "este
@@ -288,9 +295,25 @@ mismo pozo. Entonces la columna vive en el lado que se repite —`reports.obstac
 nullable y sin `UNIQUE`— y no al revés. Un único `obstacles.report_id` no podría
 representar dos reportes del mismo obstáculo sin duplicar el obstáculo.
 
+**El autor.** `reports.user_id` es **nullable**, aunque la columna nació `NOT NULL`
+con FK a `users`. La razón es de fase: no hay autenticación (Fase 3) ni una sola fila
+en `users`, así que exigir el autor haría imposible el único caso que existe hoy, que
+alguien reporte un pozo sin tener cuenta. Un reporte anónimo es legítimo mientras no
+haya login; cuando lo haya, el reporte autenticado vuelve a completar el campo. La
+alternativa descartada —sembrar un usuario "ciudadano"— deja una fila de mentira que
+después hay que deshacer con un `UPDATE` masivo
+([17 §6](17-la-api-de-reportes.md#6-el-reporte-anónimo)).
+
 **El flujo de aprobación** (C012) crea el obstáculo y, en la misma transacción, marca
 el reporte: `status = 'APPROVED'` y `obstacle_id` con el id nuevo. Aprobar significa
-crear el obstáculo; no hay estado aprobado sin obstáculo.
+crear el obstáculo; no hay estado aprobado sin obstáculo
+([18 §6](18-la-api-de-obstaculos.md#6-el-puente-de-un-reporte-a-un-obstáculo)).
+
+**Los dos ciclos de vida no se sincronizan en el MVP.** Resolver el obstáculo (C013) no
+toca el reporte que lo originó: el reporte sigue `APPROVED`, que es lo que ocurrió —se
+aprobó— y no el estado de la barrera. Los estados `UNDER_REPAIR` y `RESOLVED` del enum de
+reportes quedan sin uso. Es un límite conocido y no un olvido: sincronizarlos pediría que
+cada cierre escribiera en dos tablas para un dato que el mapa ya muestra en el obstáculo.
 
 **Los duplicados** no necesitan diseño propio en el MVP: el moderador aprueba uno y
 los demás se marcan `REJECTED`, que ya es el estado previsto para "duplicado". Si más
@@ -308,9 +331,14 @@ rampa es la pieza que une vereda y calzada, y en el modelo es el `kerb_node`. Un
 esquema que solo permitiera colgar obstáculos de veredas dejaría sin lugar el tipo más
 específico de una aplicación de accesibilidad.
 
-Colar de **cero** elementos es válido: el `geom` del obstáculo es la fuente de verdad
-de dónde está. El vínculo con el elemento es un enriquecimiento que el portal resuelve
-con el punto, y existe para que el ruteo pueda penalizar el elemento correcto.
+**Un obstáculo siempre cuelga de un elemento.** El `geom` sigue siendo la verdad de dónde
+está y no se mueve, pero el vínculo no es opcional: lo decide el servidor pegando el punto
+al elemento más cercano —vereda, cruce o cordón—, y si no hay ninguno dentro del radio, el
+alta se rechaza ([18 §3](18-la-api-de-obstaculos.md#3-el-alta)). La razón es de producto:
+un obstáculo sin vínculo no cambia ningún costo, así que sería una fila en el mapa que no
+afecta al ruteo y que el moderador no tiene con qué vincular desde la pantalla. La primera
+versión de este documento aceptaba cero elementos como caso válido; el flujo real lo
+descartó.
 
 **Obstáculo y nivel de accesibilidad no se reemplazan.** Un obstáculo es un **evento**
 —tiene fecha, autor, severidad y un ciclo de vida que termina al resolverse—; el nivel
@@ -351,7 +379,7 @@ costo(e) = metros(e) × factor_nivel(e) + Σ penalización(obstáculos activos d
 que se consulta, PostgreSQL lo expande y calcula el costo en ese momento. No ocupa espacio,
 no hay nada que mantener actualizado y no puede desincronizarse con las tablas. La que
 guarda datos es la vista *materializada*, y es justamente la que no se quiere. La vista
-existe en `infra/migrations/1793500666032_create-walkable-edges-view.sql` y expone también
+existe en `backend/migrations/1793500666032_create-walkable-edges-view.sql` y expone también
 `metros` y `level` —el nivel que efectivamente se cobró— porque un costo que no se puede
 descomponer no se puede explicar ni revisar ([11 §5](11-grafo-peatonal.md)).
 
@@ -425,8 +453,10 @@ una obra puede ocupar todo el ancho de la vereda o una parte—, así que el dat
 enum, `CRITICAL` pasa a significar "no se puede pasar" y ya no puede significar "muy malo,
 pero pasable". Si ese matiz hiciera falta, se agrega un nivel al enum (§5), no una columna.
 
-**Obstáculos activos** son los que tienen `is_resolved = false` y `deleted_at IS NULL`. El
-estado del reporte no entra en el costo: un reporte `UNDER_REPAIR` cuyo obstáculo sigue
+**Obstáculos activos** son los que tienen `resolved_at IS NULL` y `deleted_at IS NULL`. El
+estado y la fecha son el mismo dato, así que no hay un booleano al lado: resolver escribe
+`resolved_at` y la vista lo lee ([18 §2](18-la-api-de-obstaculos.md#2-qué-es-un-obstáculo-y-cómo-se-cierra)).
+El estado del reporte no entra en el costo: un reporte `UNDER_REPAIR` cuyo obstáculo sigue
 activo describe una barrera que sigue en la calle.
 
 **En un nodo, solo se honra el bloqueo.** Los metros son una cantidad de arista y un
@@ -474,14 +504,14 @@ porque la unidad de costo es la arista y el modelo no tiene barreras en el medio
 aristas ya se cortan en cada nodo, así que en el peor caso se pierde una cuadra.
 
 El arreglo correcto no es afinar el costo por metro: es **partir la arista en el punto del
-obstáculo** cuando el moderador lo vincula, con ese punto convertido en un `kerb_node` nuevo
+obstáculo** cuando el moderador lo publica, con ese punto convertido en un `kerb_node` nuevo
 y las dos mitades heredando nivel y verificación. No entra en el MVP por una razón que no es
 de esquema: sería la primera vez que el portal modifica el grafo, y eso exige que el
 importador respete los cortes al reimportar, cosa que hoy no puede porque `crossings` no
 tiene identificador externo (§8). Se revisa cuando el importador sea idempotente. Mientras
-tanto, el portal puede avisar, al vincular un obstáculo a un tramo, que en el ruteo esa
+tanto, el portal puede avisar, al publicar un obstáculo sobre un tramo, que en el ruteo esa
 barrera bloquea la cuadra entera y no solo el punto: la limitación queda visible en lugar de
-sorpresiva.
+sorpresiva. Hoy no lo dice, y la pantalla de obstáculos tampoco lo explica.
 
 #### Consecuencias
 
@@ -516,7 +546,7 @@ devolvía un camino que empezaba en el borde del grafo y parecía válido.
 
 | Columna | Tipo | Para qué |
 | --- | --- | --- |
-| `id` | `int` PK | Nunca se expone: las filas se identifican por `name` |
+| `id` | `int` PK | Clave estable de la fila; viaja en la respuesta del grafo como identidad del área |
 | `name` | `varchar(100)` único | Identifica el área en el código y en la operación |
 | `geom` | `geometry(Polygon, 4326)` | El perímetro de búsqueda |
 | `is_active` | `boolean` | Baja lógica de la fila |
@@ -547,6 +577,11 @@ baja lógica que conservar, la fila vieja se descarta.
 esquinas en ángulo recto** (`ST_Buffer(...::geography, 50, 'join=mitre')`). El método y el
 WKT quedan en la migración `1793503685017_create-service-areas.sql`, que es donde se puede
 reproducir.
+
+**La lectura de las activas la hace `GET /api/graph`.** La respuesta trae las áreas
+vigentes en `service_areas`, con su `id`, su nombre y su polígono, y el contrato está en
+[14 §5.2](14-la-api-del-grafo.md). No hay endpoint propio del área: es un polígono fijo
+que el mapa dibuja junto con el grafo que ya pide.
 
 **No está en el camino del ruteo.** El área limita **las puntas** de una consulta, no el
 recorrido: el camino sigue siendo todo el grafo, y por eso no hay ninguna arista que se
@@ -622,7 +657,7 @@ de error que cada cliente traduce.
 ## 7. Convenciones de migración
 
 Las migraciones son **SQL puro** ([02](02-stack-y-estructura.md) §7), viven en
-`infra/migrations/` y las aplica `node-pg-migrate`. Un archivo es una unidad
+`backend/migrations/` y las aplica `node-pg-migrate`. Un archivo es una unidad
 temática —las tablas que resuelve un mismo issue— y contiene el up y el down con los
 marcadores de la herramienta:
 
@@ -695,3 +730,5 @@ actualizar y la columna sería peso muerto.
   OpenStreetMap no se pueden modelar.
 - [12-relevamiento-de-accesibilidad.md](12-relevamiento-de-accesibilidad.md): de dónde sale
   el dato de accesibilidad, qué significa cada nivel en la calle y cómo se registra.
+- [18-la-api-de-obstaculos.md](18-la-api-de-obstaculos.md): cómo se publica y se cierra un
+  obstáculo, y cómo nace de un reporte aprobado.

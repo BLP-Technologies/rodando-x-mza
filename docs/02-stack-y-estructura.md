@@ -57,10 +57,10 @@ propio `package.json`.
 ```
 rodando-x-mza/
 ├── .github/      # configuración de GitHub: workflows (08) y plantilla de tareas (07)
-├── backend/      # API REST: Express 5 + TypeScript
+├── backend/      # API REST: Express 5 + TypeScript y las migraciones SQL
 ├── portal/       # Portal de moderación: Next.js
 ├── mobile/       # App principal: Expo React Native
-├── infra/        # docker-compose, aprovisionamiento (initdb/) y migraciones SQL
+├── infra/        # docker-compose, aprovisionamiento (initdb/) y build de la base
 ├── docs/         # documentación del proyecto (este directorio)
 └── scripts/      # herramientas de desarrollo (render de diagramas, etc.)
 ```
@@ -96,6 +96,7 @@ backend/src/
 ├── routes.ts     # compone los routers de cada funcionalidad
 ├── http/         # capa de transporte compartida (no es una funcionalidad)
 ├── db/           # conexión y tipos de la base
+├── obstacles/    # una funcionalidad: los obstáculos publicados
 └── auth/         # una funcionalidad (p. ej. C001/C002)
 ```
 
@@ -103,7 +104,10 @@ backend/src/
 portal/src/
 ├── app/          # rutas y layouts: orquestan, no implementan
 ├── api/          # cliente HTTP tipado y contrato generado de la API
-├── map/          # una funcionalidad: el mapa del grafo
+├── map/          # una funcionalidad: el mapa, sus capas y sus herramientas
+├── reports/      # una funcionalidad: la pantalla de reportes
+├── obstacles/    # una funcionalidad: la herramienta de obstáculos
+├── routes/       # una funcionalidad: la herramienta de ruta
 ├── session/      # de dónde sale la sesión del portal
 └── config.ts     # valores por entorno y la caja del piloto
 ```
@@ -115,6 +119,7 @@ La misma regla decide el destino en las dos aplicaciones:
 | ¿Habla HTTP/Express pero no del dominio? | `http/` |
 | ¿Es una capacidad del negocio? | su carpeta de funcionalidad (`auth/`, `reports/`, …) |
 | ¿Es acceso a datos genérico? | `db/` |
+| ¿Guarda los bytes de un archivo? | `storage/` |
 
 Dentro de una funcionalidad, el rol del archivo se marca en el nombre:
 `auth.router.ts`, `auth.schemas.ts`, `auth.service.ts`, `auth.repository.ts`. El
@@ -184,8 +189,9 @@ Esto evita mantener a mano la forma de la API en tres lugares. Cuando cambia un
 esquema, cambia el OpenAPI y los clientes se regeneran.
 
 El documento se publica en **`GET /api/openapi.json`**, generado al arrancar desde los
-esquemas registrados; hoy lo alimentan los contratos de ruteo ([13](13-api-de-ruteo.md)) y
-de lectura del grafo ([14](14-la-api-del-grafo.md)).
+esquemas registrados; hoy lo alimentan los contratos de ruteo ([13](13-api-de-ruteo.md)),
+de lectura y edición del grafo ([14](14-la-api-del-grafo.md)), de reportes
+([17](17-la-api-de-reportes.md)) y de obstáculos ([18](18-la-api-de-obstaculos.md)).
 
 Para leerlo a ojo, el mismo documento se publica como página navegable en
 **`GET /api/docs`**: la página pide el documento al backend, que también le sirve la UI,

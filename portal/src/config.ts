@@ -28,8 +28,10 @@ export type BBox = {
  *
  * Son los cuatro vértices de `data/pilot-zone.geojson` (la zona que define
  * [10 §2](../../docs/10-datos-y-zona-piloto.md)), reducidos a mínimos y máximos.
- * La API no expone `service_areas`, así que las coordenadas viajan como
- * constante: ver [16](../docs/16-el-portal.md) para el porqué.
+ * Es una constante aunque la API ya exponga `service_areas`: el primer pedido
+ * necesita un bbox antes de tener cualquier respuesta, y el área activa es la
+ * zona corrida 50 m hacia afuera, no esta caja. Ver
+ * [16 §5.4](../docs/16-el-portal.md) para el porqué.
  */
 export const PILOT_BOUNDS: BBox = {
   minLon: -68.849165,

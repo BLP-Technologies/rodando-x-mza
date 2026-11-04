@@ -8,10 +8,12 @@ Thumbs.db
 *.log
 *.tmp
 
-# Datos crudos de OpenStreetMap: se regeneran con scripts/fetch-pilot-zone-osm.mjs
-# (ver data/README.md). Lo que se versiona es el recorte, no el extracto.
-data/*.osm
+# Datos crudos de OpenStreetMap: los PBF y los extractos nuevos no se versionan.
+# El extracto de la zona piloto sí: es el snapshot que alimenta el grafo del MVP
+# (ver data/README.md).
 data/*.pbf
+data/*.osm
+!data/pilot-zone.osm
 
 # El relevamiento completo vive en el Drive del equipo (ver
 # data/relevamiento/README.md). Acá sólo se versiona la plantilla.

@@ -107,6 +107,14 @@ navegador bloquea la respuesta del grafo aunque la API conteste `200`
 ([15 §3](15-integracion-con-el-cliente.md)). Qué muestra y cómo está armado el
 portal es de [16](16-el-portal.md).
 
+Las imágenes de los reportes se guardan en **`backend/uploads/`** (o en el
+`UPLOAD_DIR` que se configure), que el backend crea si no existe. La URL con la que
+se devuelve cada imagen sale de `UPLOAD_BASE_URL`, y el backend sirve esos bytes en
+**`/uploads`**, fuera de `/api`: los archivos no son un recurso de la API y así el
+día que los sirva el proxy el cliente no cambia de URL
+([17 §4](17-la-api-de-reportes.md#4-las-imágenes)). Las dos variables están en
+`backend/.env.example`.
+
 ## 5. Reiniciar la base desde cero
 
 En desarrollo el esquema cambia mucho: una migración a medio escribir, un archivo de
@@ -149,7 +157,7 @@ docker compose exec db psql -U rodando -d rodando -c 'select name, run_on from p
 
 Si preferís no borrar el volumen, se puede deshacer migración por migración con
 `pnpm migrate:down` (revierte la última) o
-`pnpm exec node-pg-migrate down N --envPath .env -m ../infra/migrations` en `backend/`
+`pnpm exec node-pg-migrate down N --envPath .env` en `backend/`
 (revierte las últimas `N`). Eso conserva lo que no hayan tocado esas migraciones.
 
 ## 6. Consultar la base
@@ -214,6 +222,22 @@ contrato completo, que es lo que consume el cliente.
 **Los `id` de nodo y de elemento son de la base de cada uno**: si el grafo se importó en
 otro orden, no coinciden con los de otro entorno, pero los metros y los niveles sí.
 
+### Datos de prueba de reportes
+
+La pantalla `/reports` del portal se prueba con datos cargados a mano, y esos datos son
+un comando del backend:
+
+```sh
+cd backend
+pnpm seed:reports
+```
+
+Escribe **diez reportes** en la base que diga `DATABASE_URL`, dentro de la zona piloto y
+con los tres estados que el selector necesita (pendientes, aprobados y rechazados).
+**Agrega en cada corrida**: dos corridas dejan veinte. Para volver a cero, `DELETE FROM
+reports`. No hay endpoint que los cree ni los borre: es una herramienta de desarrollo
+([17 §7](17-la-api-de-reportes.md)).
+
 ## 8. Comandos frecuentes
 
 Desde `backend/`:
@@ -229,6 +253,7 @@ Desde `backend/`:
 | `pnpm migrate:down` | revierte la última migración |
 | `pnpm db:types` | regenera `src/db/types.ts` desde la base (requiere la base levantada) |
 | `pnpm db:types:verify` | falla si los tipos generados no coinciden con el esquema |
+| `pnpm seed:reports` | carga diez reportes de prueba para la pantalla de reportes |
 
 Desde `portal/`:
 

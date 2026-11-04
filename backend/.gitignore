@@ -1,3 +1,5 @@
 node_modules/
 dist/
 .env
+# Imágenes subidas en desarrollo (ver docs/17 §4): las crea el backend.
+uploads/

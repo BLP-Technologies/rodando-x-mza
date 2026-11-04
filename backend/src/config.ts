@@ -42,6 +42,19 @@ const envSchema = z.object({
     .pipe(z.array(corsOriginSchema)),
   // LOG_LEVEL no se define acá: lo lee el logger, que debe funcionar incluso
   // cuando esta configuración todavía no se validó (ver src/logger.ts).
+
+  // Dónde se guardan los bytes de las imágenes de los reportes. La ruta es
+  // relativa al proceso: el backend se arranca desde `backend/`, así que el
+  // default termina siendo `backend/uploads/`.
+  UPLOAD_DIR: z.string().default('uploads'),
+  // La URL pública de esos archivos, sin barra final para no armar `//`. Es la
+  // que se guarda en `reports.image_url`, así que un cambio de dominio deja
+  // URLs viejas: se cambia junto con lo que sirve `/uploads`
+  // (docs/17 §4).
+  UPLOAD_BASE_URL: z
+    .url()
+    .default('http://localhost:3001/uploads')
+    .transform((value) => value.replace(/\/+$/, '')),
 });
 
 export type Config = z.infer<typeof envSchema>;

@@ -68,3 +68,45 @@ export async function apiGet<T>(path: string): Promise<T> {
 
   return (await response.json()) as T;
 }
+
+/**
+ * El `PATCH` de un recurso, con el cuerpo ya parseado como `T`.
+ *
+ * Mismo contrato de error que `apiGet`: un `texto` que no es JSON del catálogo cae en
+ * `UNKNOWN_ERROR` y no rompe el render (15 §6).
+ */
+export async function apiPatch<T>(path: string, body: unknown): Promise<T> {
+  return sendJson<T>('PATCH', path, body);
+}
+
+/**
+ * El `POST` de un recurso, con el cuerpo ya parseado como `T`.
+ *
+ * `body` es opcional porque hay acciones que no llevan cuerpo —resolver un obstáculo,
+ * descartar un reporte—: no mandar cuerpo es distinto de mandar `{}`, y el contrato de esas
+ * dos rutas no tiene campos.
+ */
+export async function apiPost<T>(path: string, body?: unknown): Promise<T> {
+  return sendJson<T>('POST', path, body);
+}
+
+/** El envío con cuerpo JSON que comparten `apiPatch` y `apiPost`. */
+async function sendJson<T>(method: 'PATCH' | 'POST', path: string, body?: unknown): Promise<T> {
+  let response: Response;
+
+  try {
+    response = await fetch(new URL(path, API_URL), {
+      method,
+      headers: { accept: 'application/json', 'content-type': 'application/json' },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+  } catch {
+    throw new ApiError(NETWORK_ERROR);
+  }
+
+  if (!response.ok) {
+    throw await errorFromResponse(response);
+  }
+
+  return (await response.json()) as T;
+}

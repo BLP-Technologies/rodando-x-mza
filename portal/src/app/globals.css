@@ -24,3 +24,13 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/*
+ * Leaflet deja el foco en el `<path>` que se clickea y Chrome lo dibuja como un rectángulo
+ * negro alrededor de la caja del trazo: no sigue la línea y se lee como un error de dibujo.
+ * Los paths no están en el orden de tabulación (Leaflet no les pone `tabindex`), así que el
+ * anillo no le sirve a nadie que navegue con teclado: queda como resto de un clic.
+ */
+.leaflet-container .leaflet-interactive:focus {
+  outline: none;
+}
