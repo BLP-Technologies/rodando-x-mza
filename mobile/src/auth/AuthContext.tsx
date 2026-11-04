@@ -59,12 +59,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }, []);
 
   const cerrarSesion = useCallback(() => {
-    authService.cerrarSesion().catch((error) => {
-      console.log("Error al cerrar la sesión en el servidor", error);
-    });
-    eliminarToken().catch((error) => {
-      console.log("Error al eliminar el token", error);
-    });
+    authService
+      .cerrarSesion()
+      .catch((error) => {
+        console.log("Error al cerrar la sesión en el servidor", error);
+      })
+      .finally(() => {
+        eliminarToken().catch((error) => {
+          console.log("Error al eliminar el token", error);
+        });
+      });
     setSesion(null);
   }, []);
 
@@ -84,10 +88,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         }
       } catch (error) {
         console.log("Error al restaurar la sesión", error);
-        // El token guardado no sirve: se borra para no reintentar
-        eliminarToken().catch((e) => {
-          console.log("Error al eliminar el token", e);
-        });
+// Solo se borra si el servidor lo rechazó: sin conexión, el token sigue siendo válido
+        if (error instanceof Error && error.message === "UNAUTHENTICATED") {
+          eliminarToken().catch((e) => {
+            console.log("Error al eliminar el token", e);
+          });
+        }
       } finally {
         setCargando(false);
       }
