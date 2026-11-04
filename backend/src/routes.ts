@@ -4,6 +4,7 @@ import { docsRouter } from './http/docs.js';
 import { healthRouter } from './http/health.js';
 import { openApiDocument } from './openapi.js';
 import { routingRouter } from './routing/routing.routes.js';
+import { placesRouter } from './places/places.routes.js';
 
 /** Todas las rutas de la API se montan bajo `/api`. */
 export const apiRouter = Router();
@@ -11,6 +12,7 @@ export const apiRouter = Router();
 apiRouter.use('/health', healthRouter);
 apiRouter.use('/graph', graphRouter);
 apiRouter.use('/routes', routingRouter);
+apiRouter.use('/places', placesRouter);
 apiRouter.use('/docs', docsRouter);
 
 /**

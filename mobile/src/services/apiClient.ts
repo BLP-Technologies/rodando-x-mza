@@ -6,7 +6,7 @@
 import { Platform } from 'react-native';
 
 // Cambiar a false cuando el backend esté listo
-export const USE_MOCK = true;
+export const USE_MOCK = false;
 
 // IP para emulador Android vs Web / Celular físico
 const BASE_URL = Platform.select({
