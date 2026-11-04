@@ -16,22 +16,24 @@ Este documento responde:
 - **Dónde** corre el sistema y con qué plataforma (§2).
 - **Cómo** se despliega la base de datos, paso por paso (§3).
 - **Cómo** se opera la base por SSH cuando no hay un cliente SQL conectado (§3.7).
-- **Cómo** se desplegarán el backend y el portal (§4 y §5).
+- **Cómo** se despliega el backend, cómo se verifican sus migraciones y cómo se
+  actualiza solo con cada push (§4).
+- **Cómo** se desplegará el portal (§5).
 - **Cómo** se obtiene el APK de la aplicación móvil (§6).
 - **Qué** falta para completar el despliegue (§7).
 
 | Pieza | Estado | Dónde corre |
 | --- | --- | --- |
 | Base de datos | Desplegada y verificada | Dokploy · Application |
-| Backend | Pendiente | Dokploy · Application |
+| Backend | Desplegado y verificado | Dokploy · Application |
 | Portal | Pendiente | Dokploy · Application |
 | APK | Pendiente | Build de Expo, fuera del VPS |
 
 Quedan fuera de este documento:
 
-- **Migraciones y carga del grafo.** Se ejecutan desde el backend en producción,
-  cuando exista: `pnpm migrate` forma parte del despliegue del backend (§4) y
-  `pnpm import:osm` es una carga inicial que no se repite (§4.3).
+- **El detalle del esquema.** Las migraciones y la carga del grafo se ejecutan en el
+  servidor y se documentan acá (§4), pero su contenido está en
+  [09](09-modelo-de-datos.md) y [11](11-grafo-peatonal.md).
 - **Puesta en marcha local**, que está en
   [05-desarrollo.md](05-desarrollo.md).
 - **Verificación automática del repositorio**, que está en
@@ -296,45 +298,164 @@ Advertencias:
   `select count(*)` y revisar el número.
 - Si el servicio se recrea, el contenedor cambia: hay que volver a resolver `C`.
 
-## 4. Backend (pendiente)
+## 4. Backend
 
-Decisión tomada, todavía no ejecutada:
+### 4.1 Configuración de la Application
 
-| Campo | Valor previsto |
+| Campo | Valor |
 | --- | --- |
-| Tipo | Application |
-| Build type | Railpack (alternativa: Nixpacks) |
+| Nombre | `backend` |
+| Source | Git, el mismo repositorio, branch `main` |
+| Build type | Railpack |
 | Build path | `backend` |
 | Puerto | `3001` |
-| Dominio | `api.<dominio>` |
-| Volumen | uno nombrado para `UPLOAD_DIR` |
-| Variables | `NODE_ENV`, `DATABASE_URL`, `CORS_ORIGINS`, `UPLOAD_DIR`, `UPLOAD_BASE_URL` |
+| Dominio | `rodando-api.201-32-133-8.sslip.io` |
+| Volumen | `backend-uploads` → `/data/uploads` |
+| Watch paths | `backend/**` |
+| Auto Deploy | activado, con webhook manual (§4.6) |
 
-Notas:
+Variables:
 
-- El build necesita fijar Node 22 y pnpm 12, que son las versiones del repositorio.
-- `DATABASE_URL` usa como host el nombre del servicio de la base en Dokploy
-  (`rodando-x-mza-databasae-eswxmc`), no una IP ni un puerto publicado. Se confirma
-  al desplegar.
-- `UPLOAD_BASE_URL` es la URL pública real de `/uploads` y queda guardada en
+```text
+NODE_ENV=production
+PORT=3001
+LOG_LEVEL=info
+DATABASE_URL=postgres://rodando:<password>@rodando-x-mza-databasae-eswxmc:5432/rodando
+CORS_ORIGINS=https://rodando-x-mza.201-32-133-8.sslip.io
+UPLOAD_DIR=/data/uploads
+UPLOAD_BASE_URL=https://rodando-api.201-32-133-8.sslip.io/uploads
+RAILPACK_START_CMD=pnpm start:migrate
+```
+
+- `NODE_ENV` es obligatorio y no tiene valor por defecto.
+- `DATABASE_URL` usa como host el nombre del servicio de la base, sin IP ni puerto
+  publicado. La password tiene que ser válida en una URL: letras, números, `-` y `_`.
+- `CORS_ORIGINS` es el origen exacto del portal, sin barra final ni path; la
+  configuración rechaza cualquier otra forma al arrancar.
+- `UPLOAD_DIR` es absoluto y coincide con el punto de montaje del volumen. Relativo,
+  dependería del working directory de la imagen.
+- `UPLOAD_BASE_URL` es la URL pública de `/uploads` y queda guardada en
   `reports.image_url` ([03 §7](03-despliegue-y-operacion.md#7-configuración-y-secretos)).
-- `NEXT_PUBLIC_API_URL` no aplica acá.
+- `RAILPACK_START_CMD` es una variable de **build**: Railpack hornea el comando de
+  arranque, así que un cambio exige reconstruir (§4.2).
 
-### 4.1 Migraciones
+### 4.2 Migraciones en el arranque
 
-`pnpm migrate` aplica las migraciones de `backend/migrations` y forma parte del
-despliegue del backend. Al vivir dentro de `backend/`, entran en el contexto de build y
-el comando puede correr dentro del contenedor. Todavía no está definido cómo se integra
-a la cadena de despliegue (paso previo al arranque o tarea aparte); se documenta cuando
-se resuelva. No es un paso de la base: la base solo aporta el motor y las extensiones.
+Las migraciones viven en `backend/migrations`, dentro del contexto de build, y
+`node-pg-migrate` es una dependencia de producción. El script las aplica antes de
+levantar la API:
 
-### 4.2 Carga del grafo
+```json
+"start:migrate": "node-pg-migrate up && node --env-file-if-exists=.env dist/index.js"
+```
 
-`pnpm import:osm` carga el extracto de la zona piloto
-([11](11-grafo-peatonal.md)). Es una **carga inicial**, no un paso recurrente: se
-corre una vez contra la base y se repite solo si se regenera el extracto. El archivo
-`data/pilot-zone.osm` se versiona como snapshot, así que el clone de Dokploy ya lo
-tiene; el import puede correr desde ahí sin copiar nada.
+Dokploy lo usa porque `RAILPACK_START_CMD` lo indica. Cada deploy aplica lo pendiente
+y, si no hay nada, el `up` es una consulta y sigue.
+
+Por qué es seguro:
+
+- **Es idempotente**: la tabla `pgmigrations` registra lo aplicado.
+- **Toma un advisory lock**: dos tareas simultáneas no migran a la vez.
+- **El CI ya lo prueba**: [08](08-integracion-continua.md) corre `pnpm migrate` contra
+  una base limpia en cada pull request, así que un error de sintaxis u orden no llega
+  a `main`.
+
+Si una migración falla en producción, el contenedor no arranca y el servicio queda
+caído hasta corregir. Es intencional: es preferible a servir con un esquema
+inconsistente. Con una réplica, `stop-first` es el orden de actualización adecuado;
+`start-first` evitaría la caída pero exige migraciones compatibles hacia atrás
+([03 §5](03-despliegue-y-operacion.md#5-base-de-datos-en-producción)).
+
+### 4.3 Verificación
+
+```bash
+curl -i https://rodando-api.201-32-133-8.sslip.io/api/health
+curl -i https://rodando-api.201-32-133-8.sslip.io/api/health/ready
+```
+
+El primero responde `{"status":"ok"}` si el proceso vive; el segundo agrega
+`"db":"up"` y es el que prueba la conexión con la base. Por HTTP responde 301 hacia
+HTTPS: el certificado lo emite Traefik aunque el panel advierta que sslip.io no
+soporta TLS.
+
+Un 503 con `"db":"down"` apunta a `DATABASE_URL` o a la red, no al dominio.
+
+### 4.4 Acceso por SSH y psql
+
+La base no se publica: se opera por SSH. El procedimiento completo —entrar al VPS,
+resolver el contenedor, abrir `psql` y ejecutar archivos en lote— está en §3.7 y es el
+mismo desde el backend. Para consultas sueltas alcanza con `\dt` para las tablas,
+`\dv` para las vistas y `\q` para salir.
+
+Los cambios de esquema **no** van por `psql`: van por una migración (§4.2).
+
+### 4.5 Carga inicial del grafo
+
+Es una carga única, no un paso del despliegue. El extracto se versiona, así que el
+clone de Dokploy ya lo tiene. El nombre del servicio lo genera Dokploy y se consulta
+con `docker service ls`:
+
+```bash
+SERVICE=$(docker service ls --format '{{.Name}}' | grep backend)
+C=$(docker ps -q --filter name="$SERVICE" --filter status=running | head -n1)
+
+docker cp /etc/dokploy/applications/"$SERVICE"/code/data/pilot-zone.osm "$C":/tmp/pilot-zone.osm
+docker exec "$C" node dist/importer/importer.cli.js /tmp/pilot-zone.osm
+```
+
+Corre en una sola transacción: si falla, no deja nada escrito. La corrida del MVP leyó
+332 vías, incluyó 84 y creó 329 veredas, 270 cruces y 378 cordones, con tres avisos de
+intersecciones en T sin tronco que no se derivan. Se repite solo si se regenera el
+extracto.
+
+Verificación:
+
+```bash
+DB=$(docker ps -q --filter name=rodando-x-mza-databasae --filter status=running | head -n1)
+docker exec "$DB" psql -U rodando -d rodando -c \
+  "select (select count(*) from sidewalks) as veredas,
+          (select count(*) from crossings) as cruces,
+          (select count(*) from kerb_nodes) as cordones"
+
+curl -s "https://rodando-api.201-32-133-8.sslip.io/api/graph?bbox=-68.849165,-32.893626,-68.839872,-32.885789" \
+  | head -c 300
+```
+
+La consulta responde un `FeatureCollection` con features. Counts en 0 y
+`features: []` significan que el import no escribió.
+
+### 4.6 Actualización automática
+
+El CI y el CD están separados: GitHub verifica el cambio y Dokploy despliega `main`.
+Con `main` protegido por los checks de [08](08-integracion-continua.md), solo llega a
+producción lo que pasó CI.
+
+El webhook **no está en General**: se copia desde la pestaña **Deployments** de la app
+y tiene esta forma:
+
+```
+https://dokploy-201-32-133-8.sslip.io/api/deploy/<refreshToken>
+```
+
+No tiene secret: el token de la URL es la credencial. Se configura en GitHub →
+Settings → Webhooks, con `application/json`, evento push y sin secret. El `ping`
+inicial responde 200.
+
+Las entregas se interpretan así:
+
+| Código | Significado |
+| --- | --- |
+| 200 | deploy encolado |
+| 301 | el branch o los watch paths no coinciden |
+| 400 | Auto Deploy está apagado |
+| 404 | el token no corresponde a ninguna app |
+
+`Watch Paths` en `backend/**` evita redeployar por cambios de documentación o del
+portal: un push que no toca esa carpeta responde 301 y no despliega.
+
+El orden importa al configurar `RAILPACK_START_CMD`: al ser una variable de build,
+tiene que estar cargada **antes** del merge que la necesita; si no, el build sale con
+el comando anterior.
 
 ## 5. Portal (pendiente)
 
@@ -348,7 +469,9 @@ tiene; el import puede correr desde ahí sin copiar nada.
 | Variables | `NEXT_PUBLIC_API_URL` |
 
 `NEXT_PUBLIC_API_URL` se inlinea en el build: tiene que estar cargada **antes** del
-primer deploy y cualquier cambio de URL obliga a reconstruir.
+primer deploy y cualquier cambio de URL obliga a reconstruir. El origen
+`https://rodando-x-mza.201-32-133-8.sslip.io` ya está en el `CORS_ORIGINS` del backend
+(§4.1), así que el portal tiene que quedar en ese host.
 
 ## 6. APK (pendiente)
 
@@ -360,9 +483,10 @@ Solo necesita que la API tenga una URL pública, que es la del backend del §4.
 
 - [x] VPS con Dokploy y proyecto creado.
 - [x] Base de datos desplegada con PostGIS y pgRouting verificados.
+- [x] Backend desplegado, con migraciones integradas al despliegue.
+- [x] Carga inicial del grafo.
+- [x] Auto-deploy de `main` con el webhook de Dokploy.
 - [ ] Volumen de la base con backup.
-- [ ] Backend desplegado, con migraciones integradas al despliegue.
-- [ ] Carga inicial del grafo.
 - [ ] Portal desplegado.
 - [ ] APK compilado contra la API de producción.
 
