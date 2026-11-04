@@ -1,10 +1,10 @@
 # Portal de moderación
 
 Aplicación Next.js que muestra el grafo peatonal de accesibilidad del microcentro
-de Mendoza y permite corregir el nivel de accesibilidad de un elemento (C014). Hoy
-hace tres cosas: dibuja lo que devuelve `GET /api/graph`, muestra las propiedades
-del elemento que se selecciona y escribe su nivel con un `PATCH`, con un moderador
-simulado.
+de Mendoza y permite corregir el nivel de accesibilidad de un elemento (C014). El
+mapa es **uno solo** y tiene tres herramientas —grafo, ruta y obstáculos— como
+pestañas, con un panel de capas para prender y apagar lo que se dibuja; la cola de
+reportes ciudadanos es una pantalla aparte. Todo con un moderador simulado.
 
 Los pasos completos —base, backend y portal— están en
 [docs/05-desarrollo.md](../docs/05-desarrollo.md) §4. Las decisiones del portal

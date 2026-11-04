@@ -42,7 +42,7 @@ placesRouter.get('/:id', async (req, res) => {
 
 // POST /api/places
 placesRouter.post('/', async (req, res) => {
-  const body = req.body ?? {};
+  const body: unknown = req.body ?? {};
   const parsed = createPlaceBodySchema.safeParse(body);
 
   if (!parsed.success) {
@@ -70,7 +70,7 @@ placesRouter.patch('/:id', async (req, res) => {
     );
   }
 
-  const body = req.body ?? {};
+  const body: unknown = req.body ?? {};
   const parsedBody = updatePlaceBodySchema.safeParse(body);
   if (!parsedBody.success) {
     throw new HttpError(

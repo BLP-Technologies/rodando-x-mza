@@ -126,17 +126,21 @@ de la geometría de las calles, no de mirar una imagen.
 
 ## 4. Qué se versiona
 
-| Se versiona | No se versiona |
+| Se versiona | Qué es |
 | --- | --- |
-| `data/pilot-zone.geojson` (el recorte) | `data/pilot-zone.osm` (el extracto) |
-| `scripts/fetch-pilot-zone-osm.mjs` (cómo se obtiene) | |
-| La procedencia: fecha, endpoint, conteos y hash | |
+| `data/pilot-zone.geojson` | El recorte que delimita la zona |
+| `data/pilot-zone.osm` | El snapshot del extracto que alimenta el grafo del MVP |
+| `scripts/fetch-pilot-zone-osm.mjs` | Cómo se genera el extracto |
+| La procedencia: fecha, endpoint, conteos y hash | Qué archivo es y de dónde salió |
 
-El criterio del issue decía "por tamaño", y el tamaño no es el argumento: son 204 KB. El
-argumento es que el extracto es **un artefacto derivado y mutable**. Versionarlo daría un
-archivo que dice una cosa y una realidad de OSM que dice otra tres meses después, y no
-habría forma de saber cuál es cuál. El recorte y el script no cambian solos; el extracto
-sí. Está en `.gitignore`.
+El extracto es **un artefacto derivado y mutable**: OSM cambia todos los meses. Por eso
+se versiona como **snapshot congelado**, no como fuente viva: el archivo commiteado es el
+que define el grafo del MVP ([11](11-grafo-peatonal.md)), y regenerarlo es una decisión
+explícita que cambia ese grafo, no una tarea periódica. La procedencia documentada
+(fecha, endpoint, conteos y hash) permite saber de qué descarga salió.
+
+Los extractos nuevos y los `.pbf` no se versionan
+([`data/README.md`](../data/README.md)).
 
 ## 5. Qué hay en la zona
 

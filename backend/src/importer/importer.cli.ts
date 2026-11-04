@@ -7,7 +7,8 @@ import { importOsm } from './importer.run.js';
  * `pnpm import:osm [ruta]`: importa el extracto y deja el reporte en la salida.
  *
  * La ruta por defecto es relativa a `backend/`, que es desde donde corre el script; el
- * extracto no se versiona (docs/10 §4), así que si no está el error dice cómo generarlo.
+ * extracto se versiona como snapshot (docs/10 §4), así que si falta el error dice cómo
+ * generarlo.
  */
 const DEFAULT_EXTRACT = '../data/pilot-zone.osm';
 
