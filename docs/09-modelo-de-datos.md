@@ -295,9 +295,25 @@ mismo pozo. Entonces la columna vive en el lado que se repite —`reports.obstac
 nullable y sin `UNIQUE`— y no al revés. Un único `obstacles.report_id` no podría
 representar dos reportes del mismo obstáculo sin duplicar el obstáculo.
 
+**El autor.** `reports.user_id` es **nullable**, aunque la columna nació `NOT NULL`
+con FK a `users`. La razón es de fase: no hay autenticación (Fase 3) ni una sola fila
+en `users`, así que exigir el autor haría imposible el único caso que existe hoy, que
+alguien reporte un pozo sin tener cuenta. Un reporte anónimo es legítimo mientras no
+haya login; cuando lo haya, el reporte autenticado vuelve a completar el campo. La
+alternativa descartada —sembrar un usuario "ciudadano"— deja una fila de mentira que
+después hay que deshacer con un `UPDATE` masivo
+([17 §6](17-la-api-de-reportes.md#6-el-reporte-anónimo)).
+
 **El flujo de aprobación** (C012) crea el obstáculo y, en la misma transacción, marca
 el reporte: `status = 'APPROVED'` y `obstacle_id` con el id nuevo. Aprobar significa
-crear el obstáculo; no hay estado aprobado sin obstáculo.
+crear el obstáculo; no hay estado aprobado sin obstáculo
+([18 §6](18-la-api-de-obstaculos.md#6-el-puente-de-un-reporte-a-un-obstáculo)).
+
+**Los dos ciclos de vida no se sincronizan en el MVP.** Resolver el obstáculo (C013) no
+toca el reporte que lo originó: el reporte sigue `APPROVED`, que es lo que ocurrió —se
+aprobó— y no el estado de la barrera. Los estados `UNDER_REPAIR` y `RESOLVED` del enum de
+reportes quedan sin uso. Es un límite conocido y no un olvido: sincronizarlos pediría que
+cada cierre escribiera en dos tablas para un dato que el mapa ya muestra en el obstáculo.
 
 **Los duplicados** no necesitan diseño propio en el MVP: el moderador aprueba uno y
 los demás se marcan `REJECTED`, que ya es el estado previsto para "duplicado". Si más
@@ -315,9 +331,14 @@ rampa es la pieza que une vereda y calzada, y en el modelo es el `kerb_node`. Un
 esquema que solo permitiera colgar obstáculos de veredas dejaría sin lugar el tipo más
 específico de una aplicación de accesibilidad.
 
-Colar de **cero** elementos es válido: el `geom` del obstáculo es la fuente de verdad
-de dónde está. El vínculo con el elemento es un enriquecimiento que el portal resuelve
-con el punto, y existe para que el ruteo pueda penalizar el elemento correcto.
+**Un obstáculo siempre cuelga de un elemento.** El `geom` sigue siendo la verdad de dónde
+está y no se mueve, pero el vínculo no es opcional: lo decide el servidor pegando el punto
+al elemento más cercano —vereda, cruce o cordón—, y si no hay ninguno dentro del radio, el
+alta se rechaza ([18 §3](18-la-api-de-obstaculos.md#3-el-alta)). La razón es de producto:
+un obstáculo sin vínculo no cambia ningún costo, así que sería una fila en el mapa que no
+afecta al ruteo y que el moderador no tiene con qué vincular desde la pantalla. La primera
+versión de este documento aceptaba cero elementos como caso válido; el flujo real lo
+descartó.
 
 **Obstáculo y nivel de accesibilidad no se reemplazan.** Un obstáculo es un **evento**
 —tiene fecha, autor, severidad y un ciclo de vida que termina al resolverse—; el nivel
@@ -432,8 +453,10 @@ una obra puede ocupar todo el ancho de la vereda o una parte—, así que el dat
 enum, `CRITICAL` pasa a significar "no se puede pasar" y ya no puede significar "muy malo,
 pero pasable". Si ese matiz hiciera falta, se agrega un nivel al enum (§5), no una columna.
 
-**Obstáculos activos** son los que tienen `is_resolved = false` y `deleted_at IS NULL`. El
-estado del reporte no entra en el costo: un reporte `UNDER_REPAIR` cuyo obstáculo sigue
+**Obstáculos activos** son los que tienen `resolved_at IS NULL` y `deleted_at IS NULL`. El
+estado y la fecha son el mismo dato, así que no hay un booleano al lado: resolver escribe
+`resolved_at` y la vista lo lee ([18 §2](18-la-api-de-obstaculos.md#2-qué-es-un-obstáculo-y-cómo-se-cierra)).
+El estado del reporte no entra en el costo: un reporte `UNDER_REPAIR` cuyo obstáculo sigue
 activo describe una barrera que sigue en la calle.
 
 **En un nodo, solo se honra el bloqueo.** Los metros son una cantidad de arista y un
@@ -481,14 +504,14 @@ porque la unidad de costo es la arista y el modelo no tiene barreras en el medio
 aristas ya se cortan en cada nodo, así que en el peor caso se pierde una cuadra.
 
 El arreglo correcto no es afinar el costo por metro: es **partir la arista en el punto del
-obstáculo** cuando el moderador lo vincula, con ese punto convertido en un `kerb_node` nuevo
+obstáculo** cuando el moderador lo publica, con ese punto convertido en un `kerb_node` nuevo
 y las dos mitades heredando nivel y verificación. No entra en el MVP por una razón que no es
 de esquema: sería la primera vez que el portal modifica el grafo, y eso exige que el
 importador respete los cortes al reimportar, cosa que hoy no puede porque `crossings` no
 tiene identificador externo (§8). Se revisa cuando el importador sea idempotente. Mientras
-tanto, el portal puede avisar, al vincular un obstáculo a un tramo, que en el ruteo esa
+tanto, el portal puede avisar, al publicar un obstáculo sobre un tramo, que en el ruteo esa
 barrera bloquea la cuadra entera y no solo el punto: la limitación queda visible en lugar de
-sorpresiva.
+sorpresiva. Hoy no lo dice, y la pantalla de obstáculos tampoco lo explica.
 
 #### Consecuencias
 
@@ -707,3 +730,5 @@ actualizar y la columna sería peso muerto.
   OpenStreetMap no se pueden modelar.
 - [12-relevamiento-de-accesibilidad.md](12-relevamiento-de-accesibilidad.md): de dónde sale
   el dato de accesibilidad, qué significa cada nivel en la calle y cómo se registra.
+- [18-la-api-de-obstaculos.md](18-la-api-de-obstaculos.md): cómo se publica y se cierra un
+  obstáculo, y cómo nace de un reporte aprobado.

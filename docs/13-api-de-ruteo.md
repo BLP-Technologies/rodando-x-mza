@@ -278,8 +278,10 @@ puntos, que es exactamente lo que el modelo quiere que pase.
   [09 §4.7](09-modelo-de-datos.md); acá sólo se consumen.
 - **La distancia máxima de pegado.** Hoy la acota la red de seguridad indirectamente. Si
   aparece un caso de una punta aceptada que se pega lejísimos, se acota acá.
-- **Los obstáculos por tramo.** El detalle no los enumera: hoy no hay obstáculos cargados,
-  y su efecto ya está en el costo. Se agrega cuando el portal pueda vincularlos.
+- **Los obstáculos por tramo.** El detalle de un tramo no los enumera: su efecto ya está
+  en el costo, y el obstáculo se lee por la API de obstáculos
+  ([18](18-la-api-de-obstaculos.md)). Se agrega al contrato de ruteo el día que el cliente
+  de un recorrido necesite saber **por qué** cuesta lo que cuesta.
 - **Buscar por dirección o por nombre de calle.** Es una funcionalidad propia, no está en
   ninguna fase y no la necesita C003 (§2).
 - **La degradación cuando la base no responde.** El diagrama de actividades la muestra;

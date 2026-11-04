@@ -8,25 +8,31 @@
  * `map-panel.tsx`, con `next/dynamic` y `ssr: false` (ver el comentario de ahí y
  * [16 §5](../../docs/16-el-portal.md)).
  *
+ * **El mapa y las capas se manejan a mano, sin `react-leaflet`.** Su `MapContainer`
+ * crea el mapa una vez y lo destruye en el cleanup de su efecto, pero no lo vuelve a
+ * crear si React re-monta el mismo componente: como `Map.remove()` vacía `_panes`, las
+ * capas que después se le agregaban reventaban en `getPane(...).appendChild` al volver
+ * al grafo desde otra pantalla. Con el ciclo en nuestras manos, cada montaje crea un
+ * mapa nuevo y lo destruye al desmontarse, y las capas se dibujan por efectos sobre ese
+ * mapa: no hay instancia que sobreviva a su propio `remove()`.
+ *
  * Los datos se piden desde el navegador: el build del portal corre en CI, donde
  * no hay backend, así que nada de lo que se dibuja acá puede depender de un
  * `fetch` de prerender.
+ *
+ * **El montaje de Leaflet no vive acá**: crear el mapa, los tiles, la vista inicial y el
+ * `LayerGroup` lo hace `use-leaflet-map.ts`, que es el que comparten las tres pantallas
+ * con mapa ([16 §5.1](../../docs/16-el-portal.md)). Este archivo se queda con lo propio del
+ * grafo: pedir el área, dibujar los elementos, encuadrar con la primera respuesta y
+ * repintar la selección.
  */
 
 import "leaflet/dist/leaflet.css";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import type { LatLngBounds, LatLngBoundsLiteral } from "leaflet";
-import {
-  CircleMarker,
-  MapContainer,
-  Polygon,
-  Polyline,
-  TileLayer,
-  useMap,
-  useMapEvents,
-} from "react-leaflet";
+import * as L from "leaflet";
+import type { LatLngBoundsLiteral } from "leaflet";
 
 import { describeApiError } from "@/api/error-messages";
 import {
@@ -34,25 +40,22 @@ import {
   readGraph,
   roundBBox,
   type GraphFeature,
+  type GraphLevel,
   type ServiceArea,
 } from "@/api/graph";
 import { PILOT_BOUNDS, type BBox } from "@/config";
 import { FeatureDetails } from "./feature-details";
 import { lineStyle, pointStyle, serviceAreaStyle } from "./feature-style";
+import { useLeafletMap } from "./use-leaflet-map";
 
 /** Cuánto se espera después de un paneo antes de pedir el área nueva. */
 const DEBOUNCE_MS = 300;
 
 /** Las veredas y los cruces son líneas; los cordones, puntos. */
 type LineFeature = Extract<GraphFeature, { geometry: { type: "LineString" } }>;
-type PointFeature = Extract<GraphFeature, { geometry: { type: "Point" } }>;
 
 function isLineFeature(feature: GraphFeature): feature is LineFeature {
   return feature.geometry.type === "LineString";
-}
-
-function isPointFeature(feature: GraphFeature): feature is PointFeature {
-  return feature.geometry.type === "Point";
 }
 
 /** La clave de selección: identifica el elemento sin depender del objeto. */
@@ -107,82 +110,16 @@ function boundsOf(
   ];
 }
 
-/** La caja del piloto, en la forma que espera Leaflet. */
-const PILOT_VIEW: LatLngBoundsLiteral = [
-  [PILOT_BOUNDS.minLat, PILOT_BOUNDS.minLon],
-  [PILOT_BOUNDS.maxLat, PILOT_BOUNDS.maxLon],
-];
-
-const TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
-
-/**
- * El texto de atribución de OSM. Leaflet lo dibuja en su control de atribución
- * a partir del `attribution` de la capa de tiles: es obligatorio porque los
- * datos son ODbL 1.0 ([10 §3](../../docs/10-datos-y-zona-piloto.md)).
- */
-const OSM_ATTRIBUTION =
-  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
-
-/**
- * Los eventos del mapa que importan, con el `map` de react-leaflet en la mano.
- *
- * Tiene que ser un hijo de `MapContainer`: el mapa existe recién cuando el
- * contenedor lo crea, así que un `ref` en el padre todavía está vacío en el
- * primer efecto y sus listeners no se engancharían nunca.
- */
-function MapEvents({
-  onMoveEnd,
-  onMapClick,
-}: {
-  onMoveEnd: (bounds: LatLngBounds) => void;
-  onMapClick: () => void;
-}) {
-  const map = useMap();
-
-  useMapEvents({
-    moveend: () => onMoveEnd(map.getBounds()),
-    click: () => onMapClick(),
-  });
-
-  return null;
-}
-
-/**
- * Acomoda la vista al grafo de la primera respuesta. Después manda el usuario:
- * si el mapa se reencuadrara en cada paneo, no se podría panear.
- */
 /**
  * Acomoda la vista al grafo de la primera respuesta. Después manda el usuario: si
  * el mapa se reencuadrara en cada paneo, no se podría panear.
- *
- * Una sola vez por montaje: el `ref` lo garantiza aunque el componente se
- * re-renderice con cada refetch o cambio de bbox.
  */
-function FitBounds({
-  bounds,
-  suppressMoveEndRef,
-}: {
-  bounds: LatLngBoundsLiteral | null;
-  suppressMoveEndRef: React.RefObject<boolean>;
-}) {
-  const map = useMap();
-  const applied = useRef(false);
-
-  useEffect(() => {
-    if (applied.current || !bounds) return;
-    applied.current = true;
-
-    // `animate: false` dispara `moveend` de forma sincrónica, así que la
-    // bandera lo tapa y no pedimos dos veces el mismo grafo.
-    suppressMoveEndRef.current = true;
-    map.fitBounds(bounds, { padding: [24, 24], animate: false });
-    suppressMoveEndRef.current = false;
-  }, [map, bounds, suppressMoveEndRef]);
-
-  return null;
-}
-
 export default function GraphMap() {
+  /** La capa y el nivel de cada elemento, para repintar sólo el que cambia de estado. */
+  const drawnRef = useRef(new Map<string, { path: L.Path; level: GraphLevel }>());
+  const previousSelectedRef = useRef<string | null>(null);
+  const appliedBoundsRef = useRef(false);
+
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const suppressMoveEnd = useRef(false);
 
@@ -190,6 +127,32 @@ export default function GraphMap() {
   // único disparador de un pedido nuevo.
   const [bbox, setBbox] = useState<BBox>(PILOT_BOUNDS);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  /**
+   * El mapa lo monta el hook compartido; acá sólo se le dice qué hacer con el clic y con
+   * el final de un paneo.
+   */
+  const { containerRef, mapRef, layersRef } = useLeafletMap({
+    // Un clic en el fondo del mapa suelta la selección.
+    onClick: () => setSelectedId(null),
+    // Paneo o zoom terminado: cambiar el área, con espera. `fitBounds` del encuadre
+    // inicial dispara este mismo evento, y la bandera lo tapa.
+    onMoveEnd: (bounds) => {
+      if (suppressMoveEnd.current) return;
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+
+      debounceRef.current = setTimeout(() => {
+        setBbox(
+          roundBBox({
+            minLon: bounds.getWest(),
+            minLat: bounds.getSouth(),
+            maxLon: bounds.getEast(),
+            maxLat: bounds.getNorth(),
+          }),
+        );
+      }, DEBOUNCE_MS);
+    },
+  });
 
   const { data, error, isPending, refetch } = useQuery({
     queryKey: graphQueryKey(bbox),
@@ -203,9 +166,12 @@ export default function GraphMap() {
     retry: 1,
   });
 
-  const features = data?.features ?? [];
+  const features = useMemo(() => data?.features ?? [], [data]);
   const truncated = data?.truncated ?? false;
-  const serviceAreas = data?.service_areas.features ?? [];
+  const serviceAreas = useMemo(
+    () => data?.service_areas.features ?? [],
+    [data],
+  );
 
   /** Los nombres de las áreas activas, para la leyenda del mapa. */
   const areaNames = serviceAreas.map((area) => area.properties.name).join(", ");
@@ -219,22 +185,71 @@ export default function GraphMap() {
     [data],
   );
 
-  /** Paneo o zoom terminado: cambiar el área, con espera. */
-  const onMoveEnd = (bounds: LatLngBounds) => {
-    if (suppressMoveEnd.current) return;
-    if (debounceRef.current) clearTimeout(debounceRef.current);
+  /** El grafo y las áreas, redibujados cuando cambian los datos. */
+  useEffect(() => {
+    const layers = layersRef.current;
+    if (layers === null) return;
 
-    debounceRef.current = setTimeout(() => {
-      setBbox(
-        roundBBox({
-          minLon: bounds.getWest(),
-          minLat: bounds.getSouth(),
-          maxLon: bounds.getEast(),
-          maxLat: bounds.getNorth(),
-        }),
-      );
-    }, DEBOUNCE_MS);
-  };
+    layers.clearLayers();
+    drawnRef.current.clear();
+
+    // Las áreas van primero: el orden de alta es el orden de pintado, así que el
+    // grafo queda encima del borde de la zona.
+    for (const area of serviceAreas) {
+      layers.addLayer(new L.Polygon(areaRing(area), serviceAreaStyle()));
+    }
+
+    for (const feature of features) {
+      const id = featureId(feature);
+      const level = feature.properties.level;
+      const path: L.Path = isLineFeature(feature)
+        ? new L.Polyline(feature.geometry.coordinates.map(toLatLng), lineStyle(level, false))
+        : new L.CircleMarker(
+            toLatLng(feature.geometry.coordinates),
+            pointStyle(level, false),
+          );
+
+      // `bubblingMouseEvents: false` en el estilo evita que el clic llegue al fondo
+      // del mapa, que es el que suelta la selección.
+      path.on("click", () => setSelectedId(id));
+      layers.addLayer(path);
+      drawnRef.current.set(id, { path, level });
+    }
+  }, [features, serviceAreas, layersRef]);
+
+  /** El repintado de la selección: sólo las dos capas que cambian, no las 977. */
+  useEffect(() => {
+    const paint = (id: string | null, isSelected: boolean) => {
+      if (id === null) return;
+      const drawn = drawnRef.current.get(id);
+      if (drawn === undefined) return;
+
+      if (drawn.path instanceof L.CircleMarker) {
+        const style = pointStyle(drawn.level, isSelected);
+        drawn.path.setStyle(style);
+        drawn.path.setRadius(style.radius ?? 5);
+      } else {
+        drawn.path.setStyle(lineStyle(drawn.level, isSelected));
+      }
+    };
+
+    paint(previousSelectedRef.current, false);
+    paint(selectedId, true);
+    previousSelectedRef.current = selectedId;
+  }, [selectedId]);
+
+  /** El encuadre inicial, una sola vez por montaje y cuando llega la primera respuesta. */
+  useEffect(() => {
+    const map = mapRef.current;
+    if (map === null || appliedBoundsRef.current || firstBounds === null) return;
+    appliedBoundsRef.current = true;
+
+    // `animate: false` dispara `moveend` de forma sincrónica, así que la bandera lo
+    // tapa y no pedimos dos veces el mismo grafo.
+    suppressMoveEnd.current = true;
+    map.fitBounds(firstBounds, { padding: [24, 24], animate: false });
+    suppressMoveEnd.current = false;
+  }, [firstBounds, mapRef]);
 
   // No dejar un pedido agendado cuando el mapa se desmonta.
   useEffect(
@@ -244,67 +259,10 @@ export default function GraphMap() {
     [],
   );
 
-  const lines = features.filter(isLineFeature);
-  const points = features.filter(isPointFeature);
-
   return (
     <div className="flex h-full min-h-0">
       <div className="relative min-w-0 flex-1">
-        <MapContainer
-          bounds={PILOT_VIEW}
-          minZoom={13}
-          maxZoom={19}
-          className="h-full w-full"
-        >
-          <TileLayer
-            url={TILE_URL}
-            attribution={OSM_ATTRIBUTION}
-            maxZoom={19}
-          />
-
-          <FitBounds
-            bounds={firstBounds}
-            suppressMoveEndRef={suppressMoveEnd}
-          />
-          <MapEvents
-            onMoveEnd={onMoveEnd}
-            onMapClick={() => setSelectedId(null)}
-          />
-
-          {/* Los polígonos van antes del grafo: en Leaflet el orden de montaje es
-              el orden de pintado, así el área queda por debajo de las líneas. */}
-          {serviceAreas.map((area) => (
-            <Polygon
-              key={area.properties.id}
-              positions={areaRing(area)}
-              pathOptions={serviceAreaStyle()}
-            />
-          ))}
-
-          {lines.map((feature) => (
-            <Polyline
-              key={featureId(feature)}
-              positions={feature.geometry.coordinates.map(toLatLng)}
-              pathOptions={lineStyle(
-                feature.properties.level,
-                featureId(feature) === selectedId,
-              )}
-              eventHandlers={{ click: () => setSelectedId(featureId(feature)) }}
-            />
-          ))}
-
-          {points.map((feature) => (
-            <CircleMarker
-              key={featureId(feature)}
-              center={toLatLng(feature.geometry.coordinates)}
-              pathOptions={pointStyle(
-                feature.properties.level,
-                featureId(feature) === selectedId,
-              )}
-              eventHandlers={{ click: () => setSelectedId(featureId(feature)) }}
-            />
-          ))}
-        </MapContainer>
+        <div ref={containerRef} className="h-full w-full" />
 
         {serviceAreas.length > 0 && (
           <p className="pointer-events-none absolute left-12 top-3 z-[1100] flex items-center gap-2 rounded bg-white/95 px-3 py-1.5 text-sm text-slate-700 shadow">

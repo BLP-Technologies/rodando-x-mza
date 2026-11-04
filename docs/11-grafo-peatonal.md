@@ -485,9 +485,13 @@ Las tres protecciones que acompañan al upsert:
 
 1. **Reanclaje por geometría.** Si un obstáculo apunta a un elemento que la nueva
    corrida no generó, se busca la vereda más cercana a su `geom` (a menos de ~5 m).
-2. **Sin vínculo antes que vínculo falso.** Si no hay ninguna cerca, el obstáculo
-   queda sin vínculo: en [09 §4.5](09-modelo-de-datos.md#45-reporte-y-obstáculo)
-   colgar un obstáculo de cero elementos es válido y su `geom` es la fuente de verdad.
+2. **Sin vínculo es una excepción que se avisa.** El alta de la API no crea un obstáculo
+   sin elemento: el punto se pega al más cercano y, si no hay ninguno, se rechaza
+   ([09 §4.5](09-modelo-de-datos.md#45-reporte-y-obstáculo),
+   [18 §3](18-la-api-de-obstaculos.md#3-el-alta)). Una fila vieja que perdió su elemento en
+   una reimportación no puede rechazarse sola, así que queda sin vínculo —el `geom` sigue
+   siendo la fuente de verdad de dónde está— y se reporta como aviso para que el moderador la
+   vuelva a publicar. El `CHECK` del esquema lo permite; lo que no lo permite es el alta.
 3. **Reporte de la corrida.** Cuántos nodos, veredas y cruces se crearon, se
    actualizaron y se reanclaron, cuántos quedaron sin vínculo, y los avisos de §3.2,
    §3.6 y §3.7. Es lo que convierte una imperfección del extracto en algo visible.

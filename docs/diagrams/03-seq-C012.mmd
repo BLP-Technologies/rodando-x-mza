@@ -27,7 +27,7 @@ sequenceDiagram
     deactivate UI
 
     %% Fase 2: Creación del obstáculo
-    M ->> UI: Selecciona un reporte y presiona<br/>"Aprobar y Crear obstáculo"
+    M ->> UI: Selecciona un reporte y presiona<br/>"Crear obstáculo"
 
     activate UI
 
@@ -38,14 +38,14 @@ sequenceDiagram
         deactivate ST
     end
 
-    UI ->> B: POST /api/obstacles (reportId, location, obstacleType, severity)
+    UI ->> B: POST /api/reports/{id}/approve (type, severity)
 
     activate B
 
-    Note over B,DB: Inicia transacción BD:<br/>1. Registra el obstáculo formal<br/>2. Cambia estado del reporte a 'APPROVED'<br/>Sin UPDATE de pesos: el costo se calcula en cada consulta (09 §4.7)
+    Note over B,DB: Inicia transacción BD:<br/>1. Lee el reporte con FOR UPDATE (409 si no está PENDING)<br/>2. Pega el punto del reporte al elemento del grafo más cercano (400 NO_NEARBY_ELEMENT si no hay ninguno)<br/>3. Registra el obstáculo formal<br/>4. Cambia el estado del reporte a 'APPROVED' y lo apunta al obstáculo<br/>Sin UPDATE de pesos: el costo se calcula en cada consulta (09 §4.7)
 
     B ->> DB: BEGIN TRANSACTION
-    B ->> DB: INSERT INTO obstacles (sidewalk_id, ubicación, tipo, severidad)
+    B ->> DB: INSERT INTO obstacles (sidewalk_id | kerb_node_id | crossing_id, geom, type_id, severity)
     B ->> DB: UPDATE reports SET status = 'APPROVED', obstacle_id = nuevoId WHERE id = reportId
     B ->> DB: COMMIT
 

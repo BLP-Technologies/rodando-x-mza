@@ -2,7 +2,9 @@ import { Router } from 'express';
 import { graphRouter } from './graph/graph.routes.js';
 import { docsRouter } from './http/docs.js';
 import { healthRouter } from './http/health.js';
+import { obstaclesRouter } from './obstacles/obstacles.routes.js';
 import { openApiDocument } from './openapi.js';
+import { reportsRouter } from './reports/reports.routes.js';
 import { routingRouter } from './routing/routing.routes.js';
 import { placesRouter } from './places/places.routes.js';
 
@@ -12,7 +14,12 @@ export const apiRouter = Router();
 apiRouter.use('/health', healthRouter);
 apiRouter.use('/graph', graphRouter);
 apiRouter.use('/routes', routingRouter);
+<<<<<<< HEAD
 apiRouter.use('/places', placesRouter);
+=======
+apiRouter.use('/reports', reportsRouter);
+apiRouter.use('/obstacles', obstaclesRouter);
+>>>>>>> origin/main
 apiRouter.use('/docs', docsRouter);
 
 /**

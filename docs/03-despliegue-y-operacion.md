@@ -162,6 +162,21 @@ no se recomienda. El crecimiento esperado lo absorbe primero el disco
   las teselas se sirven por un servicio basado en OpenStreetMap que no requiere
   clave (ver §12).
 
+### Archivos de los reportes
+
+- **`UPLOAD_DIR`** apunta a un **volumen persistente**, no a un directorio del
+  contenedor: un `uploads/` efímero se borra al recrear el servicio y deja los
+  reportes apuntando a imágenes que ya no existen. Es el mismo volumen que entra
+  en el respaldo (§9).
+- **`UPLOAD_BASE_URL`** es la **URL pública real** de esos archivos, sin barra
+  final, y es la que queda guardada en `reports.image_url`. Se sirve por el mismo
+  dominio de la API (`/uploads`); quien contesta ese camino puede ser el propio
+  backend o el proxy, y el contrato no cambia
+  ([17 §4](17-la-api-de-reportes.md#4-las-imágenes)).
+- Cambiar de disco a un gestor de archivos es escribir otro adaptador del puerto
+  `ImageStorage` y cambiar `UPLOAD_BASE_URL`; las URLs ya guardadas quedan
+  apuntando al dominio viejo hasta que se migren.
+
 ## 8. Procedimiento de despliegue
 
 **Primer despliegue (una sola vez).** Antes del primer arranque hay que aprovisionar
