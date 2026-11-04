@@ -3,10 +3,11 @@
 /**
  * El mapa de los obstáculos, sobre Leaflet.
  *
- * Es el mismo montaje a mano que `map/graph-map.tsx`, por la misma razón: cada montaje crea
- * un mapa nuevo y lo destruye al desmontarse, y las capas se dibujan por efectos sobre esa
- * instancia ([16 §5.1](../../docs/16-el-portal.md)). Sin `react-leaflet`, no hay un mapa que
- * sobreviva a su propio `remove()`.
+ * Es el mismo montaje a mano que `map/graph-map.tsx`, y por la misma razón: cada montaje
+ * crea un mapa nuevo y lo destruye al desmontarse, y las capas se dibujan por efectos sobre
+ * esa instancia ([16 §5.1](../../docs/16-el-portal.md)). El montaje en sí —tiles, vista
+ * inicial, `LayerGroup`, clic por ref— vive en `map/use-leaflet-map.ts`, que comparten las
+ * tres pantallas con mapa.
  *
  * **No dibuja el grafo.** Acá la pregunta es dónde está publicado un obstáculo; las veredas,
  * los cruces y el control de capas son de otra pantalla ([16 §9](../../docs/16-el-portal.md)).
@@ -17,29 +18,12 @@
 
 import 'leaflet/dist/leaflet.css';
 
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import * as L from 'leaflet';
-import type { LatLngBoundsLiteral } from 'leaflet';
 
 import type { ObstacleFeature } from '@/api/obstacles';
-import { PILOT_BOUNDS } from '@/config';
+import { useLeafletMap } from '@/map/use-leaflet-map';
 import { RESOLVED_MARKER_COLOR, SEVERITY_MARKER_COLORS } from './obstacle-labels';
-
-const TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
-
-/** La atribución de OSM es obligatoria porque los datos son ODbL 1.0 ([10 §3]). */
-const OSM_ATTRIBUTION =
-  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
-
-/** Más lejos que el piloto no aporta y más cerca se pierde el barrio. */
-const MIN_ZOOM = 13;
-const MAX_ZOOM = 19;
-
-/** La caja del piloto, en la forma que espera Leaflet. */
-const PILOT_VIEW: LatLngBoundsLiteral = [
-  [PILOT_BOUNDS.minLat, PILOT_BOUNDS.minLon],
-  [PILOT_BOUNDS.maxLat, PILOT_BOUNDS.maxLon],
-];
 
 /** Un punto en WGS 84, en el orden que usa la API (y no el de Leaflet). */
 export type MapPoint = { lon: number; lat: number };
@@ -95,54 +79,21 @@ export function ObstaclesMap({
   onPickPoint,
   draftPoint,
 }: ObstaclesMapProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const layersRef = useRef<L.LayerGroup | null>(null);
-
   /**
-   * Lo que hace un clic en el mapa, en un ref.
-   *
-   * El listener vive lo que vive el mapa, así que no puede volver a engancharse en cada
-   * render: el ref le deja leer el modo actual sin recrear la instancia.
+   * Lo que hace un clic en el mapa: en modo "elegí el punto" fija el punto, y si no
+   * suelta la selección. El hook lo guarda en un ref, así que el listener no se vuelve a
+   * enganchar en cada render.
    */
-  const handleClickRef = useRef<(latlng: L.LatLng) => void>(() => {});
-
-  useEffect(() => {
-    handleClickRef.current = (latlng) => {
+  const { containerRef, layersRef } = useLeafletMap({
+    onClick: (latlng) => {
       if (picking) {
         onPickPoint({ lon: latlng.lng, lat: latlng.lat });
         return;
       }
 
       onSelect(null);
-    };
-  }, [picking, onPickPoint, onSelect]);
-
-  /** El mapa: se crea al montar y se destruye al desmontar. */
-  useEffect(() => {
-    const container = containerRef.current;
-    if (container === null) return;
-
-    const map = new L.Map(container, { minZoom: MIN_ZOOM, maxZoom: MAX_ZOOM });
-    map.fitBounds(PILOT_VIEW);
-    new L.TileLayer(TILE_URL, {
-      attribution: OSM_ATTRIBUTION,
-      maxZoom: MAX_ZOOM,
-    }).addTo(map);
-
-    const layers = new L.LayerGroup().addTo(map);
-    map.on('click', (event) => handleClickRef.current(event.latlng));
-
-    layersRef.current = layers;
-
-    return () => {
-      // Primero se vacía lo dibujado: soltar las capas después de `remove()` deja
-      // manejadores apuntando a un mapa destruido.
-      layers.clearLayers();
-      map.off();
-      map.remove();
-      layersRef.current = null;
-    };
-  }, []);
+    },
+  });
 
   /**
    * Los marcadores, redibujados cuando cambian los datos o la selección.
@@ -182,7 +133,7 @@ export function ObstaclesMap({
         }),
       );
     }
-  }, [obstacles, selectedId, picking, draftPoint, onSelect]);
+  }, [obstacles, selectedId, picking, draftPoint, onSelect, layersRef]);
 
   return <div ref={containerRef} className="h-full w-full" />;
 }

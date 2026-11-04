@@ -19,6 +19,12 @@
  * Los datos se piden desde el navegador: el build del portal corre en CI, donde
  * no hay backend, así que nada de lo que se dibuja acá puede depender de un
  * `fetch` de prerender.
+ *
+ * **El montaje de Leaflet no vive acá**: crear el mapa, los tiles, la vista inicial y el
+ * `LayerGroup` lo hace `use-leaflet-map.ts`, que es el que comparten las tres pantallas
+ * con mapa ([16 §5.1](../../docs/16-el-portal.md)). Este archivo se queda con lo propio del
+ * grafo: pedir el área, dibujar los elementos, encuadrar con la primera respuesta y
+ * repintar la selección.
  */
 
 import "leaflet/dist/leaflet.css";
@@ -40,6 +46,7 @@ import {
 import { PILOT_BOUNDS, type BBox } from "@/config";
 import { FeatureDetails } from "./feature-details";
 import { lineStyle, pointStyle, serviceAreaStyle } from "./feature-style";
+import { useLeafletMap } from "./use-leaflet-map";
 
 /** Cuánto se espera después de un paneo antes de pedir el área nueva. */
 const DEBOUNCE_MS = 300;
@@ -103,35 +110,11 @@ function boundsOf(
   ];
 }
 
-/** El zoom del mapa: más lejos que el piloto no aporta y más cerca se pierde el barrio. */
-const MIN_ZOOM = 13;
-const MAX_ZOOM = 19;
-
-/** La caja del piloto, en la forma que espera Leaflet. */
-const PILOT_VIEW: LatLngBoundsLiteral = [
-  [PILOT_BOUNDS.minLat, PILOT_BOUNDS.minLon],
-  [PILOT_BOUNDS.maxLat, PILOT_BOUNDS.maxLon],
-];
-
-const TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
-
-/**
- * El texto de atribución de OSM. Leaflet lo dibuja en su control de atribución
- * a partir del `attribution` de la capa de tiles: es obligatorio porque los
- * datos son ODbL 1.0 ([10 §3](../../docs/10-datos-y-zona-piloto.md)).
- */
-const OSM_ATTRIBUTION =
-  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
-
 /**
  * Acomoda la vista al grafo de la primera respuesta. Después manda el usuario: si
  * el mapa se reencuadrara en cada paneo, no se podría panear.
  */
 export default function GraphMap() {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<L.Map | null>(null);
-  /** Donde viven las capas del grafo y del área: se vacía y se redibuja con los datos. */
-  const layersRef = useRef<L.LayerGroup | null>(null);
   /** La capa y el nivel de cada elemento, para repintar sólo el que cambia de estado. */
   const drawnRef = useRef(new Map<string, { path: L.Path; level: GraphLevel }>());
   const previousSelectedRef = useRef<string | null>(null);
@@ -144,6 +127,32 @@ export default function GraphMap() {
   // único disparador de un pedido nuevo.
   const [bbox, setBbox] = useState<BBox>(PILOT_BOUNDS);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  /**
+   * El mapa lo monta el hook compartido; acá sólo se le dice qué hacer con el clic y con
+   * el final de un paneo.
+   */
+  const { containerRef, mapRef, layersRef } = useLeafletMap({
+    // Un clic en el fondo del mapa suelta la selección.
+    onClick: () => setSelectedId(null),
+    // Paneo o zoom terminado: cambiar el área, con espera. `fitBounds` del encuadre
+    // inicial dispara este mismo evento, y la bandera lo tapa.
+    onMoveEnd: (bounds) => {
+      if (suppressMoveEnd.current) return;
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+
+      debounceRef.current = setTimeout(() => {
+        setBbox(
+          roundBBox({
+            minLon: bounds.getWest(),
+            minLat: bounds.getSouth(),
+            maxLon: bounds.getEast(),
+            maxLat: bounds.getNorth(),
+          }),
+        );
+      }, DEBOUNCE_MS);
+    },
+  });
 
   const { data, error, isPending, refetch } = useQuery({
     queryKey: graphQueryKey(bbox),
@@ -176,71 +185,6 @@ export default function GraphMap() {
     [data],
   );
 
-  /**
-   * Paneo o zoom terminado: cambiar el área, con espera.
-   *
-   * Va en un ref y no en el efecto que crea el mapa para que el listener pueda vivir
-   * lo que vive el mapa sin volver a engancharse en cada render.
-   */
-  const onMoveEndRef = useRef<(bounds: L.LatLngBounds) => void>(() => {});
-
-  useEffect(() => {
-    onMoveEndRef.current = (bounds) => {
-      if (suppressMoveEnd.current) return;
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-
-      debounceRef.current = setTimeout(() => {
-        setBbox(
-          roundBBox({
-            minLon: bounds.getWest(),
-            minLat: bounds.getSouth(),
-            maxLon: bounds.getEast(),
-            maxLat: bounds.getNorth(),
-          }),
-        );
-      }, DEBOUNCE_MS);
-    };
-  }, []);
-
-  /**
-   * El mapa: se crea al montar y se destruye al desmontar.
-   *
-   * Es el único dueño de la instancia de Leaflet. Los efectos de abajo dibujan sobre
-   * `mapRef.current`, así que nunca hay una capa hablándole a un mapa que ya no existe.
-   */
-  useEffect(() => {
-    const container = containerRef.current;
-    if (container === null) return;
-
-    const map = new L.Map(container, { minZoom: MIN_ZOOM, maxZoom: MAX_ZOOM });
-    map.fitBounds(PILOT_VIEW);
-    new L.TileLayer(TILE_URL, {
-      attribution: OSM_ATTRIBUTION,
-      maxZoom: MAX_ZOOM,
-    }).addTo(map);
-
-    const layers = new L.LayerGroup().addTo(map);
-    map.on("moveend", () => onMoveEndRef.current(map.getBounds()));
-    map.on("click", () => setSelectedId(null));
-
-    mapRef.current = map;
-    layersRef.current = layers;
-    // Se copia a una constante para el cleanup: el ref puede cambiar antes de que
-    // corra, y lo que hay que vaciar es el mapa de este efecto.
-    const drawn = drawnRef.current;
-
-    return () => {
-      // Primero se vacía lo dibujado: soltar las capas después de `remove()` deja
-      // manejadores apuntando a un mapa destruido.
-      layers.clearLayers();
-      drawn.clear();
-      map.off();
-      map.remove();
-      mapRef.current = null;
-      layersRef.current = null;
-    };
-  }, []);
-
   /** El grafo y las áreas, redibujados cuando cambian los datos. */
   useEffect(() => {
     const layers = layersRef.current;
@@ -271,7 +215,7 @@ export default function GraphMap() {
       layers.addLayer(path);
       drawnRef.current.set(id, { path, level });
     }
-  }, [features, serviceAreas]);
+  }, [features, serviceAreas, layersRef]);
 
   /** El repintado de la selección: sólo las dos capas que cambian, no las 977. */
   useEffect(() => {
@@ -305,7 +249,7 @@ export default function GraphMap() {
     suppressMoveEnd.current = true;
     map.fitBounds(firstBounds, { padding: [24, 24], animate: false });
     suppressMoveEnd.current = false;
-  }, [firstBounds]);
+  }, [firstBounds, mapRef]);
 
   // No dejar un pedido agendado cuando el mapa se desmonta.
   useEffect(

@@ -4,10 +4,10 @@
  * La navegación del portal: una entrada por objeto de trabajo y sólo por las pantallas que
  * existen.
  *
- * Son tres —el grafo, los reportes y los obstáculos—: `/routes` entra cuando tenga su
- * pantalla, no antes. La barra no anuncia lo que falta, porque una sección que se clickea y
- * no lleva a nada es peor que una que no está ([16 §8](../../docs/16-el-portal.md)). El
- * estado activo se marca con `aria-current` y con el estilo, para que no dependa del color.
+ * Son cuatro —el grafo, los reportes, los obstáculos y la ruta—. La barra no anuncia lo que
+ * falta, porque una sección que se clickea y no lleva a nada es peor que una que no está
+ * ([16 §8](../../docs/16-el-portal.md)). El estado activo se marca con `aria-current` y con el
+ * estilo, para que no dependa del color.
  */
 
 import Link from 'next/link';
@@ -17,6 +17,7 @@ const LINKS = [
   { href: '/', label: 'Grafo' },
   { href: '/reports', label: 'Reportes' },
   { href: '/obstacles', label: 'Obstáculos' },
+  { href: '/routes', label: 'Ruta' },
 ] as const;
 
 export function Nav() {
