@@ -107,6 +107,7 @@ portal/src/
 ├── map/          # una funcionalidad: el mapa del grafo
 ├── reports/      # una funcionalidad: la pantalla de reportes
 ├── obstacles/    # una funcionalidad: la pantalla de obstáculos
+├── routes/       # una funcionalidad: la pantalla de ruta
 ├── session/      # de dónde sale la sesión del portal
 └── config.ts     # valores por entorno y la caja del piloto
 ```

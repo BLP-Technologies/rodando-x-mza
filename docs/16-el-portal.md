@@ -20,8 +20,8 @@ Este documento responde:
 - **Cómo el mapa** lee el grafo, lo dibuja y avisa lo que no puede mostrar (§5).
 - **De dónde salen** los tipos del contrato y la dirección de la API (§6).
 - **Cómo se corre** y dónde están los comandos (§7).
-- **Qué pantalla sirve a cada objeto de trabajo** —el grafo, los reportes, los obstáculos—
-  y por qué son pantallas distintas (§8).
+- **Qué pantalla sirve a cada objeto de trabajo** —el grafo, los reportes, los obstáculos y
+  el recorrido— y por qué son pantallas distintas (§8).
 
 No decide el contrato de cada endpoint —es de
 [14](14-la-api-del-grafo.md) y de [13](13-api-de-ruteo.md)—, ni las reglas de
@@ -29,15 +29,15 @@ la integración —URL como configuración, CORS y traducción de errores, que s
 [15](15-integracion-con-el-cliente.md)—, ni la puesta en marcha completa, que es
 de [05 §4](05-desarrollo.md).
 
-## 2. Qué hace hoy: el grafo, los reportes y los obstáculos
+## 2. Qué hace hoy: el grafo, los reportes, los obstáculos y la ruta
 
 El portal es una aplicación **aparte del backend**, en `portal/`: Next.js 16,
 React 19, Tailwind 4 y TypeScript (`package.json`). Se sirve en el puerto 3000 y
 habla con la API por HTTP, igual que va a hacerlo la app mobile.
 
-Hoy resuelve tres de las preguntas del moderador en la zona piloto —**qué hay y cómo
-está**, **corregir el nivel** y **publicar o cerrar una barrera**— y abre la cola de
-reportes para revisarla, con estas cosas:
+Hoy resuelve cuatro de las preguntas del moderador en la zona piloto —**qué hay y cómo
+está**, **corregir el nivel**, **publicar o cerrar una barrera** y **por dónde se puede
+caminar**— y abre la cola de reportes para revisarla, con estas cosas:
 
 - **Dibuja el grafo** que devuelve `GET /api/graph`: veredas y cruces como
   líneas, cordones como puntos, y el nivel de accesibilidad como color (§5.3).
@@ -65,8 +65,12 @@ reportes para revisarla, con estas cosas:
   siguiente; resolverlo lo saca del costo ([09 §4.7](09-modelo-de-datos.md#47-el-costo-de-las-aristas-se-calcula-no-se-guarda)).
 - **Muestra los obstáculos de un elemento** en su ficha del mapa del grafo, activos
   primero y resueltos después (§5.6).
+- **Pide un recorrido accesible** entre dos puntos en una pantalla propia, `/routes`: las
+  dos puntas se marcan sobre el mapa, el recorrido se dibuja por tramos con el color del
+  nivel de cada uno y el panel resume metros, costo y metros sin relevar (§8.3). Es C003
+  visto desde la moderación: el recorrido que va a pedir la app, pedido a mano.
 
-Lo que **no** hace todavía: calcular recorridos —no hay pantalla de ruta, `/routes`—,
+Lo que **no** hace todavía: guardar un recorrido o un lugar frecuente (C006 a C009),
 buscar una calle y autenticar personas (la sesión es simulada, §4). Tampoco edita un
 obstáculo ya publicado: se resuelve y se publica otro
 ([18 §8](18-la-api-de-obstaculos.md#8-lo-que-este-documento-no-decide)).
@@ -88,6 +92,7 @@ portal/src/
 ├── map/        # la funcionalidad del mapa
 ├── reports/    # la pantalla de reportes
 ├── obstacles/  # la pantalla de obstáculos
+├── routes/     # la pantalla de ruta
 ├── session/    # la sesión del portal
 └── config.ts   # la URL de la API y la caja del piloto
 ```
@@ -98,6 +103,7 @@ portal/src/
 | ¿Es la pantalla del mapa o una parte suya? | `map/` |
 | ¿Es la pantalla de reportes o una parte suya? | `reports/` |
 | ¿Es la pantalla de obstáculos o una parte suya? | `obstacles/` |
+| ¿Es la pantalla de ruta o una parte suya? | `routes/` |
 | ¿Habla con la API? | `api/` |
 | ¿Responde quién es la persona que modera? | `session/` |
 | ¿Es un valor que cambia entre entornos? | `config.ts` |
@@ -190,6 +196,14 @@ crea un mapa y lo destruye al desmontarse
 ([`graph-map.tsx`](../portal/src/map/graph-map.tsx)), y las capas se dibujan en
 efectos sobre esa instancia: no hay un mapa que sobreviva a su propio `remove()`.
 El costo es una veintena de líneas de `new L.Polyline(...)` en vez de componentes.
+
+**Un solo montaje, tres pantallas.** El ciclo del mapa —crear el `L.Map`, montar los tiles
+con la atribución, encuadrar en la caja del piloto, abrir el `LayerGroup` del llamador y
+enganchar el clic por un ref— vive en `map/use-leaflet-map.ts`, y lo comparten el grafo,
+los obstáculos y la ruta. Cada pantalla se queda con lo suyo: qué capas dibuja, cuándo
+vuelve a pedir el área y qué hace un clic. **`reports/report-minimap.tsx` queda aparte a
+propósito**: es un mapa fijo de veinte líneas, con su zoom y sin capas, y meterlo en el
+hook sería parametrizar justo lo que no se comparte (§8.1).
 
 ### 5.2 Leaflet no existe en el servidor
 
@@ -368,6 +382,11 @@ izquierda. El dato viene en `service_areas` de la respuesta del grafo
   achicaría el grafo sin motivo.
 - **Se dibujan todas, sin conmutación por capa.** Prender y apagar capas desde una lista es
   trabajo de otra tarea; hoy el único control del mapa es el paneo.
+- **También en `/routes`.** La pantalla de ruta dibuja el mismo borde, con el mismo estilo,
+  y también debajo de lo que importa —ahí, el recorrido—. El motivo es el contexto del
+  rechazo por perímetro: una punta fuera de la zona se rechaza con `OUTSIDE_SERVICE_AREA`
+  ([13 §4.1](13-api-de-ruteo.md#41-la-red-de-seguridad)), y el borde es la única forma de
+  ver dónde está el límite antes de marcar la punta (§8.3).
 
 ## 6. El cliente HTTP y el contrato
 
@@ -417,23 +436,24 @@ una decide su superficie y sus valores por defecto. Las que existen hoy:
 | `/` | El grafo | Mapa | `['graph', bbox]`, el área que se está mirando |
 | `/reports` | Los reportes ciudadanos | Tabla con detalle al costado | `['reports', status]`, `PENDING` por defecto |
 | `/obstacles` | Los obstáculos publicados | Mapa | `['obstacles', status]`, `ACTIVE` por defecto |
-| `/routes` | Un recorrido | Mapa | Todavía no existe |
+| `/routes` | Un recorrido | Mapa | `['graph', PILOT_BOUNDS]`, **sólo** para el borde del área; el recorrido es una mutación |
 
-**Cada pantalla elige su superficie.** El grafo y los obstáculos son mapas porque la pregunta
-es dónde está la cosa; los reportes son una lista porque la pregunta es cuál miro ahora. Los
-reportes **no se dibujan sobre el mapa del grafo**: son puntos que esperan una decisión, se
-revisan de a uno y su estado no es un dato de accesibilidad, así que meterlos ahí mezclaría
-dos escalas de trabajo y una capa más que apagar (§5.7).
+**Cada pantalla elige su superficie.** El grafo, los obstáculos y la ruta son mapas porque la
+pregunta es dónde está la cosa —o por dónde se pasa—; los reportes son una lista porque la
+pregunta es cuál miro ahora. Los reportes **no se dibujan sobre el mapa del grafo**: son
+puntos que esperan una decisión, se revisan de a uno y su estado no es un dato de
+accesibilidad, así que meterlos ahí mezclaría dos escalas de trabajo y una capa más que
+apagar (§5.7).
 
 **Cada pantalla elige sus valores por defecto y su query.** El grafo abre en la caja del
 piloto (§5.4); los reportes abren en `PENDING`, que es la cola de trabajo; los obstáculos
-abren en `ACTIVE`, que es lo que está en la calle. Ninguna hereda el estado de la otra: son
-listas distintas, con claves de caché distintas, y cambiar el filtro de una no toca a las
-demás.
+abren en `ACTIVE`, que es lo que está en la calle; la ruta no tiene cola: pide un recorrido
+cuando se aprieta un botón (§8.3). Ninguna hereda el estado de la otra: son listas
+distintas, con claves de caché distintas, y cambiar el filtro de una no toca a las demás.
 
-**La barra sólo muestra las pantallas que existen.** Hoy son tres —grafo, reportes y
-obstáculos—; `/routes` no está porque una entrada que se clickea y no lleva a nada es peor
-que una que no está. Entra cuando exista su pantalla.
+**La barra sólo muestra las pantallas que existen.** Son cuatro —grafo, reportes, obstáculos
+y ruta—, y no anuncia ninguna que falte, porque una entrada que se clickea y no lleva a nada
+es peor que una que no está.
 
 **El puente reporte → obstáculo es una acción del panel y va en un solo sentido.** Desde el
 detalle de un reporte `PENDING` se crea el obstáculo o se descarta el reporte (§8.1); desde
@@ -564,6 +584,93 @@ nada más: el elemento del grafo lo decide el servidor
 - **Después de publicar** se invalida el prefijo de obstáculos, el filtro vuelve a `Activos`
   —el obstáculo nace activo— y el detalle muestra el recién creado.
 
+### 8.3 La pantalla de ruta
+
+`/routes` es donde se pide un recorrido accesible (`routes/routes-screen.tsx`): un mapa a la
+izquierda y un panel de 320 píxeles al costado, como `/obstacles`. Es C003 visto desde la
+moderación ([13](13-api-de-ruteo.md)), y el mapa se monta con el mismo hook que las otras
+dos pantallas con mapa (§5.1).
+
+**El pedido es una mutación, no una query.** "Calcular" dispara `calculateRoute`
+(`api/routes.ts`) con las dos puntas, se habilita recién cuando están las dos y dice
+"Calculando…" mientras corre. El disparador es un botón y no un cambio de estado, la
+respuesta no se comparte con ninguna otra pantalla y **no hay comparación con el pedido
+anterior**: el operador compara a ojo, con los dos mapas delante si quiere. Guardarla en la
+caché sería cachear algo que se pide a propósito y que puede cambiar entre dos clics
+—basta editar un nivel en `/`—.
+
+**El estado es de interfaz: dos coordenadas.** `origin` y `destination` guardan el punto que
+se marcó, no el nodo al que la API se lo pegó; `picking` dice qué punta está esperando un
+clic. Nada de eso vive en el servidor.
+
+**Cómo se eligen las puntas.** "Marcar origen" y "Marcar destino" ponen el mapa en modo de
+clic, con el aviso arriba ("Hacé clic en el mapa para marcar el origen"), igual que el alta
+de un obstáculo (§8.2). Cada punta muestra su coordenada y se limpia por separado. **Un clic
+fuera del modo no hace nada**: no selecciona —no hay nada que seleccionar— y no limpia el
+recorrido dibujado.
+
+**El límite de teclado, y el botón del centro.** Un clic en el mapa no es alcanzable con el
+teclado, así que cada punta tiene además **"Usar el centro del mapa"**: toma el centro de la
+vista actual sin cambiar el encuadre. Es el camino para elegir un punto sin mouse; un cursor
+movible con las flechas sería otra tarea, y es la que haría falta para elegir un punto
+*cualquiera* con el teclado.
+
+**Qué dibuja el mapa, en orden de alta, que es el orden de pintado:**
+
+1. Los tiles de OSM, con la atribución obligatoria (§5.5).
+2. El borde del área de servicio, con `serviceAreaStyle()` y `interactive: false`, debajo de
+   todo: es contexto y no puede tapar lo que hay que mirar (§5.7).
+3. **Un `L.Polyline` por `leg`**, con el color del nivel que se cobró (`lineStyle(leg.level)`).
+   No se fusionan en una geometría única: el nivel es de cada tramo, y fusionarlos obligaría a
+   elegir un color para el conjunto ([13 §7](13-api-de-ruteo.md#7-la-respuesta)).
+4. Las dos puntas: los nodos pegados (`origin.node` y `destination.node`), cada uno con su
+   color, los mismos que usa el panel.
+5. El punto que se marcó con el clic, tenue y con guiones, para que se vea la diferencia con
+   el nodo.
+
+**El grafo arranca apagado.** Acá se pregunta por dónde se pasa, no qué hay: las veredas y los
+cruces son de `/`, con el control de capas que es de otra tarea (§5.7). El borde del área sí
+se dibuja, porque es el contexto del rechazo por perímetro: `OUTSIDE_SERVICE_AREA` dice que
+una punta quedó fuera de esa zona ([13 §4.1](13-api-de-ruteo.md#41-la-red-de-seguridad)).
+
+**Los tres estados de la respuesta se muestran distinto**
+([15 §5](15-integracion-con-el-cliente.md#5-lo-que-no-es-obvio-del-contrato-de-ruteo)):
+
+- `found: true` con tramos → el recorrido, el resumen y la lista de tramos.
+- `found: false` → **no es un error**: un cartel informativo, sin rojo y **sin botón de
+  reintentar** (volver a pedirlo daría lo mismo mientras el dato no cambie), y **las dos puntas
+  pegadas se dibujan igual**: ahí son el diagnóstico de que cayeron en componentes distintos del
+  grafo.
+- `found: true` con `legs` vacío y `summary` en cero → las dos puntas se pegaron al mismo
+  cordón: se dice con una línea de texto, no como una falla
+  ([13 §7](13-api-de-ruteo.md#7-la-respuesta)).
+
+**La distancia del pegamento se muestra.** Cada punta aparece con su nodo y a cuántos metros
+quedó del punto marcado. El recorrido empieza en el cordón y no donde está el pin, y sin ese
+número la ruta parece nacer en una esquina ajena ([13 §4.2](13-api-de-ruteo.md#42-el-pegado-y-por-qué-no-se-extiende-la-geometría)).
+
+**El panel muestra los tres números, sin glosario.** Metros, **costo** —los metros de cada
+tramo ponderados por su nivel más lo que suman los obstáculos activos, en metros equivalentes
+([09 §4.7](09-modelo-de-datos.md#47-el-costo-de-las-aristas-se-calcula-no-se-guarda))—, metros
+sin relevar y cruces. La pantalla no trae una línea que explique qué es el costo: es un número
+para comparar entre dos pedidos, y quien modera ya sabe de dónde sale. Los metros sin relevar
+sí llevan su aviso, porque no son un número más: son los que se apoyan en elementos que nadie
+mirió, y mientras el grafo siga sin relevar van a ser todos.
+
+**El área de servicio es contexto, no requisito.** La pantalla hace **una sola lectura** del
+grafo con la clave `['graph', PILOT_BOUNDS]` y sin refetch al panear —el mapa encuadra en la
+caja del piloto y no se mueve—, y de ahí usa sólo `service_areas`. Si esa lectura falla, el
+borde no se dibuja y **el resto de la pantalla funciona igual**: el recorrido no depende de
+ella. El grafo no se dibuja aunque la respuesta lo traiga.
+
+**Los errores.** `describeRouteError` (`api/error-messages.ts`) lee los `details[].field` de
+`VALIDATION_ERROR` para distinguir `OUTSIDE_SERVICE_AREA` en `origin` de `destination` (y el
+caso de las dos): el código es el mismo, pero el texto dice qué punta marcar de nuevo
+([04 §4](04-errores-y-mensajes.md#4-catálogo-de-códigos)). `origin.lat` cuenta como `origin`,
+porque el `field` es la ruta del campo. **`found: false` nunca pasa por ese mapeo**: no es un
+error. El cartel va arriba del mapa con el motivo y nada más; reintentar es volver a apretar
+"Calcular".
+
 ## 9. Lo que este documento no decide
 
 - **El contrato de la API.** Vive en cada documento de caso de uso, hoy
@@ -591,6 +698,7 @@ nada más: el elemento del grafo lo decide el servidor
 - [10-datos-y-zona-piloto.md](10-datos-y-zona-piloto.md): la zona piloto y la
   atribución de OSM.
 - [14-la-api-del-grafo.md](14-la-api-del-grafo.md): el contrato que el mapa lee.
+- [13-api-de-ruteo.md](13-api-de-ruteo.md): el contrato del recorrido y sus dos respuestas.
 - [17-la-api-de-reportes.md](17-la-api-de-reportes.md): la cola de reportes y su moderación.
 - [18-la-api-de-obstaculos.md](18-la-api-de-obstaculos.md): el alta, la lectura y el cierre
   de un obstáculo.

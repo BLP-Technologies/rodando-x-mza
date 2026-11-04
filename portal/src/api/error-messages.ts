@@ -9,7 +9,8 @@
  * Los textos de lectura **no nombran una pantalla**: el mismo `INTERNAL_ERROR`
  * llega leyendo el grafo y leyendo los reportes, y decir "el grafo" en la lista de
  * reportes sería mentir sobre lo que falló (mismo código, mismo mensaje). Lo que sí
- * puede nombrar su objeto es el guardado del nivel, que ocurre en un solo lugar.
+ * puede nombrar su objeto es la escritura del nivel y el pedido de recorrido, que
+ * ocurren en un solo lugar.
  */
 
 import { ApiError, NETWORK_ERROR } from './client';
@@ -100,4 +101,63 @@ export function describeObstacleError(error: unknown): string {
   if (!(error instanceof ApiError)) return GENERIC_OBSTACLE_MESSAGE;
 
   return detailMessage(error) ?? OBSTACLE_MESSAGES[error.code] ?? GENERIC_OBSTACLE_MESSAGE;
+}
+
+/**
+ * Los errores del pedido de recorrido.
+ *
+ * Van aparte porque el motivo de dominio no alcanza con el código: `OUTSIDE_SERVICE_AREA`
+ * dice **qué punta** quedó fuera, y la acción de la persona es marcar otra punta, no
+ * corregir un dato ([13 §8](../../docs/13-api-de-ruteo.md#8-cómo-se-rechaza)).
+ */
+const ROUTE_MESSAGES: Record<string, string> = {
+  [NETWORK_ERROR]:
+    'No se pudo pedir el recorrido: no hay conexión con la API. Revisá que el backend esté levantado.',
+  VALIDATION_ERROR: 'La API rechazó el pedido. Revisá las puntas y probá de nuevo.',
+  INTERNAL_ERROR: 'La API falló al calcular el recorrido. Probá de nuevo.',
+};
+
+const GENERIC_ROUTE_MESSAGE = 'No se pudo calcular el recorrido.';
+
+/**
+ * El texto de una punta fuera del perímetro, según cuál sea.
+ *
+ * Los `details` de la API traen `{ field, code }`, con `field` como ruta del campo
+ * (`origin`, `destination`, `origin.lat`): por eso se compara por prefijo y no por igualdad.
+ * Si la punta no se reconoce, devuelve `null` y gana el mensaje del código, que es un texto
+ * correcto y no inventa una localización.
+ */
+function outsideServiceAreaMessage(error: ApiError): string | null {
+  let origin = false;
+  let destination = false;
+
+  for (const detail of error.details ?? []) {
+    if (detail.code !== 'OUTSIDE_SERVICE_AREA') continue;
+    if (detail.field.startsWith('origin')) origin = true;
+    if (detail.field.startsWith('destination')) destination = true;
+  }
+
+  if (origin && destination) {
+    return 'El origen y el destino están fuera de la zona de servicio. Marcá los dos puntos dentro del borde azul.';
+  }
+  if (origin) {
+    return 'El origen está fuera de la zona de servicio. Marcá un punto dentro del borde azul.';
+  }
+  if (destination) {
+    return 'El destino está fuera de la zona de servicio. Marcá un punto dentro del borde azul.';
+  }
+
+  return null;
+}
+
+/**
+ * El texto de un pedido de recorrido que la API rechazó.
+ *
+ * `found: false` **nunca** pasa por acá: no tiene recorrido pero no es un error
+ * ([13 §6](../../docs/13-api-de-ruteo.md#6-cuando-no-hay-recorrido)).
+ */
+export function describeRouteError(error: unknown): string {
+  if (!(error instanceof ApiError)) return GENERIC_ROUTE_MESSAGE;
+
+  return outsideServiceAreaMessage(error) ?? ROUTE_MESSAGES[error.code] ?? GENERIC_ROUTE_MESSAGE;
 }
