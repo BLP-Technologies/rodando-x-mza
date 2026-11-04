@@ -16,6 +16,7 @@ Este documento responde:
 - **Dónde** corre el sistema y con qué plataforma (§2).
 - **Cómo** se despliega la base de datos, paso por paso (§3).
 - **Cómo** se opera la base por SSH cuando no hay un cliente SQL conectado (§3.7).
+- **Cómo** se respalda la base mientras dura el MVP (§3.8).
 - **Cómo** se despliega el backend, cómo se verifican sus migraciones y cómo se
   actualiza solo con cada push (§4).
 - **Cómo** se despliega el portal y qué necesita el servidor (§5).
@@ -262,8 +263,7 @@ detenidos que lo referencian: listarlos con
 - **Volúmenes ajenos.** En el servidor conviven `dokploy` y `dokploy-postgres`, que
   pertenecen al panel. No se tocan. Tampoco se ejecuta `docker volume prune` ni
   `docker system prune --volumes`.
-- **Backup.** Pendiente: el volumen `rodando-db-data` todavía no tiene respaldo
-  configurado.
+- **Backup.** Manual por ahora (§3.8): no hay respaldo automático programado.
 
 ### 3.7 Operación por SSH
 
@@ -319,6 +319,59 @@ Advertencias:
 - Antes de un `UPDATE` o `DELETE` masivo, correr el mismo `WHERE` con
   `select count(*)` y revisar el número.
 - Si el servicio se recrea, el contenedor cambia: hay que volver a resolver `C`.
+
+### 3.8 Respaldo manual
+
+Mientras el sistema esté en el MVP el respaldo es manual: se hace antes de cualquier
+operación riesgosa, como una carga masiva, un cambio de datos o una migración. No hay
+backups automáticos configurados.
+
+Generar el dump en el VPS, directamente en el home del usuario con el que se entra por
+SSH:
+
+```bash
+DB=$(docker ps -q --filter name=rodando-x-mza-databasae --filter status=running | head -n1)
+docker exec "$DB" pg_dump -U rodando -d rodando -Fc > ~/rodando-$(date +%F-%H%M).dump
+ls -lh ~/rodando-*.dump
+```
+
+`-Fc` es formato custom comprimido: ocupa poco y se puede inspeccionar sin restaurar.
+`pg_dump` toma una foto consistente aunque la API esté escribiendo, pero no incluye
+roles ni contraseñas. Si el archivo se generó como root, se mueve al home del usuario y
+se ajusta el dueño antes de copiarlo.
+
+Copiar a la máquina de trabajo:
+
+```bash
+scp -P <puerto> usuario@IP_DEL_VPS:'~/rodando-*.dump' ~/backups/rodando/
+```
+
+`scp` usa **`-P` mayúscula** para el puerto; `ssh` usa `-p` minúscula. Si el servidor
+escucha en el 22 se omite, pero acá el SSH está en un puerto distinto: sin `-P` la
+conexión queda esperando y no avisa nada.
+
+Verificar que el archivo sea un dump válido:
+
+```bash
+pg_restore -l ~/backups/rodando/rodando-*.dump | head
+```
+
+Tiene que listar el TOC: extensiones, tablas y la vista `walkable_edges`. Un archivo de
+0 bytes o uno que `pg_restore` rechaza no es un respaldo.
+
+Para probar la restauración, en una base descartable con PostGIS y pgRouting, como la
+del compose de desarrollo:
+
+```bash
+createdb -h localhost -U rodando prueba_restore
+pg_restore -h localhost -U rodando -d prueba_restore --no-owner ~/backups/rodando/rodando-*.dump
+```
+
+Alcance: cubre la base, no las imágenes de `backend-uploads`
+([03 §9](03-despliegue-y-operacion.md#9-respaldo-y-restauración)). El respaldo
+automático a un destino S3 queda diferido hasta que el sistema pase a producción
+sostenida; ese día se configura con Volume Backups de Dokploy sobre
+`rodando-db-data`, con el servicio apagado durante la copia.
 
 ## 4. Backend
 
@@ -541,7 +594,8 @@ Solo necesita que la API tenga una URL pública, que es la del backend del §4.
 - [x] Auto-deploy de `main` con el webhook de Dokploy.
 - [x] Portal desplegado y conectado a la API.
 - [x] Limpieza diaria de Docker activada.
-- [ ] Volumen de la base con backup.
+- [x] Respaldo manual de la base (dump y copia fuera del VPS).
+- [ ] Respaldo automático (diferido; ver §3.8).
 - [ ] APK compilado contra la API de producción.
 
 ## 8. Documentos relacionados
