@@ -379,7 +379,7 @@ costo(e) = metros(e) × factor_nivel(e) + Σ penalización(obstáculos activos d
 que se consulta, PostgreSQL lo expande y calcula el costo en ese momento. No ocupa espacio,
 no hay nada que mantener actualizado y no puede desincronizarse con las tablas. La que
 guarda datos es la vista *materializada*, y es justamente la que no se quiere. La vista
-existe en `infra/migrations/1793500666032_create-walkable-edges-view.sql` y expone también
+existe en `backend/migrations/1793500666032_create-walkable-edges-view.sql` y expone también
 `metros` y `level` —el nivel que efectivamente se cobró— porque un costo que no se puede
 descomponer no se puede explicar ni revisar ([11 §5](11-grafo-peatonal.md)).
 
@@ -657,7 +657,7 @@ de error que cada cliente traduce.
 ## 7. Convenciones de migración
 
 Las migraciones son **SQL puro** ([02](02-stack-y-estructura.md) §7), viven en
-`infra/migrations/` y las aplica `node-pg-migrate`. Un archivo es una unidad
+`backend/migrations/` y las aplica `node-pg-migrate`. Un archivo es una unidad
 temática —las tablas que resuelve un mismo issue— y contiene el up y el down con los
 marcadores de la herramienta:
 

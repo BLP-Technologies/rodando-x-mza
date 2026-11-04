@@ -157,7 +157,7 @@ docker compose exec db psql -U rodando -d rodando -c 'select name, run_on from p
 
 Si preferís no borrar el volumen, se puede deshacer migración por migración con
 `pnpm migrate:down` (revierte la última) o
-`pnpm exec node-pg-migrate down N --envPath .env -m ../infra/migrations` en `backend/`
+`pnpm exec node-pg-migrate down N --envPath .env` en `backend/`
 (revierte las últimas `N`). Eso conserva lo que no hayan tocado esas migraciones.
 
 ## 6. Consultar la base

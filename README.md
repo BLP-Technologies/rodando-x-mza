@@ -29,3 +29,7 @@ Vive en [`docs/`](docs/):
 - [13 — La API de ruteo](docs/13-api-de-ruteo.md)
 - [14 — La API del grafo](docs/14-la-api-del-grafo.md)
 - [15 — La integración con el cliente](docs/15-integracion-con-el-cliente.md)
+- [16 — El portal de moderación](docs/16-el-portal.md)
+- [17 — La API de reportes](docs/17-la-api-de-reportes.md)
+- [18 — La API de obstáculos](docs/18-la-api-de-obstaculos.md)
+- [19 — Guía de despliegue con Dokploy](docs/19-guia-de-despliegue-dokploy.md)

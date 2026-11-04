@@ -6,12 +6,13 @@ Datos crudos de la Fase 1. La decisión que los explica está en
 | Archivo | Se versiona | Qué es |
 | --- | --- | --- |
 | `pilot-zone.geojson` | Sí | El polígono que delimita la zona piloto |
-| `pilot-zone.osm` | **No** | El extracto de OpenStreetMap, generado por el script |
+| `pilot-zone.osm` | Sí, como snapshot | El extracto de OpenStreetMap que alimenta el grafo del MVP |
 | `relevamiento/` | Plantilla sí, datos no | La plantilla de campo del relevamiento de accesibilidad |
 
-El extracto no se versiona porque es **un artefacto derivado y mutable**: OSM cambia todos
-los meses, así que el archivo que se guarda hoy dice otra cosa el mes que viene. Lo que se
-versiona es el polígono, el script que descarga y la procedencia que el script imprime.
+El extracto es un artefacto derivado y mutable: OSM cambia todos los meses. Se versiona
+como **snapshot congelado**: el archivo commiteado es el que define el grafo del MVP y no
+se regenera de rutina. Regenerarlo es un cambio deliberado, que produce otro hash y otro
+grafo. Los extractos nuevos y los `.pbf` no se versionan.
 
 El relevamiento de accesibilidad es el otro conjunto de datos de la zona, y tiene su
 propio régimen: se versiona la **plantilla**, no lo relevado
@@ -23,6 +24,9 @@ propio régimen: se versiona la **plantilla**, no lo relevado
 ```sh
 node scripts/fetch-pilot-zone-osm.mjs
 ```
+
+Sobrescribe el snapshot commiteado. Si se corre, hay que actualizar la tabla de
+procedencia con la fecha, los conteos y el hash nuevos, y asumir que el grafo cambia.
 
 El script lee `pilot-zone.geojson`, le suma un búfer de 130 m (una cuadra) y pide por
 Overpass las vías, las áreas de esparcimiento y los nodos peatonales de interés. Reintenta
@@ -55,11 +59,11 @@ Datos de OpenStreetMap, bajo [ODbL 1.0](https://opendatacommons.org/licenses/odb
 La aplicación tiene que mostrar la atribución a OpenStreetMap donde se muestran los datos
 (ver [docs/03-despliegue-y-operacion.md](../docs/03-despliegue-y-operacion.md)).
 
-## Procedencia de la última corrida
+## Procedencia del extracto versionado
 
 | Fecha | Endpoint | Contenido | sha256 |
 | --- | --- | --- | --- |
-| 2026-10-31 | `overpass-api.de` | 332 ways · 1.468 nodos · 204 KB | `cdbad95ea94bf56b…` |
+| 2026-10-31 | `overpass-api.de` | 332 ways · 1.468 nodos · 204 KB | `42d2b95e905a0b93…` |
 
-El hash cambia en cada corrida aunque los datos no cambien (el orden de los elementos varía
-en la respuesta), así que sirve para decir *qué archivo se usó*, no para verificar contenido.
+El hash identifica la descarga exacta que se commiteó. Si se regenera el archivo cambia
+aunque los datos no cambien, porque el orden de los elementos en la respuesta varía.
