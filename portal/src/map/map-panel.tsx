@@ -12,13 +12,17 @@
  * un componente de servidor Next tira un error de build. Por eso este archivo es
  * `'use client'` aunque no tenga estado: es el borde entre los dos mundos.
  *
+ * La pantalla que monta es una sola, `map-screen.tsx`: las tres herramientas del
+ * mapa viven adentro y comparten la única instancia de Leaflet, así que este
+ * `dynamic` se evalúa una vez por visita y no una vez por herramienta.
+ *
  * El contenedor y la atribución sí van en el HTML del servidor, así que la
  * página se lee y se audita sin JavaScript.
  */
 
 import dynamic from 'next/dynamic';
 
-const GraphMap = dynamic(() => import('./graph-map'), {
+const MapScreen = dynamic(() => import('./map-screen'), {
   ssr: false,
   loading: () => (
     <p className="flex h-full items-center justify-center text-sm text-slate-500">
@@ -34,7 +38,7 @@ export function MapPanel() {
       className="flex h-[calc(100vh-4rem)] min-h-0 flex-col"
     >
       <div id="graph-map" className="min-h-0 flex-1 bg-slate-100">
-        <GraphMap />
+        <MapScreen />
       </div>
 
       {/* Atribución obligatoria (ODbL 1.0, [10 §3](docs/10-datos-y-zona-piloto.md)).
