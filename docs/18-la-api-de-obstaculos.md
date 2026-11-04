@@ -386,5 +386,5 @@ mensaje, igual que en los reportes ([17 §5](17-la-api-de-reportes.md#5-cómo-se
   motivos, incluido `NO_NEARBY_ELEMENT`.
 - [14-la-api-del-grafo.md](14-la-api-del-grafo.md): la lectura del grafo, de donde salen los
   elementos a los que se pega un obstáculo.
-- [16-el-portal.md](16-el-portal.md): la pantalla de obstáculos y la ficha del elemento.
+- [16-el-portal.md](16-el-portal.md): la pestaña de obstáculos y la ficha del elemento.
 - [07-plan-de-trabajo.md](07-plan-de-trabajo.md): las fases y los casos de uso C012 y C013.

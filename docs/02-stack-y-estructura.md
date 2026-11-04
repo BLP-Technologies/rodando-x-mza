@@ -104,10 +104,10 @@ backend/src/
 portal/src/
 ├── app/          # rutas y layouts: orquestan, no implementan
 ├── api/          # cliente HTTP tipado y contrato generado de la API
-├── map/          # una funcionalidad: el mapa del grafo
+├── map/          # una funcionalidad: el mapa, sus capas y sus herramientas
 ├── reports/      # una funcionalidad: la pantalla de reportes
-├── obstacles/    # una funcionalidad: la pantalla de obstáculos
-├── routes/       # una funcionalidad: la pantalla de ruta
+├── obstacles/    # una funcionalidad: la herramienta de obstáculos
+├── routes/       # una funcionalidad: la herramienta de ruta
 ├── session/      # de dónde sale la sesión del portal
 └── config.ts     # valores por entorno y la caja del piloto
 ```
