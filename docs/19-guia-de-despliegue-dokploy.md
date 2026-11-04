@@ -15,6 +15,7 @@ Este documento responde:
 
 - **Dónde** corre el sistema y con qué plataforma (§2).
 - **Cómo** se despliega la base de datos, paso por paso (§3).
+- **Cómo** se opera la base por SSH cuando no hay un cliente SQL conectado (§3.7).
 - **Cómo** se desplegarán el backend y el portal (§4 y §5).
 - **Cómo** se obtiene el APK de la aplicación móvil (§6).
 - **Qué** falta para completar el despliegue (§7).
@@ -231,14 +232,69 @@ detenidos que lo referencian: listarlos con
   mientras el primero escribe deja el cluster corrupto. Si en *Advanced → Swarm
   Settings* existe un *Update Order*, tiene que ser `stop-first`, no `start-first`.
 - **Sin puerto publicado.** La base solo se alcanza desde la red de Dokploy, por el
-  nombre del servicio, o por la terminal del contenedor. Para operar desde una
-  máquina local se publica un puerto temporal (por ejemplo `15432 → 5432`) y se
-  retira al terminar.
+  nombre del servicio, o por SSH al VPS (§3.7). Se evaluó publicar un puerto
+  temporal para usar un cliente SQL desde una máquina local y se descartó: obliga a
+  exponer Postgres sin TLS a Internet y el trabajo no lo justifica.
 - **Volúmenes ajenos.** En el servidor conviven `dokploy` y `dokploy-postgres`, que
   pertenecen al panel. No se tocan. Tampoco se ejecuta `docker volume prune` ni
   `docker system prune --volumes`.
 - **Backup.** Pendiente: el volumen `rodando-db-data` todavía no tiene respaldo
   configurado.
+
+### 3.7 Operación por SSH
+
+La base no se publica en Internet. Para consultas sueltas o trabajo en lote se entra
+por SSH al VPS y desde ahí al contenedor. Es el único camino de acceso desde fuera de
+la red de Dokploy.
+
+Entrar al servidor:
+
+```bash
+ssh usuario@IP_DEL_VPS
+```
+
+Identificar el contenedor en ejecución. El nombre incluye el identificador de la
+tarea y cambia en cada redeploy, así que se resuelve por filtro en vez de
+hardcodearlo:
+
+```bash
+C=$(docker ps -q --filter name=rodando-x-mza-databasae --filter status=running | head -n1)
+echo "$C"
+```
+
+Sesión interactiva:
+
+```bash
+docker exec -it "$C" psql -U rodando -d rodando
+```
+
+Para aplicar un archivo `.sql` que está en el VPS, como una sola transacción y
+cortando en el primer error:
+
+```bash
+docker exec -i "$C" psql -U rodando -d rodando \
+  --single-transaction -v ON_ERROR_STOP=1 < operaciones.sql
+```
+
+`--single-transaction` hace que el archivo se aplique entero o no se aplique;
+`ON_ERROR_STOP=1` evita que psql continúe después de un error. Sin las dos, un
+archivo que falla a la mitad deja la base en un estado intermedio.
+
+Exportar el resultado de una consulta a CSV:
+
+```bash
+docker exec -i "$C" psql -U rodando -d rodando -c \
+  "\copy (select * from reports) to stdout csv header" > reports.csv
+```
+
+Advertencias:
+
+- Los cambios de esquema van por una migración en `infra/migrations`. Ejecutar DDL a
+  mano desincroniza producción del repositorio y de los tipos generados
+  ([09](09-modelo-de-datos.md)).
+- Antes de un `UPDATE` o `DELETE` masivo, correr el mismo `WHERE` con
+  `select count(*)` y revisar el número.
+- Si el servicio se recrea, el contenedor cambia: hay que volver a resolver `C`.
 
 ## 4. Backend (pendiente)
 
