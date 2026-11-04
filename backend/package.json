@@ -1,9 +1,9 @@
 {
   "name": "rodando-x-mza-backend",
+  "type": "module",
   "version": "0.0.0",
   "private": true,
   "description": "API REST de Rodando x MZA",
-  "type": "module",
   "packageManager": "pnpm@12.4.1",
   "engines": {
     "node": ">=22"

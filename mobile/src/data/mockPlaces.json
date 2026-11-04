@@ -1,0 +1,18 @@
+[
+  {
+    "id": "place_casa",
+    "name": "Casa",
+    "address": "Brasil 1550",
+    "category": "CASA",
+    "latitude": -32.8942,
+    "longitude": -68.8475
+  },
+  {
+    "id": "place_escuela",
+    "name": "Escuela",
+    "address": "Av. San Martín 1200",
+    "category": "ESTUDIO",
+    "latitude": -32.8895,
+    "longitude": -68.8458
+  }
+]

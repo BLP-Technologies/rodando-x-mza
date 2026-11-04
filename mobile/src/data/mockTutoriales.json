@@ -1,0 +1,56 @@
+[
+  {
+    "id": 1,
+    "title": "Moverse por la ciudad",
+    "category": "Movilidad urbana",
+    "duration": "8min",
+    "description":
+      "Técnicas de propulsión y equilibrio en silla de ruedas, explicadas en español por Fisioterapia para la gente. Practicá con acompañamiento profesional.",
+    "youtubeId": "MyB_T1etaQE"
+  },
+  {
+    "id": 2,
+    "title": "Subir y bajar cordones",
+    "category": "Técnicas de movilidad",
+    "duration": "4min",
+    "description":
+      "Demostración en español para afrontar el desnivel entre la calle y la vereda. Adaptá la técnica a tus capacidades con acompañamiento profesional.",
+    "youtubeId": "OeMxqC9lbvk"
+  },
+  {
+    "id": 3,
+    "title": "Subir rampas",
+    "category": "Técnicas de movilidad",
+    "duration": "7min",
+    "description":
+      "Fisioterapia para la gente explica en español el manejo de la silla en una rampa y el trabajo de propulsión",
+    "youtubeId": "MuSoLag_meo"
+  },
+  {
+    "id": 4,
+    "title": "Mantenimiento de la silla",
+    "category": "Mantenimiento",
+    "duration": "17min",
+    "description":
+    "Edna Serrano comparte en español una demostración de limpieza y cuidado de su silla de ruedas.",
+    "youtubeId": "MgHRuP68pk4"
+  },
+  {
+    "id": 5,
+    "title": "Uso seguro de la silla de ruedas",
+    "category": "Seguridad",
+    "duration": "4min",
+    "description":
+    "Recomendaciones en español para preparar y utilizar una silla de ruedas con asistencia, prestando atención a la seguridad.",
+    "youtubeId": "G0sS5VdalQI"
+  },
+  {
+    "id": 6,
+    "title": "Conocer los tipos de sillas de ruedas",
+    "category": "Autonomía",
+    "duration": "12min",
+    "description":
+    "Fisioterapia para la gente presenta en español diferencias entre sillas de ruedas para conocer sus características y usos.",
+    "youtubeId": "jk4F9j5CF7Y"
+  }
+]
