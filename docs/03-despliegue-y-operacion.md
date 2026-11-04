@@ -291,3 +291,6 @@ referir a este documento y quedarse con los pasos concretos.
   estructura de carpetas y entorno de desarrollo.
 - [09-modelo-de-datos.md](09-modelo-de-datos.md): convenciones del esquema y de las
   migraciones que se aplican en el procedimiento de §8.
+- [19-guia-de-despliegue-dokploy.md](19-guia-de-despliegue-dokploy.md): el paso a
+  paso real del despliegue en el VPS, con la configuración de cada pieza y los
+  errores encontrados.
