@@ -18,7 +18,7 @@ Este documento responde:
 - **Cómo** se opera la base por SSH cuando no hay un cliente SQL conectado (§3.7).
 - **Cómo** se despliega el backend, cómo se verifican sus migraciones y cómo se
   actualiza solo con cada push (§4).
-- **Cómo** se desplegará el portal (§5).
+- **Cómo** se despliega el portal y qué necesita el servidor (§5).
 - **Cómo** se obtiene el APK de la aplicación móvil (§6).
 - **Qué** falta para completar el despliegue (§7).
 
@@ -26,7 +26,7 @@ Este documento responde:
 | --- | --- | --- |
 | Base de datos | Desplegada y verificada | Dokploy · Application |
 | Backend | Desplegado y verificado | Dokploy · Application |
-| Portal | Pendiente | Dokploy · Application |
+| Portal | Desplegado y verificado | Dokploy · Application |
 | APK | Pendiente | Build de Expo, fuera del VPS |
 
 Quedan fuera de este documento:
@@ -72,6 +72,28 @@ contenericen: **todo corre en Docker**. Lo que se evita es escribirlo a mano.
 > **Nota sobre el proxy.** [03 §2](03-despliegue-y-operacion.md) describe nginx como
 > reverse proxy. En Dokploy ese rol lo cumple **Traefik**, que viene incluido y
 > emite los certificados. La topología del resto de los componentes no cambia.
+
+### 2.1 Disco
+
+**20 GB es el mínimo.** La base, el backend, el portal y el builder de Railpack tienen
+que convivir en el mismo disco, y un build de Next necesita margen además de lo que
+ocupan las imágenes ya construidas.
+
+Al ampliar el disco en el proveedor, el filesystem se extiende al reiniciar; si no lo
+hace, se crece la partición con `growpart` y el filesystem con `resize2fs` (o
+`xfs_growfs`, o `lvextend` si hay LVM). El panel del proveedor puede mostrar más
+espacio usado que `df` porque cuenta snapshots y la reserva del sistema: `df` es la
+fuente de verdad.
+
+Para diagnosticar:
+
+```bash
+df -h /
+docker system df
+```
+
+La limpieza diaria de Docker se activa en **Settings → Web Server → Daily Docker
+Cleanup**: poda contenedores detenidos, imágenes sin uso y build cache.
 
 ## 3. La base de datos
 
@@ -457,21 +479,52 @@ El orden importa al configurar `RAILPACK_START_CMD`: al ser una variable de buil
 tiene que estar cargada **antes** del merge que la necesita; si no, el build sale con
 el comando anterior.
 
-## 5. Portal (pendiente)
+## 5. Portal
 
-| Campo | Valor previsto |
+### 5.1 Configuración de la Application
+
+| Campo | Valor |
 | --- | --- |
-| Tipo | Application |
+| Nombre | `frontend` |
+| Source | Git, el mismo repositorio, branch `main` |
 | Build type | Railpack |
 | Build path | `portal` |
 | Puerto | `3000` |
-| Dominio | `portal.<dominio>` |
-| Variables | `NEXT_PUBLIC_API_URL` |
+| Dominio | `rodando-x-mza.201-32-133-8.sslip.io` |
+| Volumen | ninguno |
+| Watch paths | `portal/**` |
+| Auto Deploy | activado, con webhook manual |
 
-`NEXT_PUBLIC_API_URL` se inlinea en el build: tiene que estar cargada **antes** del
-primer deploy y cualquier cambio de URL obliga a reconstruir. El origen
-`https://rodando-x-mza.201-32-133-8.sslip.io` ya está en el `CORS_ORIGINS` del backend
-(§4.1), así que el portal tiene que quedar en ese host.
+Variables:
+
+```text
+NODE_ENV=production
+PORT=3000
+NEXT_PUBLIC_API_URL=https://rodando-api.201-32-133-8.sslip.io
+RAILPACK_PACKAGES=node@22
+```
+
+- `NEXT_PUBLIC_API_URL` es el **origen** de la API, sin `/api` y sin barra final: el
+  cliente arma las rutas con `new URL(path, API_URL)`.
+- Se inlinea en el bundle durante el build. Tiene que estar cargada antes del primer
+  deploy y cualquier cambio de URL exige reconstruir.
+- El host del portal es el que figura en el `CORS_ORIGINS` del backend (§4.1); si
+  cambia uno, cambia el otro.
+- No lleva volumen: las imágenes de los reportes las sirve el backend.
+
+### 5.2 Build y verificación
+
+Railpack detecta Next, usa pnpm 12.4.1 desde `packageManager` y Node 22 por
+`RAILPACK_PACKAGES`. El build corre `next build` con Turbopack y prerenderiza las
+rutas estáticas; el arranque es `next start` en el puerto 3000.
+
+```bash
+curl -i https://rodando-x-mza.201-32-133-8.sslip.io
+docker service ls | grep frontend
+```
+
+Esperás un 200 con HTML y el servicio en `1/1`. La prueba real es en el navegador:
+que el mapa cargue y traiga datos del grafo, sin errores de CORS en la consola.
 
 ## 6. APK (pendiente)
 
@@ -486,8 +539,9 @@ Solo necesita que la API tenga una URL pública, que es la del backend del §4.
 - [x] Backend desplegado, con migraciones integradas al despliegue.
 - [x] Carga inicial del grafo.
 - [x] Auto-deploy de `main` con el webhook de Dokploy.
+- [x] Portal desplegado y conectado a la API.
+- [x] Limpieza diaria de Docker activada.
 - [ ] Volumen de la base con backup.
-- [ ] Portal desplegado.
 - [ ] APK compilado contra la API de producción.
 
 ## 8. Documentos relacionados
