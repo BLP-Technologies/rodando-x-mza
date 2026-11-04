@@ -32,7 +32,7 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 /**
  * Los obstáculos que cuelgan de un elemento del grafo.
  *
- * Lee la misma query que la pantalla de `/obstacles` con `status='ALL'` —así comparte la
+ * Lee la misma query que la pestaña Obstáculos con `status='ALL'` —así comparte la
  * entrada de caché y ve también lo resuelto— y filtra en el cliente por
  * `element_kind`/`element_id`: el servidor no tiene un filtro por elemento y agregarlo sería
  * un parámetro para un caso que el cliente resuelve con lo que ya recibió.

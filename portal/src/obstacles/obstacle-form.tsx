@@ -25,7 +25,7 @@ import {
   type ObstacleType,
 } from '@/api/obstacles';
 import { OBSTACLE_SEVERITIES, SEVERITY_LABELS } from './obstacle-labels';
-import type { MapPoint } from './obstacles-map';
+import type { MapPoint } from '@/map/layer-draw';
 
 type ObstacleFormProps = {
   point: MapPoint;

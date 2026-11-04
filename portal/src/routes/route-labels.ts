@@ -2,9 +2,13 @@
  * Las etiquetas y los colores de la pantalla de ruta, en español y en un solo lugar.
  *
  * El nivel de un tramo no se traduce acá: los cuatro nombres —y sus colores— son los del
- * mapa y viven en `map/feature-style.ts`, porque un tramo se pinta con el mismo criterio que
- * una vereda del grafo ([16 §5.3](../../docs/16-el-portal.md)). Duplicarlos sería tener dos
- * verdades sobre qué significa `PARTIAL`.
+ * mapa y viven en `map/feature-style.ts`, porque el detalle del recorrido muestra el nivel de
+ * cada tramo con el mismo criterio que una vereda del grafo
+ * ([16 §5.3](../../docs/16-el-portal.md)). Duplicarlos sería tener dos verdades sobre qué
+ * significa `PARTIAL`.
+ *
+ * La geometría del recorrido tiene su propio estilo y vive con los demás del mapa: es una
+ * sola línea y no una por tramo.
  */
 
 import type { RouteLeg } from '@/api/routes';

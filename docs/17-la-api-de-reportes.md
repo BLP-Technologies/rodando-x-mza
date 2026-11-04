@@ -291,9 +291,10 @@ decenas de megabytes. El orden es **determinístico**, `created_at DESC, id DESC
 recortan en el mismo lugar y lo que se ve primero es siempre lo más nuevo.
 
 **No hay `bbox`.** El grafo lo tiene porque la unidad de trabajo del moderador es el
-área; la de los reportes es la fila: se revisan en una lista y uno por vez, y el mapa
-del grafo no los dibuja ([16 §8](16-el-portal.md)). Se revisa el día que la lista deje
-de ser una cola de un solo estado y haya que mirar reportes de una zona: ahí el área
+área; la de los reportes es la fila: se revisan en una lista y uno por vez. El mapa los
+dibuja sólo como capa y sólo los `PENDING` ([16 §5.8](16-el-portal.md#58-el-panel-de-capas)),
+que es la cola de trabajo, y para eso no hace falta área. Se revisa el día que la lista
+deje de ser una cola de un solo estado y haya que mirar reportes de una zona: ahí el área
 vuelve a tener sentido y se pide como en el grafo.
 
 **Los dados de baja no aparecen, en ningún estado y sin parámetro.** La baja de un

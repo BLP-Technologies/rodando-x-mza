@@ -3,18 +3,18 @@
 /**
  * El montaje de un mapa de Leaflet, en un solo lugar.
  *
- * Las tres pantallas que dibujan un mapa —el grafo, los obstáculos y el recorrido—
- * necesitan lo mismo: un `L.Map` sobre un contenedor, los tiles de OSM con la atribución
- * obligatoria ([10 §3](../../docs/10-datos-y-zona-piloto.md)), la vista inicial del piloto
- * y un `LayerGroup` propio donde dibujar. Eso vive acá, y cada pantalla se ocupa de sus
- * capas.
+ * La pantalla del portal necesita lo mismo de siempre: un `L.Map` sobre un contenedor, los
+ * tiles de OSM con la atribución obligatoria
+ * ([10 §3](../../docs/10-datos-y-zona-piloto.md)), la vista inicial del piloto y un
+ * `LayerGroup` propio donde dibujar. Eso vive acá, y `map-screen.tsx` se ocupa de sus capas.
  *
  * **Sin `react-leaflet`.** Su `MapContainer` crea el mapa una vez y lo destruye en el
  * cleanup de su efecto, pero no lo vuelve a crear si React re-monta el componente: como
  * `Map.remove()` vacía los panes de Leaflet, las capas que después se le agregaban
- * reventaban en `getPane(...).appendChild` al volver al grafo desde otra pantalla. Con el
- * ciclo en nuestras manos, cada montaje crea un mapa y lo destruye al desmontarse, y las
- * capas se dibujan por efectos sobre esa instancia ([16 §5.1](../../docs/16-el-portal.md)).
+ * reventaban en `getPane(...).appendChild`. Con el ciclo en nuestras manos, cada montaje crea
+ * un mapa y lo destruye al desmontarse, y las capas se dibujan por efectos sobre esa
+ * instancia. En la pantalla del portal el montaje es uno solo y no se rehace al cambiar de
+ * herramienta: lo que cambia es qué se dibuja encima.
  *
  * Importa Leaflet, así que **nunca** puede evaluarse en el servidor: quien lo usa ya está
  * debajo de un `ssr: false` ([16 §5.2](../../docs/16-el-portal.md)).

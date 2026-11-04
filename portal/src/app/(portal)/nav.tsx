@@ -1,23 +1,20 @@
 'use client';
 
 /**
- * La navegación del portal: una entrada por objeto de trabajo y sólo por las pantallas que
- * existen.
+ * La navegación del portal: una entrada por pantalla.
  *
- * Son cuatro —el grafo, los reportes, los obstáculos y la ruta—. La barra no anuncia lo que
- * falta, porque una sección que se clickea y no lleva a nada es peor que una que no está
- * ([16 §8](../../docs/16-el-portal.md)). El estado activo se marca con `aria-current` y con el
- * estilo, para que no dependa del color.
+ * Son dos —el mapa y los reportes—. El mapa es uno solo con tres herramientas adentro: las
+ * pestañas no son secciones, así que no tienen entrada propia. La barra no anuncia lo que
+ * falta, porque una sección que se clickea y no lleva a nada es peor que una que no está. El
+ * estado activo se marca con `aria-current` y con el estilo, para que no dependa del color.
  */
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 const LINKS = [
-  { href: '/', label: 'Grafo' },
+  { href: '/', label: 'Mapa' },
   { href: '/reports', label: 'Reportes' },
-  { href: '/obstacles', label: 'Obstáculos' },
-  { href: '/routes', label: 'Ruta' },
 ] as const;
 
 export function Nav() {
@@ -26,7 +23,7 @@ export function Nav() {
   return (
     <nav aria-label="Secciones del portal" className="flex items-center gap-1">
       {LINKS.map((link) => {
-        // El grafo es la raíz exacta; el resto, su rama entera.
+        // El mapa es la raíz exacta; los reportes, su rama entera.
         const isActive =
           link.href === '/' ? pathname === '/' : pathname.startsWith(link.href);
 
