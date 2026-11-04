@@ -1,5 +1,7 @@
+import { sql, type Transaction } from 'kysely';
 import { afterAll, describe, expect, it } from 'vitest';
 import { getDb } from '../db/index.js';
+import type { DB } from '../db/types.js';
 import { inRolledBackTransaction } from '../db/test-transaction.js';
 import {
   findDefaultUserId,
@@ -11,6 +13,25 @@ import {
   deletePlaceRow,
 } from './places.sql.js';
 
+/**
+ * `user_places.user_id` es NOT NULL, y la base del CI no trae usuarios: el auth
+ * todavía no está en `main`. Cada prueba siembra el suyo dentro de la transacción
+ * que después se revierte.
+ */
+async function createTestUser(trx: Transaction<DB>): Promise<number> {
+  const result = await sql<{ id: number }>`
+    INSERT INTO users (name, email, password_hash)
+    VALUES (
+      'Usuario de prueba',
+      'prueba-' || gen_random_uuid() || '@example.com',
+      'no-es-un-hash'
+    )
+    RETURNING id
+  `.execute(trx);
+
+  return result.rows[0]!.id;
+}
+
 describe.skipIf(!process.env.DATABASE_URL)('places.sql contra la base de datos', () => {
   afterAll(async () => {
     await getDb().destroy();
@@ -18,6 +39,8 @@ describe.skipIf(!process.env.DATABASE_URL)('places.sql contra la base de datos',
 
   it('encuentra el id del usuario por defecto y valida su existencia', async () => {
     await inRolledBackTransaction(async (trx) => {
+      await createTestUser(trx);
+
       const defaultUserId = await findDefaultUserId(trx);
       expect(defaultUserId).not.toBeNull();
       expect(typeof defaultUserId).toBe('number');
@@ -32,7 +55,7 @@ describe.skipIf(!process.env.DATABASE_URL)('places.sql contra la base de datos',
 
   it('inserta un lugar persistiendo coordenadas geográficas en PostGIS y lo recupera por id', async () => {
     await inRolledBackTransaction(async (trx) => {
-      const userId = (await findDefaultUserId(trx))!;
+      const userId = await createTestUser(trx);
 
       const inserted = await insertPlaceRow(trx, {
         userId,
@@ -58,7 +81,7 @@ describe.skipIf(!process.env.DATABASE_URL)('places.sql contra la base de datos',
 
   it('lista los lugares filtrados por usuario y ordenados descendentemente', async () => {
     await inRolledBackTransaction(async (trx) => {
-      const userId = (await findDefaultUserId(trx))!;
+      const userId = await createTestUser(trx);
 
       const p1 = await insertPlaceRow(trx, {
         userId,
@@ -86,7 +109,7 @@ describe.skipIf(!process.env.DATABASE_URL)('places.sql contra la base de datos',
 
   it('actualiza un lugar existente modificando datos y geometría', async () => {
     await inRolledBackTransaction(async (trx) => {
-      const userId = (await findDefaultUserId(trx))!;
+      const userId = await createTestUser(trx);
 
       const inserted = await insertPlaceRow(trx, {
         userId,
@@ -114,7 +137,7 @@ describe.skipIf(!process.env.DATABASE_URL)('places.sql contra la base de datos',
 
   it('elimina un lugar y retorna false al intentar borrar uno inexistente', async () => {
     await inRolledBackTransaction(async (trx) => {
-      const userId = (await findDefaultUserId(trx))!;
+      const userId = await createTestUser(trx);
 
       const inserted = await insertPlaceRow(trx, {
         userId,
