@@ -1,11 +1,6 @@
 /**
  * El dibujo de cada capa del mapa, en funciones puras.
  *
- * Antes cada pantalla con mapa tenía su propio archivo de dibujo y, con ellos, su propia copia
- * de los detalles de Leaflet: el orden de alta, el `bubblingMouseEvents` que deja pasar el clic
- * al fondo, el `interactive: false` del borde. Con una sola pantalla y un solo `LayerGroup`,
- * esas decisiones viven acá, separadas de quién las decide prender o apagar.
- *
  * **Los colores no se eligen acá.** Salen de `feature-style.ts` (los niveles y el borde del
  * área), de `obstacle-labels.ts` (la severidad) y de `route-labels.ts` (las dos puntas): una
  * capa es un módulo de lectura, no de diseño.
@@ -14,15 +9,27 @@
  * que ya viene debajo del `ssr: false` de `map-panel.tsx`.
  */
 
-import * as L from 'leaflet';
+import * as L from "leaflet";
 
-import type { GraphFeature, GraphLevel, ServiceArea } from '@/api/graph';
-import type { ObstacleFeature } from '@/api/obstacles';
-import type { ReportFeature } from '@/api/reports';
-import type { RoutePoint, RouteResponse } from '@/api/routes';
-import { RESOLVED_MARKER_COLOR, SEVERITY_MARKER_COLORS } from '@/obstacles/obstacle-labels';
-import { DESTINATION_COLOR, ORIGIN_COLOR, PICKED_POINT_COLOR } from '@/routes/route-labels';
-import { lineStyle, pointStyle, routeLineStyle, serviceAreaStyle } from './feature-style';
+import type { GraphFeature, GraphLevel, ServiceArea } from "@/api/graph";
+import type { ObstacleFeature } from "@/api/obstacles";
+import type { ReportFeature } from "@/api/reports";
+import type { RoutePoint, RouteResponse } from "@/api/routes";
+import {
+  RESOLVED_MARKER_COLOR,
+  SEVERITY_MARKER_COLORS,
+} from "@/obstacles/obstacle-labels";
+import {
+  DESTINATION_COLOR,
+  ORIGIN_COLOR,
+  PICKED_POINT_COLOR,
+} from "@/routes/route-labels";
+import {
+  lineStyle,
+  pointStyle,
+  routeLineStyle,
+  serviceAreaStyle,
+} from "./feature-style";
 
 /** Un punto en el orden de la API (y no el de Leaflet): el borrador del alta de obstáculos. */
 export type MapPoint = { lon: number; lat: number };
@@ -88,7 +95,7 @@ export function drawGraph(
     // Los estilos llevan `bubblingMouseEvents: false`, que es lo que evita que el clic llegue
     // al fondo del mapa.
     const path: L.Path =
-      feature.geometry.type === 'LineString'
+      feature.geometry.type === "LineString"
         ? new L.Polyline(
             feature.geometry.coordinates.map(toLatLng),
             lineStyle(level, isSelected),
@@ -100,7 +107,7 @@ export function drawGraph(
 
     // Seleccionar es de la pestaña Grafo: en las otras el clic sobre el grafo no cambia
     // nada, ni siquiera en silencio.
-    if (options.selectable) path.on('click', () => options.onSelect(id));
+    if (options.selectable) path.on("click", () => options.onSelect(id));
     layers.addLayer(path);
     drawn.set(id, { path, level });
   }
@@ -114,7 +121,7 @@ export function drawGraph(
  * Fijo y fuera de la paleta de niveles (verde, ámbar, rojo y gris) y del azul del área: un
  * reporte no dice todavía qué tan accesible es el lugar, dice que alguien vio algo.
  */
-const REPORT_COLOR = '#db2777';
+const REPORT_COLOR = "#db2777";
 
 /**
  * Los reportes ciudadanos pendientes: un anillo por punto, sin interacción.
@@ -131,9 +138,9 @@ export function drawReports(
 
     layers.addLayer(
       new L.CircleMarker([lat, lon], {
-        radius: 6,
+        radius: 10,
         color: REPORT_COLOR,
-        weight: 2,
+        weight: 3,
         fill: false,
         interactive: false,
       }),
@@ -156,9 +163,9 @@ function obstacleStyle(
   return {
     color,
     fillColor: color,
-    fillOpacity: isSelected ? 1 : 0.7,
+    fillOpacity: isSelected ? 1 : 0.9,
     weight: isSelected ? 3 : 1,
-    radius: isSelected ? 9 : 6,
+    radius: isSelected ? 10 : 8,
     interactive,
     // Sin esto el clic llegaría también al fondo del mapa, que es el que suelta la
     // selección de la pestaña Grafo.
@@ -175,10 +182,10 @@ function obstacleStyle(
 function draftMarker(point: MapPoint): L.CircleMarker {
   return new L.CircleMarker([point.lat, point.lon], {
     radius: 9,
-    color: '#0369a1',
-    fillColor: '#0ea5e9',
+    color: "#0369a1",
+    fillColor: "#0ea5e9",
     fillOpacity: 0.4,
-    dashArray: '4 4',
+    dashArray: "4 4",
     weight: 2,
     interactive: false,
   });
@@ -212,7 +219,7 @@ export function drawObstacles(
       obstacleStyle(obstacle, id === options.selectedId, options.interactive),
     );
 
-    if (options.interactive) marker.on('click', () => options.onSelect(id));
+    if (options.interactive) marker.on("click", () => options.onSelect(id));
     layers.addLayer(marker);
   }
 
@@ -225,10 +232,13 @@ export function drawObstacles(
  * `interactive: false` para que no capture clics: el mapa donde se dibuja también es el que
  * marca puntas, y un marcador que se come el clic rompe el modo de elegir punto.
  */
-function endpointMarker(point: { lat: number; lon: number }, color: string): L.CircleMarker {
+function endpointMarker(
+  point: { lat: number; lon: number },
+  color: string,
+): L.CircleMarker {
   return new L.CircleMarker([point.lat, point.lon], {
-    radius: 9,
-    color: '#ffffff',
+    radius: 10,
+    color: "#ffffff",
     weight: 3,
     fillColor: color,
     fillOpacity: 1,
@@ -239,10 +249,10 @@ function endpointMarker(point: { lat: number; lon: number }, color: string): L.C
 /** El punto que se marcó con el clic, tenue y sin relleno, para no confundirlo con el nodo. */
 function pickedMarker(point: RoutePoint): L.CircleMarker {
   return new L.CircleMarker([point.lat, point.lon], {
-    radius: 8,
+    radius: 9,
     color: PICKED_POINT_COLOR,
     weight: 2,
-    dashArray: '3 3',
+    dashArray: "3 3",
     fill: false,
     interactive: false,
   });
@@ -267,7 +277,10 @@ export function drawRoute(
     if (route.found) {
       for (const leg of route.legs) {
         layers.addLayer(
-          new L.Polyline(leg.geometry.coordinates.map(toLatLng), routeLineStyle()),
+          new L.Polyline(
+            leg.geometry.coordinates.map(toLatLng),
+            routeLineStyle(),
+          ),
         );
       }
     }

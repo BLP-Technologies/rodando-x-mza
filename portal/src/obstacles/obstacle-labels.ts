@@ -12,26 +12,26 @@ import type {
   ObstacleFeature,
   ObstacleSeverity,
   ObstacleStatusFilter,
-} from '@/api/obstacles';
+} from "@/api/obstacles";
 
 /** Los tres filtros de la lectura, con los activos primero: es lo que hay en la calle. */
 export const OBSTACLE_STATUS_FILTERS: readonly ObstacleStatusFilter[] = [
-  'ACTIVE',
-  'RESOLVED',
-  'ALL',
+  "ACTIVE",
+  "RESOLVED",
+  "ALL",
 ];
 
 export const STATUS_FILTER_LABELS: Record<ObstacleStatusFilter, string> = {
-  ACTIVE: 'Activos',
-  RESOLVED: 'Resueltos',
-  ALL: 'Todos',
+  ACTIVE: "Activos",
+  RESOLVED: "Resueltos",
+  ALL: "Todos",
 };
 
 /** Las tres severidades, de menos a más restrictiva: el orden del formulario. */
 export const OBSTACLE_SEVERITIES: readonly ObstacleSeverity[] = [
-  'MINOR',
-  'MODERATE',
-  'CRITICAL',
+  "MINOR",
+  "MODERATE",
+  "CRITICAL",
 ];
 
 /**
@@ -41,16 +41,16 @@ export const OBSTACLE_SEVERITIES: readonly ObstacleSeverity[] = [
  * ([09 §4.7](../../docs/09-modelo-de-datos.md)), y quien modera tiene que verlo así.
  */
 export const SEVERITY_LABELS: Record<ObstacleSeverity, string> = {
-  MINOR: 'Leve',
-  MODERATE: 'Moderada',
-  CRITICAL: 'Crítica (bloquea el paso)',
+  MINOR: "Leve",
+  MODERATE: "Moderada",
+  CRITICAL: "Crítica (bloquea el paso)",
 };
 
 /** Los badges de la tabla y del detalle, con la paleta de niveles del mapa invertida. */
 export const SEVERITY_COLORS: Record<ObstacleSeverity, string> = {
-  MINOR: 'border-slate-300 bg-slate-100 text-slate-700',
-  MODERATE: 'border-amber-300 bg-amber-50 text-amber-800',
-  CRITICAL: 'border-red-300 bg-red-50 text-red-800',
+  MINOR: "border-slate-300 bg-slate-100 text-slate-700",
+  MODERATE: "border-amber-300 bg-amber-50 text-amber-800",
+  CRITICAL: "border-red-300 bg-red-50 text-red-800",
 };
 
 /**
@@ -60,22 +60,22 @@ export const SEVERITY_COLORS: Record<ObstacleSeverity, string> = {
  * cuenta", y no se confunde con el rojo de una barrera activa.
  */
 export const SEVERITY_MARKER_COLORS: Record<ObstacleSeverity, string> = {
-  MINOR: '#475569',
-  MODERATE: '#b45309',
-  CRITICAL: '#b91c1c',
+  MINOR: "#2264BD",
+  MODERATE: "#DE640B",
+  CRITICAL: "#b91c1c",
 };
 
 /** El color de un obstáculo resuelto: queda en el mapa como historia, no como barrera. */
-export const RESOLVED_MARKER_COLOR = '#94a3b8';
+export const RESOLVED_MARKER_COLOR = "#33B324";
 
 /** La clase de elemento con el nombre que ve el moderador. */
 export const ELEMENT_KIND_LABELS: Record<ObstacleElementKind, string> = {
-  sidewalk: 'Vereda',
-  kerb: 'Cordón',
-  crossing: 'Cruce',
+  sidewalk: "Vereda",
+  kerb: "Cordón",
+  crossing: "Cruce",
 };
 
 /** El estado del obstáculo en una palabra, derivado de la fecha y no de un booleano. */
 export function obstacleStateLabel(obstacle: ObstacleFeature): string {
-  return obstacle.properties.resolved_at === null ? 'Activo' : 'Resuelto';
+  return obstacle.properties.resolved_at === null ? "Activo" : "Resuelto";
 }

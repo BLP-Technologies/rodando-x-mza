@@ -270,7 +270,13 @@ export default function MapScreen() {
   };
 
   /**
-   * Cambiar de pestaña no desmonta nada: se llevan el modo de clic y nada más.
+   * Cambiar de pestaña no desmonta nada: se llevan los modos de clic y las selecciones.
+   *
+   * **La selección es de la herramienta que la hizo.** Un elemento del grafo se resalta para
+   * leerlo en la ficha y un obstáculo para leer su detalle; cambiar a una herramienta que no
+   * muestra esa ficha dejaría un resaltado sin panel que lo explique. Se suelta lo mismo que
+   * al apagar la capa que lo contenía, y por el mismo motivo. La pestaña Ruta no selecciona
+   * nada, así que no tiene nada que devolver.
    *
    * La pestaña Obstáculos se lee con su capa prendida, así que entrar a ella la prende: la
    * casilla del panel la muestra marcada y fija mientras dure.
@@ -279,6 +285,8 @@ export default function MapScreen() {
     setTab(next);
     setRoutePicking(null);
     setObstaclePicking(false);
+    if (next !== "grafo") setSelectedId(null);
+    if (next !== "obstaculos") setObstacleSelectedId(null);
     if (next === "obstaculos") {
       setLayers((current) => (current.obstaculos ? current : { ...current, obstaculos: true }));
     }
