@@ -1,7 +1,9 @@
 import express, { static as serveStatic, type Express, type RequestHandler } from 'express';
+import type { Logger } from 'pino';
 import { loadConfig } from './config.js';
 import { cors } from './http/cors.js';
 import { errorHandler, notFound } from './http/error-handler.js';
+import { createRequestLogger } from './http/request-logger.js';
 import { apiRouter } from './routes.js';
 
 /** Cuánto puede cachear el navegador una imagen. Los nombres son únicos y no se
@@ -11,13 +13,19 @@ const UPLOAD_MAX_AGE = '365d';
 export interface AppOptions {
   /** Orígenes de navegador permitidos para CORS. Vacío: no se emite ninguno. */
   corsOrigins?: readonly string[];
+  /** Logger a usar. En tests se inyecta uno que captura la salida. */
+  logger?: Logger;
 }
 
 /** Construye la aplicación Express. Separado del arranque para poder testearla. */
-export function createApp({ corsOrigins = [] }: AppOptions = {}): Express {
+export function createApp({ corsOrigins = [], logger }: AppOptions = {}): Express {
   const app = express();
 
   app.disable('x-powered-by');
+  // Detrás de Traefik: sin esto, `req.ip` es la IP del proxy y no la del cliente.
+  app.set('trust proxy', 1);
+  // Primero de todo: también registra los 404 y los errores del resto de la cadena.
+  app.use(createRequestLogger({ logger }));
   // Antes del router y de notFound: un preflight OPTIONS no es una ruta de la API
   // y, si cae en notFound, responde 404 y el navegador nunca ve los encabezados.
   app.use(cors(corsOrigins));
