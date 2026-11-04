@@ -41,9 +41,22 @@ export async function insertReport(
   db: Kysely<DB>,
   input: InsertReportInput,
 ): Promise<ReportRow | null> {
-  const result = await sql<{ id: number; status: ReportStatus }>`
-    INSERT INTO reports (type_id, severity, description, geom, image_url)
-    SELECT catalogue.id, ${input.severity}::obstacle_severity, ${input.description},
+  const result = await sql<{ id: number; status: ReportStatus }>
+  // `
+  //   INSERT INTO reports (type_id, severity, description, geom, image_url)
+  //   SELECT catalogue.id, ${input.severity}::obstacle_severity, ${input.description},
+  //          ST_SetSRID(ST_MakePoint(${input.lon}, ${input.lat}), 4326), ${input.imageUrl}
+  //   FROM obstacle_types catalogue
+  //   WHERE catalogue.code = ${input.type} AND catalogue.is_active
+  //   RETURNING id, status
+  // `.execute(db);
+
+
+  //fallback para probar funcionamiento reporte. waiting for user_id implementation
+  `
+    INSERT INTO reports (user_id, type_id, severity, description, geom, image_url)
+    SELECT (SELECT id FROM users ORDER BY id ASC LIMIT 1),
+           catalogue.id, ${input.severity}::obstacle_severity, ${input.description},
            ST_SetSRID(ST_MakePoint(${input.lon}, ${input.lat}), 4326), ${input.imageUrl}
     FROM obstacle_types catalogue
     WHERE catalogue.code = ${input.type} AND catalogue.is_active
