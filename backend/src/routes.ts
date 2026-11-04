@@ -14,12 +14,9 @@ export const apiRouter = Router();
 apiRouter.use('/health', healthRouter);
 apiRouter.use('/graph', graphRouter);
 apiRouter.use('/routes', routingRouter);
-<<<<<<< HEAD
 apiRouter.use('/places', placesRouter);
-=======
 apiRouter.use('/reports', reportsRouter);
 apiRouter.use('/obstacles', obstaclesRouter);
->>>>>>> origin/main
 apiRouter.use('/docs', docsRouter);
 
 /**
