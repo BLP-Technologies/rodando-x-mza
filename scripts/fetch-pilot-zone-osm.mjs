@@ -7,7 +7,8 @@
  * de interes. Escribe data/pilot-zone.osm (XML) y verifica que el archivo tenga
  * lo que la zona necesita: las cuatro calles del perimetro y las cinco plazas.
  *
- * El extracto no se versiona (ver data/README.md): se regenera con
+ * El extracto se versiona como snapshot (ver data/README.md). Regenerarlo es un
+ * cambio deliberado: sobrescribe el archivo commiteado y cambia el grafo. Se corre con
  *   node scripts/fetch-pilot-zone-osm.mjs
  * Los datos son de OpenStreetMap, bajo ODbL.
  */

@@ -57,10 +57,10 @@ propio `package.json`.
 ```
 rodando-x-mza/
 ├── .github/      # configuración de GitHub: workflows (08) y plantilla de tareas (07)
-├── backend/      # API REST: Express 5 + TypeScript
+├── backend/      # API REST: Express 5 + TypeScript y las migraciones SQL
 ├── portal/       # Portal de moderación: Next.js
 ├── mobile/       # App principal: Expo React Native
-├── infra/        # docker-compose, aprovisionamiento (initdb/) y migraciones SQL
+├── infra/        # docker-compose, aprovisionamiento (initdb/) y build de la base
 ├── docs/         # documentación del proyecto (este directorio)
 └── scripts/      # herramientas de desarrollo (render de diagramas, etc.)
 ```

@@ -289,7 +289,7 @@ docker exec -i "$C" psql -U rodando -d rodando -c \
 
 Advertencias:
 
-- Los cambios de esquema van por una migración en `infra/migrations`. Ejecutar DDL a
+- Los cambios de esquema van por una migración en `backend/migrations`. Ejecutar DDL a
   mano desincroniza producción del repositorio y de los tipos generados
   ([09](09-modelo-de-datos.md)).
 - Antes de un `UPDATE` o `DELETE` masivo, correr el mismo `WHERE` con
@@ -322,18 +322,19 @@ Notas:
 
 ### 4.1 Migraciones
 
-`pnpm migrate` aplica las migraciones de `infra/migrations` y forma parte del
-despliegue del backend. Todavía no está definido cómo se integra a la cadena de
-despliegue (paso previo al arranque o tarea aparte); se documenta cuando se resuelva.
-No es un paso de la base: la base solo aporta el motor y las extensiones.
+`pnpm migrate` aplica las migraciones de `backend/migrations` y forma parte del
+despliegue del backend. Al vivir dentro de `backend/`, entran en el contexto de build y
+el comando puede correr dentro del contenedor. Todavía no está definido cómo se integra
+a la cadena de despliegue (paso previo al arranque o tarea aparte); se documenta cuando
+se resuelva. No es un paso de la base: la base solo aporta el motor y las extensiones.
 
 ### 4.2 Carga del grafo
 
 `pnpm import:osm` carga el extracto de la zona piloto
 ([11](11-grafo-peatonal.md)). Es una **carga inicial**, no un paso recurrente: se
 corre una vez contra la base y se repite solo si se regenera el extracto. El archivo
-`data/pilot-zone.osm` no se versiona; se genera con
-`scripts/fetch-pilot-zone-osm.mjs` o se copia desde una máquina que ya lo tenga.
+`data/pilot-zone.osm` se versiona como snapshot, así que el clone de Dokploy ya lo
+tiene; el import puede correr desde ahí sin copiar nada.
 
 ## 5. Portal (pendiente)
 
