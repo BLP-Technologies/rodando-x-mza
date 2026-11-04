@@ -47,10 +47,10 @@ export function LayerPanel({
   /**
    * Colapsa sin perder el foco.
    *
-   * Se hace acá y no en un efecto a propósito: el cuerpo deja de existir en el mismo commit
-   * que cambia `open`, así que un efecto ya corre con el control oculto, `contains` sobre el
-   * `activeElement` devuelve `false` y el foco queda en el `<body>` del documento. Leyendo el
-   * foco antes de avisar, el control todavía está y el salto al botón es el del usuario.
+   * Se hace acá y no en un efecto a propósito: el cuerpo se oculta en el mismo commit que
+   * cambia `open`, y el navegador saca el foco del control en cuanto deja de estar visible, así
+   * que un efecto ya corre con `activeElement` en el `<body>` y el foco se pierde. Leyendo el
+   * foco antes de avisar, el salto al botón lo hace el usuario y el efecto no tiene que adivinar.
    */
   const handleToggle = () => {
     if (open && bodyRef.current?.contains(document.activeElement) === true) {

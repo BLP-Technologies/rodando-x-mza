@@ -22,7 +22,7 @@ import type { ReportFeature } from '@/api/reports';
 import type { RoutePoint, RouteResponse } from '@/api/routes';
 import { RESOLVED_MARKER_COLOR, SEVERITY_MARKER_COLORS } from '@/obstacles/obstacle-labels';
 import { DESTINATION_COLOR, ORIGIN_COLOR, PICKED_POINT_COLOR } from '@/routes/route-labels';
-import { lineStyle, pointStyle, serviceAreaStyle } from './feature-style';
+import { lineStyle, pointStyle, routeLineStyle, serviceAreaStyle } from './feature-style';
 
 /** Un punto en el orden de la API (y no el de Leaflet): el borrador del alta de obstáculos. */
 export type MapPoint = { lon: number; lat: number };
@@ -68,7 +68,7 @@ type GraphDrawOptions = {
 };
 
 /**
- * Las veredas, los cruces y los cordones, más el tooltip de la calle.
+ * Las veredas, los cruces y los cordones.
  *
  * Devuelve lo dibujado por elemento: el repintado de la selección toca dos capas y no las
  * 977 del piloto, así que necesita saber cuál es el trazo de cada `id`.
@@ -97,17 +97,6 @@ export function drawGraph(
             toLatLng(feature.geometry.coordinates),
             pointStyle(level, isSelected),
           );
-
-    // El tooltip es de la vereda y dice en qué calle está: es la respuesta a "no me acuerdo
-    // en qué calle estaba". No captura el clic ni sustituye a la ficha, y los cruces y
-    // cordones no tienen calle que mostrar.
-    if (
-      feature.geometry.type === 'LineString' &&
-      feature.properties.element_kind === 'sidewalk' &&
-      feature.properties.street_name !== null
-    ) {
-      path.bindTooltip(feature.properties.street_name, { interactive: false });
-    }
 
     // Seleccionar es de la pestaña Grafo: en las otras el clic sobre el grafo no cambia
     // nada, ni siquiera en silencio.
@@ -262,11 +251,11 @@ function pickedMarker(point: RoutePoint): L.CircleMarker {
 /**
  * El recorrido, sus dos puntas y los puntos marcados.
  *
- * Un `Polyline` por tramo y no una línea fusionada: cada tramo tiene su nivel cobrado y su
- * elemento, y el color sale de ahí. Las puntas se dibujan también cuando no hay recorrido:
- * ahí son el diagnóstico, las dos cayeron en componentes distintos del grafo. Los puntos
- * marcados van arriba de todo y se dibujan apenas existen, aunque todavía no se haya pedido
- * nada: son la confirmación de que el clic registró el lugar.
+ * Un solo color: el nivel de cada tramo se lee en el panel, no en la geometría ([16 §5.3]).
+ * Las puntas se dibujan también cuando no hay recorrido: ahí son el diagnóstico, las dos
+ * cayeron en componentes distintos del grafo. Los puntos marcados van arriba de todo y se
+ * dibujan apenas existen, aunque todavía no se haya pedido nada: son la confirmación de que el
+ * clic registró el lugar.
  */
 export function drawRoute(
   layers: L.LayerGroup,
@@ -278,7 +267,7 @@ export function drawRoute(
     if (route.found) {
       for (const leg of route.legs) {
         layers.addLayer(
-          new L.Polyline(leg.geometry.coordinates.map(toLatLng), lineStyle(leg.level, false)),
+          new L.Polyline(leg.geometry.coordinates.map(toLatLng), routeLineStyle()),
         );
       }
     }

@@ -119,16 +119,31 @@ function boundsOf(features: readonly GraphFeature[]): LatLngBoundsLiteral | null
  *
  * Son tres lecturas distintas y cualquiera puede venir recortada; tres carteles apilados
  * sobre el mismo mapa no se leerían, y uno que diga "se recortó" sin decir qué, tampoco.
+ *
+ * La sugerencia de acercarse es sólo para el grafo: es la única lectura que se pide por área,
+ * así que es la única que cambia al hacer zoom. Los reportes y los obstáculos no tienen `bbox`
+ * y achicar el área no devuelve ninguno más.
  */
-function truncationMessage(parts: readonly string[]): string | null {
+function truncationMessage(truncated: {
+  grafo: boolean;
+  obstaculos: boolean;
+  reportes: boolean;
+}): string | null {
+  const parts = [
+    ...(truncated.grafo ? ["elementos del grafo"] : []),
+    ...(truncated.obstaculos ? ["obstáculos"] : []),
+    ...(truncated.reportes ? ["reportes"] : []),
+  ];
+
   if (parts.length === 0) return null;
 
   const list =
     parts.length === 1
       ? parts[0]
       : `${parts.slice(0, -1).join(", ")} y ${parts[parts.length - 1]}`;
+  const advice = truncated.grafo ? " Acercate o achicá el área para verlos todos." : "";
 
-  return `La API devolvió una parte: hay más de 2000 ${list}. Acercate o achicá el área para verlos todos.`;
+  return `La API devolvió una parte: hay más de 2000 ${list}.${advice}`;
 }
 
 export default function MapScreen() {
@@ -229,11 +244,11 @@ export default function MapScreen() {
     [graphQuery.data],
   );
 
-  const truncation = truncationMessage([
-    ...(graphQuery.data?.truncated === true ? ["elementos del grafo"] : []),
-    ...(obstaclesQuery.data?.truncated === true ? ["obstáculos"] : []),
-    ...(reportsQuery.data?.truncated === true ? ["reportes"] : []),
-  ]);
+  const truncation = truncationMessage({
+    grafo: graphQuery.data?.truncated === true,
+    obstaculos: obstaclesQuery.data?.truncated === true,
+    reportes: reportsQuery.data?.truncated === true,
+  });
 
   /** El modo de clic vigente. Los dos no pueden coexistir: cambiar de pestaña los cancela. */
   const clickMode: ClickMode = routePicking ?? (obstaclePicking ? "obstacle" : null);
