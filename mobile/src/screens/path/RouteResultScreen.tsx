@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/auth/AuthContext';
-
 import {
   View,
   Text,
   ScrollView,
   TouchableOpacity,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -17,7 +17,7 @@ import { FormInput } from '@/components/common/FormInput';
 import { OSMRouteMap } from '@/components/path/OSMRouteMap';
 import { ActionButton } from '@/components/common/ActionButton';
 import { StatusModal, StatusType } from '@/components/common/StatusModal';
-import { routesService } from '@/services/routesService';
+import { routesService, RouteCalculationResponse } from '@/services/routesService';
 import { CreateRouteInput } from '@/types/routes';
 
 type RouteResultProp = RouteProp<RouteStackParamList, 'RouteResult'>;
@@ -27,15 +27,15 @@ export const RouteResultScreen = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<RouteResultProp>();
 
-
-  // Consumimos el contexto global:
   const { isGuest, user, cerrarSesion, irAAutenticacion } = useAuth();
 
   const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
   const [isSaved, setIsSaved] = useState<boolean>(false);
   const [customName, setCustomName] = useState<string>('');
 
-  
+  // Estados de cálculo de la ruta real desde el backend
+  const [isLoadingRoute, setIsLoadingRoute] = useState<boolean>(true);
+  const [calculationResult, setCalculationResult] = useState<RouteCalculationResponse | null>(null);
 
   // Parámetros recibidos de NewRouteScreen (con fallback)
   const { origin, destination } = route.params || {
@@ -43,7 +43,77 @@ export const RouteResultScreen = () => {
     destination: { label: 'Escuela', latitude: -32.8791, longitude: -68.8412 },
   };
 
-  // Solo busca rutas guardadas si el usuario no es visitante
+  // Modal para éxito o error
+  const [modalConfig, setModalConfig] = useState<{
+    visible: boolean;
+    type: StatusType;
+    title: string;
+    message?: string;
+  }>({
+    visible: false,
+    type: 'success',
+    title: '',
+  });
+
+  // 1. Llamar al backend real para calcular la ruta
+  useEffect(() => {
+    let isActive = true;
+
+    const fetchCalculatedRoute = async () => {
+      if (!origin.latitude || !origin.longitude || !destination.latitude || !destination.longitude) {
+        setIsLoadingRoute(false);
+        setModalConfig({
+          visible: true,
+          type: 'error',
+          title: 'Coordenadas incompletas',
+          message: 'No se recibieron coordenadas válidas de origen y destino.',
+        });
+        return;
+      }
+
+      try {
+        setIsLoadingRoute(true);
+        const data = await routesService.calculateRoute({
+          origin: { lat: origin.latitude, lon: origin.longitude },
+          destination: { lat: destination.latitude, lon: destination.longitude },
+        });
+
+        if (isActive) {
+          if (!data.found || !data.legs || data.legs.length === 0) {
+            setModalConfig({
+              visible: true,
+              type: 'warning',
+              title: 'Ruta no encontrada',
+              message: 'No se encontró un camino accesible conectado entre estos dos puntos en la zona piloto.',
+            });
+          }
+          setCalculationResult(data);
+        }
+      } catch (err: any) {
+        if (isActive) {
+          console.error('Error calculando ruta en backend:', err);
+          setModalConfig({
+            visible: true,
+            type: 'error',
+            title: 'Error de conexión',
+            message: 'No pudimos conectar con el motor de rutas. Verificá que el backend esté corriendo.',
+          });
+        }
+      } finally {
+        if (isActive) {
+          setIsLoadingRoute(false);
+        }
+      }
+    };
+
+    fetchCalculatedRoute();
+
+    return () => {
+      isActive = false;
+    };
+  }, [origin.latitude, origin.longitude, destination.latitude, destination.longitude]);
+
+  // 2. Verificar si la ruta ya está guardada localmente
   useEffect(() => {
     let isActive = true;
     if (!isGuest) {
@@ -66,23 +136,58 @@ export const RouteResultScreen = () => {
     };
   }, [isGuest, origin.latitude, origin.longitude, destination.latitude, destination.longitude]);
 
-  // Modal para éxito o error al guardar
-  const [modalConfig, setModalConfig] = useState<{
-    visible: boolean;
-    type: StatusType;
-    title: string;
-    message?: string;
-  }>({
-    visible: false,
-    type: 'success',
-    title: '',
-  });
+  // 3. Extraer polilínea unificada [lat, lon] a partir de los legs GeoJSON [lon, lat]
+  const fullCoordinates: [number, number][] = useMemo(() => {
+    if (!calculationResult?.legs) {
+      return [
+        [origin.latitude || 0, origin.longitude || 0],
+        [destination.latitude || 0, destination.longitude || 0],
+      ];
+    }
 
-  const routeMetrics = {
-    distance: '340 m',
-    duration: '16 min aprox.',
-    warningMessage: 'Hay un tramo de vereda sin verificar.',
-  };
+    const coords: [number, number][] = [];
+    calculationResult.legs.forEach((leg) => {
+      leg.geometry.coordinates.forEach(([lon, lat]) => {
+        coords.push([lat, lon]);
+      });
+    });
+    return coords.length > 0
+      ? coords
+      : [
+          [origin.latitude || 0, origin.longitude || 0],
+          [destination.latitude || 0, destination.longitude || 0],
+        ];
+  }, [calculationResult, origin, destination]);
+
+  // 4. Formatear métricas reales calculadas por el backend
+  const routeMetrics = useMemo(() => {
+    if (!calculationResult?.summary) {
+      return {
+        distanceMeters: 0,
+        distanceText: 'Calculando...',
+        durationMinutes: 0,
+        durationText: 'Calculando...',
+        hasUnverified: false,
+        unverifiedMeters: 0,
+        crossings: 0,
+      };
+    }
+
+    const meters = Math.round(calculationResult.summary.meters);
+    // Estimación para silla de ruedas / peatonal accesible: ~4.5 km/h ≈ 75 metros por minuto
+    const estimatedMinutes = Math.max(1, Math.round(meters / 70));
+    const unverified = Math.round(calculationResult.summary.unverified_meters || 0);
+
+    return {
+      distanceMeters: meters,
+      distanceText: `${meters} m`,
+      durationMinutes: estimatedMinutes,
+      durationText: `${estimatedMinutes} min aprox.`,
+      hasUnverified: unverified > 0,
+      unverifiedMeters: unverified,
+      crossings: calculationResult.summary.crossings || 0,
+    };
+  }, [calculationResult]);
 
   const handleLogout = () => {
     cerrarSesion();
@@ -92,11 +197,12 @@ export const RouteResultScreen = () => {
     navigation.navigate('RouteDetail', {
       originLabel: origin.label,
       destinationLabel: destination.label,
+      legs: calculationResult?.legs || [],
+      summary: calculationResult?.summary,
     });
   };
 
   const handleSaveRoute = async () => {
-    // Si es visitante, abre el modal de solicitud de inicio/registro
     if (isGuest) {
       setShowAuthModal(true);
       return;
@@ -125,13 +231,10 @@ export const RouteResultScreen = () => {
           longitude: destination.longitude,
           placeId: null,
         },
-        distanceMeters: 340,
-        durationMinutes: 16,
-        accessibilityScore: 85,
-        coordinates: [
-          [origin.latitude, origin.longitude],
-          [destination.latitude, destination.longitude],
-        ],
+        distanceMeters: routeMetrics.distanceMeters,
+        durationMinutes: routeMetrics.durationMinutes,
+        accessibilityScore: routeMetrics.hasUnverified ? 75 : 95,
+        coordinates: fullCoordinates,
       };
 
       await routesService.create(newRoutePayload);
@@ -169,7 +272,6 @@ export const RouteResultScreen = () => {
         onLogout={handleLogout}
       />
 
-      {/* Botón Volver con Touch Target accesible */}
       <View style={styles.backButtonContainer}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}
@@ -199,26 +301,39 @@ export const RouteResultScreen = () => {
           <OSMRouteMap
             origin={origin}
             destination={destination}
+            coordinates={fullCoordinates}
             height={230}
           />
-          {/* Badge de advertencia sobre el mapa */}
-          <View
-            style={styles.mapWarningBadge}
-            accessible={true}
-            accessibilityRole="alert"
-            accessibilityLabel="Advertencia: Tramo sin verificar sobre el mapa"
-          >
-            <Ionicons name="warning-outline" size={16} color="#7A4D00" />
-            <Text style={styles.mapWarningText}>Tramo sin verificar</Text>
-          </View>
+
+          {isLoadingRoute && (
+            <View style={styles.mapLoadingOverlay}>
+              <ActivityIndicator size="small" color={theme.colors.brand.teal} />
+              <Text style={styles.mapLoadingText}>Calculando ruta accesible...</Text>
+            </View>
+          )}
+
+          {/* Badge solo si hay advertencia de tramos sin verificar */}
+          {routeMetrics.hasUnverified && !isLoadingRoute && (
+            <View
+              style={styles.mapWarningBadge}
+              accessible={true}
+              accessibilityRole="alert"
+              accessibilityLabel={`Advertencia: Hay ${routeMetrics.unverifiedMeters} metros de vereda sin verificar sobre el mapa`}
+            >
+              <Ionicons name="warning-outline" size={16} color="#7A4D00" />
+              <Text style={styles.mapWarningText}>
+                {routeMetrics.unverifiedMeters}m de vereda sin verificar
+              </Text>
+            </View>
+          )}
         </View>
 
-        {/* Sección Informativa agrupada para lectores de pantalla */}
+        {/* Sección Informativa */}
         <View style={styles.infoSection}>
           <View
             accessible={true}
             accessibilityRole="summary"
-            accessibilityLabel={`Ruta accesible encontrada: desde ${origin.label} hasta ${destination.label}. Distancia: ${routeMetrics.distance}, duración estimada: ${routeMetrics.duration}`}
+            accessibilityLabel={`Ruta accesible: desde ${origin.label} hasta ${destination.label}. Distancia: ${routeMetrics.distanceText}, duración estimada: ${routeMetrics.durationText}, cruces accesibles: ${routeMetrics.crossings}`}
           >
             <Text style={styles.eyebrow}>RUTA ACCESIBLE ENCONTRADA</Text>
 
@@ -234,20 +349,25 @@ export const RouteResultScreen = () => {
             </View>
 
             <Text style={styles.metricsText}>
-              {routeMetrics.distance} | {routeMetrics.duration}
+              {routeMetrics.distanceText} | {routeMetrics.durationText}
+              {routeMetrics.crossings > 0 ? ` | ${routeMetrics.crossings} cruces` : ''}
             </Text>
           </View>
 
-          {/* Banner de alerta de accesibilidad */}
-          <View
-            style={styles.alertBanner}
-            accessible={true}
-            accessibilityRole="alert"
-            accessibilityLabel={routeMetrics.warningMessage}
-          >
-            <Ionicons name="help-circle-outline" size={18} color="#9C3B53" />
-            <Text style={styles.alertText}>{routeMetrics.warningMessage}</Text>
-          </View>
+          {/* Banner de alerta si hay tramos sin verificar */}
+          {routeMetrics.hasUnverified && (
+            <View
+              style={styles.alertBanner}
+              accessible={true}
+              accessibilityRole="alert"
+              accessibilityLabel={`Aviso: Hay ${routeMetrics.unverifiedMeters} metros de vereda no verificados por la comunidad.`}
+            >
+              <Ionicons name="help-circle-outline" size={18} color="#9C3B53" />
+              <Text style={styles.alertText}>
+                Hay {routeMetrics.unverifiedMeters} m de vereda sin verificar.
+              </Text>
+            </View>
+          )}
 
           {/* Botones de acción */}
           <View style={styles.actionsRow}>
@@ -255,7 +375,11 @@ export const RouteResultScreen = () => {
               title="VER DETALLE"
               variant="primary"
               onPress={handleViewDetail}
-              style={styles.flexButton}
+              disabled={isLoadingRoute || !calculationResult?.found}
+              style={{
+                ...styles.flexButton,
+                ...((isLoadingRoute || !calculationResult?.found) ? styles.disabledButton : {}),
+              }}
               accessibilityLabel="Ver detalle"
               accessibilityHint="Abre la lista de indicaciones paso a paso de este trayecto"
             />
@@ -263,10 +387,12 @@ export const RouteResultScreen = () => {
               title={isSaved ? 'RECORRIDO GUARDADO' : 'GUARDAR RECORRIDO'}
               variant="primary"
               onPress={handleSaveRoute}
-              disabled={isSaved}
+              disabled={isSaved || isLoadingRoute || !calculationResult?.found}
               style={{
                 ...styles.flexButton,
-                ...(isSaved ? styles.disabledButton : {}),
+                ...(isSaved || isLoadingRoute || !calculationResult?.found
+                  ? styles.disabledButton
+                  : {}),
               }}
               accessibilityLabel={isSaved ? 'Recorrido guardado' : 'Guardar recorrido'}
               accessibilityHint={
@@ -292,7 +418,7 @@ export const RouteResultScreen = () => {
         </View>
       </ScrollView>
 
-      {/* Modal de confirmación o error (éxito al guardar) */}
+      {/* Modales */}
       <StatusModal
         visible={modalConfig.visible}
         type={modalConfig.type}
@@ -302,7 +428,6 @@ export const RouteResultScreen = () => {
         onClose={handleCloseStatusModal}
       />
 
-      {/* Modal de autenticación requerida para visitantes */}
       <StatusModal
         visible={showAuthModal}
         type="auth"
@@ -349,6 +474,25 @@ const getStyles = (theme: Theme) => ({
   mapWrapper: {
     position: 'relative' as const,
     marginBottom: theme.spacing.lg,
+    borderRadius: theme.metrics.radius.card,
+    overflow: 'hidden' as const,
+  },
+  mapLoadingOverlay: {
+    position: 'absolute' as const,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(255, 255, 255, 0.75)',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    gap: 8,
+  },
+  mapLoadingText: {
+    fontSize: 13,
+    fontWeight: '700' as const,
+    color: theme.colors.brand.navy,
   },
   mapWarningBadge: {
     position: 'absolute' as const,

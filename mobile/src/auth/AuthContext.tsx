@@ -6,8 +6,10 @@ import React, {
   useState,
   useEffect,
 } from "react";
+import { userService } from "@/services/userServices";
 import { eliminarToken, guardarToken, leerToken } from "./almacenamiento";
 import * as authService from "./authService";
+
 // Quién está usando la app. `null` = todavía no eligió cómo entrar (se muestra el flujo de auth)
 export type Sesion =
   | { tipo: "usuario"; nombre: string; email: string; token: string }
@@ -22,6 +24,7 @@ interface AuthContextType {
   cargando: boolean;
   user: { nombre: string; email: string } | null;
   iniciarSesion: (datos: DatosSesion) => void;
+  actualizarNombre: (nuevoNombre: string) => Promise<void>;
   entrarComoInvitado: () => void;
   cerrarSesion: () => void;
   irAAutenticacion: () => void;
@@ -29,13 +32,14 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType>({
   sesion: null,
-  isGuest: false, //
+  isGuest: false,
   cargando: true,
-  user: null, //
+  user: null,
   iniciarSesion: () => {},
+  actualizarNombre: async () => {},
   entrarComoInvitado: () => {},
   cerrarSesion: () => {},
-  irAAutenticacion: () => {}, //
+  irAAutenticacion: () => {},
 });
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
@@ -51,6 +55,22 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     });
     guardarToken(datos.token).catch((error) => {
       console.log("Error al guardar el token", error);
+    });
+  }, []);
+
+  const actualizarNombre = useCallback(async (nuevoNombre: string) => {
+    // 1. Guarda en AsyncStorage o backend mediante el servicio
+    const usuarioActualizado = await userService.updateCurrentUserName(nuevoNombre);
+
+    // 2. Notifica a React actualizando el estado 'sesion'
+    setSesion((prevSesion) => {
+      if (prevSesion?.tipo === "usuario") {
+        return {
+          ...prevSesion,
+          nombre: usuarioActualizado.name,
+        };
+      }
+      return prevSesion;
     });
   }, []);
 
@@ -88,7 +108,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         }
       } catch (error) {
         console.log("Error al restaurar la sesión", error);
-// Solo se borra si el servidor lo rechazó: sin conexión, el token sigue siendo válido
+        // Solo se borra si el servidor lo rechazó: sin conexión, el token sigue siendo válido
         if (error instanceof Error && error.message === "UNAUTHENTICATED") {
           eliminarToken().catch((e) => {
             console.log("Error al eliminar el token", e);
@@ -114,6 +134,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       isGuest,
       user,
       iniciarSesion,
+      actualizarNombre,
       entrarComoInvitado,
       cerrarSesion,
       irAAutenticacion: cerrarSesion,
@@ -124,6 +145,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       isGuest,
       user,
       iniciarSesion,
+      actualizarNombre,
       entrarComoInvitado,
       cerrarSesion,
     ],

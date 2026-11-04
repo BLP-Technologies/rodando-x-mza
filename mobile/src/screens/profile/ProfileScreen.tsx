@@ -1,17 +1,30 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, Switch, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { 
+  View,
+  Text,
+  ScrollView,
+  Alert,
+  Keyboard,
+  ActivityIndicator,
+  TouchableOpacity,
+  Switch,
+  TextInput,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useStyles, Theme, useAccessibility, FontScaleOption } from '@/theme';
 import { useAuth } from '@/auth/AuthContext';
-
+import { userService } from '@/services/userServices';
 import { AppHeader } from '@/components/common/AppHeader';
 import { PrimaryButton } from '@/components/common/PrimaryButton';
 import { ScreenHeader } from '@/components/common/ScreenHeader';
 import { useVoiceReader } from '@/hooks/useVoiceReader';
 
 
+
 export const ProfileScreen = () => {
+
+  
   const { styles, theme } = useStyles(getStyles);
   const {
     preferences,
@@ -23,7 +36,18 @@ export const ProfileScreen = () => {
   } = useAccessibility();
 
   // Consumo de la sesión central
-  const { isGuest, user, cerrarSesion, irAAutenticacion } = useAuth();
+  const { isGuest, user, cerrarSesion, irAAutenticacion, actualizarNombre } = useAuth();
+  const [isEditing, setIsEditing] = useState(false);
+  const [nombreInput, setNombreInput] = useState(user?.nombre || '');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+
+  const toggleEditar = () => {
+    if (!isEditing) {
+      setNombreInput(user?.nombre || ''); // Resetea al nombre actual al abrir
+    }
+    setIsEditing(!isEditing);
+  };
 
   //Instancia lector de voz
   const { speak } = useVoiceReader();
@@ -65,6 +89,46 @@ export const ProfileScreen = () => {
     cerrarSesion();
   };
 
+
+
+
+  // Sincroniza el campo con el nombre de sesión actual
+  useEffect(() => {
+    if (user?.nombre) {
+      setNombreInput(user.nombre);
+    }
+  }, [user?.nombre]);
+
+  const handleGuardarNombre = async () => {
+    const trimmed = nombreInput.trim();
+
+    if (!trimmed) {
+      Alert.alert('Nombre requerido', 'El nombre no puede estar vacío.');
+      return;
+    }
+
+    if (trimmed === user?.nombre) {
+      Alert.alert('Sin cambios', 'El nombre ingresado es el mismo que el actual.');
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      await actualizarNombre(trimmed);
+      Keyboard.dismiss();
+      Alert.alert('Éxito', 'Nombre actualizado correctamente.');
+    } catch (error) {
+      console.error('Error al actualizar nombre:', error);
+      Alert.alert(
+        'Error',
+        error instanceof Error ? error.message : 'No se pudo actualizar el nombre.'
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+
   const userInitial = isGuest
     ? 'A'
     : user?.nombre?.[0]?.toUpperCase() || 'U';
@@ -100,11 +164,19 @@ export const ProfileScreen = () => {
             {/* Tarjeta de bienvenida con Avatar y botón Editar datos */}
             <View style={styles.welcomeCard}>
               <View style={styles.userInfoRow}>
-                <View style={styles.avatarCircleAuth}>
+                <View 
+                  style={styles.avatarCircleAuth}
+                  accessible={false} 
+                  importantForAccessibility="no"
+                >
                   <Text style={styles.avatarAuthText}>{userInitial}</Text>
                 </View>
 
-                <View style={styles.userDetailsCol}>
+                <View 
+                  style={styles.userDetailsCol}
+                  accessible={true}
+                  accessibilityLabel={`¡Hola! ${user?.nombre || 'Visitante'}. Correo: ${user?.email || 'Sin correo asociado'}`}
+                >
                   <Text style={styles.greetingText}>¡Hola! 👋</Text>
                   <Text style={styles.userNameText}>{user?.nombre || 'Visitante'}</Text>
                   <Text style={styles.userEmailText}>{user?.email || 'Sin correo asociado'}</Text>
@@ -112,16 +184,56 @@ export const ProfileScreen = () => {
 
                 <TouchableOpacity
                   style={styles.editDataButton}
-                  onPress={() => console.log('Navegar a Editar datos')}//ToDo
+                  onPress={toggleEditar}
                   accessible={true}
                   accessibilityRole="button"
                   accessibilityLabel="Editar datos personales"
                   accessibilityHint="Abre la pantalla para modificar tu nombre o correo"
                 >
-                  <Text style={styles.editDataText}>Editar datos</Text>
+                  <Text style={styles.editDataText}>
+                    {isEditing ? 'Cancelar' : 'Editar datos'}
+                  </Text>
                 </TouchableOpacity>
               </View>
             </View>
+
+            {isEditing && (
+              <View style={styles.changeNameCard}>
+                <Text style={styles.sectionLabel}>CAMBIAR NOMBRE</Text>
+
+                <TextInput
+                  style={styles.input}
+                  value={nombreInput}
+                  onChangeText={setNombreInput}
+                  placeholder="Ingresá tu nombre"
+                  placeholderTextColor="#8E8E93"
+                  autoCapitalize="words"
+                  maxLength={50}
+                  accessible={true}
+                  accessibilityLabel="Campo para ingresar tu nuevo nombre"
+                  accessibilityHint="Ingresá hasta 50 caracteres"
+                />
+
+                <View style={styles.buttonContainer}>
+                  <TouchableOpacity
+                    style={[styles.saveButton, isSubmitting && styles.saveButtonDisabled]}
+                    onPress={async () => {
+                      await handleGuardarNombre();
+                      setIsEditing(false); // Oculta el formulario al guardar exitosamente
+                    }}
+                    disabled={isSubmitting}
+                    accessible={true}
+                    accessibilityRole="button"
+                    accessibilityLabel="Guardar nombre"
+                    accessibilityState={{ busy: isSubmitting }}
+                  >
+                    <Text style={styles.saveButtonText}>
+                      {isSubmitting ? 'Guardando...' : 'Guardar nombre'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
 
             {/* Tarjeta Cuenta Activa */}
             <View 
@@ -145,17 +257,23 @@ export const ProfileScreen = () => {
             {/* Tarjeta de bienvenida de invitado */}
             <View style={styles.welcomeCard}>
               <View style={styles.userInfoRow}>
-                <View style={styles.avatarCircleGuest}>
+                <View 
+                  style={styles.avatarCircleGuest}
+                  accessible={false} 
+                  importantForAccessibility="no"
+                >
                   <Text style={styles.avatarGuestText}>A</Text>
                 </View>
 
-                <View style={styles.userDetailsCol}>
-                  <Text style={styles.greetingText}>¡Hola! 👋</Text>
-                  <Text style={styles.userNameText}>Visitante</Text>
-                  <Text style={styles.guestStatusText}>
-                    Estás usando la aplicación sin cuenta.
-                  </Text>
-                </View>
+                  <View 
+                    style={styles.userDetailsCol}
+                    accessible={true}
+                    accessibilityLabel={`¡Hola! ${user?.nombre || 'Visitante'}. Correo: ${user?.email || 'Sin correo asociado'}`}
+                  >
+                    <Text style={styles.greetingText}>¡Hola! 👋</Text>
+                    <Text style={styles.userNameText}>{user?.nombre || 'Visitante'}</Text>
+                    <Text style={styles.userEmailText}>{user?.email || 'Sin correo asociado'}</Text>
+                  </View>
               </View>
             </View>
 
@@ -193,12 +311,26 @@ export const ProfileScreen = () => {
         {/* ============================================================== */}
         {/* PREFERENCIAS DE ACCESIBILIDAD (Comunes a ambos estados)       */}
         {/* ============================================================== */}
-        <Text style={styles.sectionHeader}>Preferencias de accesibilidad</Text>
+        <Text 
+          style={styles.sectionHeader}
+          accessible={true}
+          accessibilityLabel="Preferencias de accesibilidad"
+          accessibilityRole="header"
+        >
+          Preferencias de accesibilidad
+        </Text>
 
         <View style={styles.settingsGroup}>
           {/* Lectura en voz alta */}
-          <View style={styles.settingRow}>
-            <View style={styles.settingTextCol}>
+          <View
+            accessible={true}
+            accessibilityRole="switch"
+            accessibilityLabel="Lectura en voz alta. Escuchá indicaciones y mensajes importantes"
+            accessibilityState={{ checked: preferences.screenReaderEnabled }}
+            accessibilityHint="Toca dos veces para activar o desactivar"
+            style={styles.settingRow}
+          >
+            <View style={styles.settingTextCol} importantForAccessibility="no-hide-descendants">
               <Text style={styles.settingTitle}>Lectura en voz alta</Text>
               <Text style={styles.settingDescription}>
                 Escuchá indicaciones y mensajes importantes.
@@ -209,9 +341,8 @@ export const ProfileScreen = () => {
               onValueChange={handleToggleVoiceReading}
               trackColor={{ false: '#D1D5DB', true: theme.colors.brand.teal }}
               thumbColor="#FFFFFF"
-              accessibilityRole="switch"
-              accessibilityLabel="Lectura en voz alta"
-              accessibilityState={{ checked: preferences.screenReaderEnabled }}
+              importantForAccessibility="no"
+              accessible={false}
             />
           </View>
 
@@ -230,6 +361,7 @@ export const ProfileScreen = () => {
               onValueChange={setHighContrast}
               trackColor={{ false: '#D1D5DB', true: theme.colors.brand.teal }}
               thumbColor="#FFFFFF"
+              accessible={true}
               accessibilityRole="switch"
               accessibilityLabel="Modo alto contraste"
               accessibilityState={{ checked: preferences.highContrast }}
@@ -276,6 +408,7 @@ export const ProfileScreen = () => {
               onValueChange={setReadingGuide}
               trackColor={{ false: '#D1D5DB', true: theme.colors.brand.teal }}
               thumbColor="#FFFFFF"
+              accessible={true}
               accessibilityRole="switch"
               accessibilityLabel="Guía de lectura"
               accessibilityState={{ checked: preferences.readingGuide }}
@@ -297,6 +430,7 @@ export const ProfileScreen = () => {
               onValueChange={setReduceMotion}
               trackColor={{ false: '#D1D5DB', true: theme.colors.brand.teal }}
               thumbColor="#FFFFFF"
+              
               accessibilityRole="switch"
               accessibilityLabel="Reducir movimiento"
               accessibilityState={{ checked: preferences.reduceMotion }}
@@ -593,6 +727,60 @@ const getStyles = (theme: Theme) => ({
     fontSize: theme.metrics.font.body.size - 2,
     color: theme.colors.text.muted,
     lineHeight: 18,
+  },
+
+  // --- Estilos para la sección de edición de nombre ---
+  changeNameCard: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: theme.colors.brand.navy,
+    borderRadius: theme.metrics.radius.card, // ~16px
+    padding: theme.spacing.lg,
+    marginTop: theme.spacing.md,
+    marginBottom: theme.spacing.lg,
+  },
+  sectionLabel: {
+    fontSize: theme.metrics.font.caption.size + 1, // ~13px
+    fontWeight: '800' as const,
+    color: theme.colors.brand.navy,
+    letterSpacing: 0.6,
+    marginBottom: theme.spacing.sm,
+    textTransform: 'uppercase' as const,
+  },
+  input: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: theme.colors.brand.navy,
+    borderRadius: theme.metrics.radius.card - 4, // ~12px
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: 12,
+    fontSize: theme.metrics.font.body.size,
+    fontWeight: '600' as const,
+    color: theme.colors.brand.navy,
+    marginBottom: theme.spacing.md,
+  },
+  buttonContainer: {
+    alignItems: 'flex-end' as const, // Alinea el botón a la derecha
+  },
+  saveButton: {
+    borderWidth: 2,
+    borderColor: theme.colors.brand.navy,
+    borderRadius: theme.metrics.radius.card, // ~14px a 16px
+    backgroundColor: '#FFFFFF',
+    paddingVertical: 10,
+    paddingHorizontal: 22,
+    minHeight: 44, // Accesibilidad: target táctil mínimo
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+  },
+  saveButtonDisabled: {
+    opacity: 0.5,
+  },
+  saveButtonText: {
+    fontSize: theme.metrics.font.body.size,
+    fontWeight: '800' as const,
+    color: theme.colors.brand.navy,
+    textAlign: 'center' as const,
   },
 });
 

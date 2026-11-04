@@ -100,6 +100,7 @@ const getStyles = (theme: Theme) => ({
     shadowOpacity: 0.15,
     shadowRadius: 6,
     elevation: 3,
+    
   },
   outlineButton: {
     borderWidth: 2,
@@ -114,5 +115,7 @@ const getStyles = (theme: Theme) => ({
     fontWeight: '800' as const,
     letterSpacing: 0.8,
     textTransform: 'uppercase' as const,
+    textAlign: 'center' as const
+    
   },
 });

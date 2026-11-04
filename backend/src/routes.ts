@@ -7,6 +7,7 @@ import { obstaclesRouter } from './obstacles/obstacles.routes.js';
 import { openApiDocument } from './openapi.js';
 import { reportsRouter } from './reports/reports.routes.js';
 import { routingRouter } from './routing/routing.routes.js';
+import { placesRouter } from './places/places.routes.js';
 
 /** Todas las rutas de la API se montan bajo `/api`. */
 export const apiRouter = Router();
@@ -15,6 +16,7 @@ apiRouter.use('/health', healthRouter);
 apiRouter.use('/auth', authRouter);
 apiRouter.use('/graph', graphRouter);
 apiRouter.use('/routes', routingRouter);
+apiRouter.use('/places', placesRouter);
 apiRouter.use('/reports', reportsRouter);
 apiRouter.use('/obstacles', obstaclesRouter);
 apiRouter.use('/docs', docsRouter);

@@ -20,15 +20,7 @@ export const TutorialDetailScreen = () => {
   const { isGuest, user, cerrarSesion } = useAuth();
 
   // Parámetros o fallback con el contenido de la maqueta
-  const tutorial = route.params?.tutorial || {
-    id: '1',
-    title: 'Moverse por la ciudad',
-    category: 'Movilidad urbana',
-    duration: '3min',
-    description:
-      'Cómo resolver cordones y desniveles con asistencia y priorizando la seguridad.',
-    youtubeId: 'pM_s_3a0K3Y', // ID de video de técnicas en silla de ruedas
-  };
+  const tutorial = route.params?.tutorial;
 
  const handleLogout = () => {
     cerrarSesion();
@@ -38,6 +30,18 @@ export const TutorialDetailScreen = () => {
     ? 'A'
     : user?.nombre?.[0]?.toUpperCase() || 'U';
 
+
+  // Fallback de seguridad si se ingresara sin parámetros
+  if (!tutorial) {
+    return (
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
+        <ScreenHeader eyebrow="ERROR" title="Tutorial no encontrado" showBackButton={true} />
+        <View style={styles.emptyContainer}>
+          <Text style={styles.descriptionText}>No se pudo cargar la información del tutorial seleccionado.</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }    
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       {/* 1. Header principal de la aplicación */}
@@ -114,5 +118,9 @@ const getStyles = (theme: Theme) => ({
     lineHeight: theme.metrics.font.body.lineHeight + 2, // ~24px
     color: theme.colors.brand.navy,
     fontWeight: '500' as const,
+  },
+  emptyContainer: {
+    padding: theme.spacing.xl,
+    alignItems: 'center' as const,
   },
 });
