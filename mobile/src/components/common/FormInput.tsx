@@ -9,13 +9,16 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useStyles, Theme } from '@/theme';
+import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
 
 interface FormInputProps extends TextInputProps {
   label?: string;
   containerStyle?: ViewStyle;
   enableVoiceInput?: boolean;
   onVoiceInput?: () => void;
+  onVoiceTranscript?: (text: string) => void;
   isListening?: boolean;
+  lang?: string;
 }
 
 export const FormInput = ({
@@ -25,7 +28,11 @@ export const FormInput = ({
   numberOfLines = 1,
   enableVoiceInput = false,
   onVoiceInput,
-  isListening = false,
+  onVoiceTranscript,
+  isListening: externalIsListening = false,
+  lang = 'es-AR',
+  value,
+  onChangeText,
   style,
   onFocus,
   onBlur,
@@ -33,6 +40,34 @@ export const FormInput = ({
 }: FormInputProps) => {
   const { styles, theme } = useStyles(getStyles);
   const [isFocused, setIsFocused] = useState(false);
+
+  // Manejo del texto transcripto: usa la función externa si existe, 
+  // o concatena automáticamente sobre onChangeText y value.
+  const handleTranscriptResult = (transcript: string) => {
+    if (onVoiceTranscript) {
+      onVoiceTranscript(transcript);
+      return;
+    }
+
+    if (onChangeText) {
+      const currentVal = value ?? '';
+      const updatedVal = currentVal ? `${currentVal} ${transcript}` : transcript;
+      onChangeText(updatedVal);
+    }
+  };
+
+  const {
+    isListening: internalIsListening,
+    isSupported,
+    startListening,
+    stopListening,
+  } = useSpeechRecognition({
+    onResult: handleTranscriptResult,
+    lang,
+  });
+
+  const isListening = enableVoiceInput && !onVoiceInput ? internalIsListening : externalIsListening;
+  const showVoiceButton = enableVoiceInput && (!enableVoiceInput || isSupported);
 
   const handleFocus: TextInputProps['onFocus'] = (e) => {
     setIsFocused(true);
@@ -47,8 +82,13 @@ export const FormInput = ({
   const handleVoicePress = () => {
     if (onVoiceInput) {
       onVoiceInput();
+      return;
+    }
+
+    if (isListening) {
+      stopListening();
     } else {
-      console.log(`Dictado por voz solicitado para: ${label || 'input'}`);
+      startListening();
     }
   };
 
@@ -78,6 +118,8 @@ export const FormInput = ({
           multiline={multiline}
           numberOfLines={numberOfLines}
           textAlignVertical={multiline ? 'top' : 'center'}
+          value={value}
+          onChangeText={onChangeText}
           onFocus={handleFocus}
           onBlur={handleBlur}
           accessible={true}
@@ -86,7 +128,7 @@ export const FormInput = ({
           {...rest}
         />
 
-        {enableVoiceInput && (
+        {showVoiceButton && (
           <TouchableOpacity
             style={[
               styles.voiceButton,
@@ -172,7 +214,7 @@ const getStyles = (theme: Theme) => ({
     paddingTop: theme.spacing.sm,
   },
   voiceButton: {
-    width: theme.metrics.minTouch, // 48px para cumplir el área táctil mínima accesible
+    width: theme.metrics.minTouch,
     height: theme.metrics.minTouch,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,

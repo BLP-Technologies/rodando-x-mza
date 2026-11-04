@@ -238,12 +238,15 @@ export const ReportsScreen = () => {
         {/* 5. Input multilínea accesible con botón de voz */}
         <FormInput
           label="DESCRIPCIÓN (OPCIONAL)"
-          placeholder="Escribí detalles adicionales sobre la barrera..."
+          placeholder="Escribí o presioná el micrófono para agregar detalles adicionales sobre la barrera..."
           value={description}
           onChangeText={setDescription}
           multiline={true}
           numberOfLines={4}
           enableVoiceInput={true}
+          onVoiceTranscript={(text) => {
+            setDescription((prev) => (prev ? `${prev} ${text}` : text));
+          }}
         />
 
         {/* 6. Botones de acción */}
