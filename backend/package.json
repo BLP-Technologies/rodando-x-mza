@@ -4,6 +4,7 @@
   "private": true,
   "description": "API REST de Rodando x MZA",
   "type": "module",
+  "packageManager": "pnpm@12.4.1",
   "engines": {
     "node": ">=22"
   },
@@ -11,25 +12,30 @@
     "dev": "tsx watch --env-file-if-exists=.env src/index.ts",
     "build": "tsc -p tsconfig.build.json",
     "start": "node --env-file-if-exists=.env dist/index.js",
+    "start:migrate": "node-pg-migrate up && node --env-file-if-exists=.env dist/index.js",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "vitest run",
-    "migrate": "node-pg-migrate up --envPath .env -m ../infra/migrations",
-    "migrate:down": "node-pg-migrate down --envPath .env -m ../infra/migrations"
+    "migrate": "node-pg-migrate up --envPath .env",
+    "migrate:down": "node-pg-migrate down --envPath .env",
+    "import:osm": "tsx --env-file-if-exists=.env src/importer/importer.cli.ts",
+    "import:osm:dist": "node --env-file-if-exists=.env dist/importer/importer.cli.js",
+    "seed:reports": "tsx --env-file-if-exists=.env src/reports/reports.seed.cli.ts",
+    "db:types": "kysely-codegen",
+    "db:types:verify": "kysely-codegen --verify || { echo 'Los tipos de src/db/types.ts no coinciden con el esquema: corré pnpm db:types y commiteá el resultado.'; exit 1; }"
   },
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "^9.1.0",
-    "bcryptjs": "^3.0.3",
-    "cors": "^2.8.6",
     "express": "^5.3.0",
     "kysely": "^0.29.6",
-    "multer": "^2.4.0",
+    "multer": "^2.5.0",
+    "node-pg-migrate": "^9.0.0",
     "pg": "^8.23.1",
     "pino": "^10.4.0",
+    "swagger-ui-dist": "^5.34.1",
     "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/multer": "^2.3.0",
     "@types/node": "^22.0.0",
@@ -38,7 +44,6 @@
     "dotenv": "^18.0.7",
     "eslint": "^10.12.0",
     "kysely-codegen": "^0.20.0",
-    "node-pg-migrate": "^9.0.0",
     "pino-pretty": "^13.2.0",
     "supertest": "^7.3.1",
     "tsx": "^4.23.15",

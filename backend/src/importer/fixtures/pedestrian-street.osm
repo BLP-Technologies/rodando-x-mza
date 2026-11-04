@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Extracto de prueba de la calle peatonal, escrito a mano.
+
+  Es el caso controlado de docs/11 §3.5: una peatonal de dos tramos que empieza en
+  una calle, cruza otra en el medio y termina en una tercera. Las tres son
+  `residential`, así que su vereda corre a 6,5 m del eje y el ancho de calzada que
+  hay que cruzar son 13 m.
+
+    Calle Oeste (norte-sur) ── Peatonal Centro (este-oeste) ── Calle Este
+                            Calle Media (norte-sur), en el medio
+
+  Lo que el importador tiene que derivar acá:
+
+    - una sola línea por tramo peatonal, sobre el eje, y no dos;
+    - en el cruce de Peatonal Centro con Calle Media, dos cordones —uno por vereda
+      de Calle Media— y un cruce sobre la calzada entre ellos;
+    - en cada punta (una T con la peatonal como brazo que termina), lo mismo: los dos
+      cordones de la calle que la recibe, unidos por el cruce, y ninguna vereda de
+      la boca, porque los dos lados de la boca caen en el mismo punto.
+
+  Las coordenadas son de Mendoza y el damero está alineado con los ejes para que la
+  aritmética sea legible: 0,0001 de longitud ~9,35 m y 0,0001 de latitud ~11,13 m.
+-->
+<osm version="0.6" generator="hand-written fixture">
+  <bounds minlat="-32.8897" minlon="-68.8483" maxlat="-32.8873" maxlon="-68.8443"/>
+
+  <!-- Calle Oeste: nodo 2 es la punta oeste de la peatonal -->
+  <node id="1" lat="-32.8870" lon="-68.8470"/>
+  <node id="2" lat="-32.8880" lon="-68.8470"/>
+  <node id="3" lat="-32.8890" lon="-68.8470"/>
+
+  <!-- Calle Media: nodo 5 es el cruce del medio -->
+  <node id="4" lat="-32.8870" lon="-68.8460"/>
+  <node id="5" lat="-32.8880" lon="-68.8460"/>
+  <node id="6" lat="-32.8890" lon="-68.8460"/>
+
+  <!-- Calle Este: nodo 8 es la punta este de la peatonal -->
+  <node id="7" lat="-32.8870" lon="-68.8450"/>
+  <node id="8" lat="-32.8880" lon="-68.8450"/>
+  <node id="9" lat="-32.8890" lon="-68.8450"/>
+
+  <way id="201">
+    <nd ref="1"/>
+    <nd ref="2"/>
+    <nd ref="3"/>
+    <tag k="highway" v="residential"/>
+    <tag k="name" v="Calle Oeste"/>
+  </way>
+
+  <way id="202">
+    <nd ref="4"/>
+    <nd ref="5"/>
+    <nd ref="6"/>
+    <tag k="highway" v="residential"/>
+    <tag k="name" v="Calle Media"/>
+  </way>
+
+  <way id="203">
+    <nd ref="7"/>
+    <nd ref="8"/>
+    <nd ref="9"/>
+    <tag k="highway" v="residential"/>
+    <tag k="name" v="Calle Este"/>
+  </way>
+
+  <way id="204">
+    <nd ref="2"/>
+    <nd ref="5"/>
+    <nd ref="8"/>
+    <tag k="highway" v="pedestrian"/>
+    <tag k="name" v="Peatonal Centro"/>
+  </way>
+</osm>

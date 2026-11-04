@@ -1,39 +1,42 @@
 stateDiagram-v2
     accTitle: Ciclo de vida del obstáculo
-    accDescr: Estados del obstáculo que el moderador crea en el mapa a partir de un reporte aprobado, y su efecto sobre el peso de la vereda en el cálculo de recorridos accesibles.
+    accDescr: Estados del obstáculo que el moderador publica en el mapa —desde un reporte aprobado o desde la pantalla de obstáculos— y su efecto sobre el costo del tramo afectado en el cálculo de recorridos accesibles.
 
-    state "ACTIVO" as ACTIVO
-    state "RESUELTO" as RESUELTO
-    state "ELIMINADO" as ELIMINADO
+    state "ACTIVO" as ACTIVE
+    state "RESUELTO" as RESOLVED
+    state "ELIMINADO" as DELETED
 
-    [*] --> ACTIVO: el moderador crea el obstáculo desde un reporte aprobado (C012)
+    [*] --> ACTIVE: el moderador publica el obstáculo (C012), desde un reporte aprobado o desde el mapa
 
-    ACTIVO --> RESUELTO: la barrera ya no está o fue reparada (C013)
-    RESUELTO --> ACTIVO: la barrera volvió a aparecer (C013)
-    ACTIVO --> ELIMINADO: baja lógica (deleted_at)
-    RESUELTO --> ELIMINADO: baja lógica (deleted_at)
+    ACTIVE --> RESOLVED: la barrera ya no está o fue reparada (C013)
+    ACTIVE --> DELETED: baja lógica (deleted_at)
+    RESOLVED --> DELETED: baja lógica (deleted_at)
 
-    note right of ACTIVO
-        Mientras está activo, el obstáculo se considera
-        en el cálculo de recorridos: la vereda afectada
-        se penaliza o directamente se evita.
+    note right of ACTIVE
+        Mientras está activo, el obstáculo entra en el
+        costo del tramo: la severidad suma metros
+        equivalentes y CRITICAL deja el tramo
+        intransitable. El costo se calcula en cada
+        consulta, no se guarda (docs/09 §4.7).
     end note
 
-    note left of ACTIVO
-        El tipo (pozo, árbol, escalón, pendiente excesiva,
-        estrechamiento) y la severidad (crítica, moderada,
-        menor) son atributos, no estados: el moderador los
-        ajusta sin que cambie el ciclo de vida.
+    note left of ACTIVE
+        El tipo (obstacle_types) y la severidad
+        (obstacle_severity) son atributos, no estados:
+        el moderador los ajusta sin que cambie el
+        ciclo de vida.
     end note
 
-    note left of RESUELTO
-        En el modelo de datos el estado se guarda con el
-        booleano obstacles.is_resolved, no con un estado
-        con nombre propio. Al resolverse, el peso de la
-        vereda vuelve a su valor normal.
+    note left of RESOLVED
+        En el modelo de datos el estado se guarda con la
+        fecha obstacles.resolved_at: NULL es activo, y
+        con fecha es resuelto. No hay un booleano al
+        lado. Al resolverse deja de contar en el costo:
+        el de la arista se calcula en cada consulta, así
+        que no hay valor que revertir.
     end note
 
-    note right of ELIMINADO
+    note right of DELETED
         La baja lógica (obstacles.deleted_at) saca el
         obstáculo del mapa sin perder su historial.
     end note

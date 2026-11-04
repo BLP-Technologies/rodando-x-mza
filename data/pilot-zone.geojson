@@ -1,0 +1,26 @@
+{
+  "type": "Feature",
+  "name": "pilot-zone",
+  "properties": {
+    "name_es": "Zona piloto Fase 1",
+    "description_es": "Cuadrante de 6x6 manzanas del microcentro de Mendoza, delimitado por las lineas centrales de Necochea al norte, San Lorenzo al sur, Peru al oeste y 9 de Julio al este.",
+    "method_es": "Interseccion de las lineas centrales de las cuatro calles, ajustadas por minimos cuadrados sobre la geometria de OpenStreetMap (ver data/README.md).",
+    "source": "OpenStreetMap contributors",
+    "license": "ODbL-1.0",
+    "crs": "EPSG:4326",
+    "precision_m": 2,
+    "decided_in": "docs/09 and issue #9"
+  },
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [-68.847481, -32.885789],
+        [-68.839872, -32.887198],
+        [-68.841541, -32.893626],
+        [-68.849165, -32.892218],
+        [-68.847481, -32.885789]
+      ]
+    ]
+  }
+}

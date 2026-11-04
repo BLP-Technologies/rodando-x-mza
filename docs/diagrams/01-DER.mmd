@@ -1,56 +1,94 @@
 erDiagram
-USERS {
-int id PK
-varchar(50) name
-varchar(200) email
-varchar(255) password_hash
-boolean is_moderator
-datetime created_at
-datetime updated_at
-datetime? deleted_at
-}
+    %% Valores cerrados: ver docs/09-modelo-de-datos.md %%
+    %% Enums: accessibility_level (FULL, PARTIAL, NONE), obstacle_severity (MINOR,
+    %% MODERATE, CRITICAL), report_status (PENDING, APPROVED, UNDER_REPAIR,
+    %% RESOLVED, REJECTED). Solo accessibility_level es nullable, y NULL = no
+    %% determinado; severity y status son NOT NULL (status con DEFAULT PENDING). %%
+    %% El costo de ruteo no es columna de ninguna tabla: se calcula en una vista
+    %% sobre veredas y cruces (docs/09 §4.7). %%
+    %% Lo que el diagrama no puede mostrar, y conviene tener a mano:
+    %%   - Unicos: obstacle_types.code y tutorial_categories.code; users.email,
+    %%     unico por lower(email) y solo entre los no borrados; user_tutorials
+    %%     (user_id, tutorial_id), para no guardar dos veces el mismo tutorial; y
+    %%     service_areas.name, que identifica el area en el codigo.
+    %%   - Indices GiST: las geometrias puntuales de lugares, rutas guardadas,
+    %%     obstaculos y reportes, y el poligono de service_areas, que se consulta
+    %%     con ST_Covers en cada pedido de ruta.
+    %%   - CHECK: en veredas y cruces start_node_id <> end_node_id (sin bucles);
+    %%     en obstaculos num_nonnulls(sidewalk_id, kerb_node_id, crossing_id) <= 1.
+    %%   - Defaults con significado: is_active de los catalogos en true; is_moderator,
+    %%     is_verified en false; resolved_at en NULL (obstaculo activo, docs/09 §4.5);
+    %%     reports.status en PENDING.
+    %%   - on delete: CASCADE en lo que cuelga del usuario como dato personal (lugares,
+    %%     rutas guardadas, tutoriales guardados); RESTRICT para reports.user_id, para
+    %%     los catalogos y para los elementos del grafo.
+    %%   - Nullable con significado: reports.user_id, porque no hay autenticacion
+    %%     todavia y el reporte anonimo es un caso legitimo (docs/09 §4.5).
+
+    USERS {
+        int id PK
+        varchar(50) name
+        varchar(200) email
+        varchar(255) password_hash
+        boolean is_moderator
+        timestamptz created_at
+        timestamptz updated_at
+        timestamptz? deleted_at
+    }
 
     USER_PLACES {
         int id PK
         int user_id FK
         varchar(100) name
         varchar(300)? description
-        geometry(Point) geom
-        datetime created_at
-        datetime updated_at
+        geometry(Point,4326) geom
+        timestamptz created_at
+        timestamptz updated_at
     }
 
     SAVED_ROUTES {
         int id PK
         int user_id FK
         varchar(100) name "ej: Ir al trabajo"
-        geometry(Point) start_point "Punto A (Origen)"
-        geometry(Point) end_point "Punto B (Destino)"
-        datetime created_at
-        datetime updated_at
+        geometry(Point,4326) start_point "Punto A (Origen)"
+        geometry(Point,4326) end_point "Punto B (Destino)"
+        timestamptz created_at
+        timestamptz updated_at
     }
 
-    %% Nodos de conexión / Esquinas %%
+    %% Perimetro de busqueda de una consulta de ruteo: no tiene FK, es dato de
+    %% operacion (docs/09 §4.8) %%
+    SERVICE_AREAS {
+        int id PK
+        varchar(100) name "Unico; identifica el area en el codigo"
+        geometry(Polygon,4326) geom "Perimetro de busqueda"
+        boolean is_active "Baja logica de la fila"
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    %% Nodos de conexión: los vértices del grafo %%
     KERB_NODES {
         int id PK
-        geometry(Point) geom
-        varchar(10)? accessibility_level "FULL, PARTIAL, NONE"
-        boolean is_verified
+        geometry(Point,4326) geom
+        accessibility_level? accessibility_level "FULL, PARTIAL, NONE; NULL = no determinado"
+        boolean is_verified "Un moderador confirmó el valor"
+        timestamptz created_at
+        timestamptz updated_at
     }
-
 
     %% Vereda, de cordón a cordón %%
     SIDEWALKS {
         int id PK
         int start_node_id FK
         int end_node_id FK
-        bigint osm_way_id "FK externo"
+        bigint? osm_way_id "Lo llena el import; no es único"
         varchar(100)? street_name
-        char(1)? side "Lado de la calle (L / R / -)"
-        geometry(Linevarchar) geom
-        boolean is_verified
-        boolean is_accessible
-        float? width "Ancho de vereda"
+        accessibility_level? accessibility_level "FULL, PARTIAL, NONE; NULL = no determinado"
+        geometry(LineString,4326) geom
+        boolean is_verified "Un moderador confirmó el valor"
+        timestamptz created_at
+        timestamptz updated_at
     }
 
     %% Cruce peatonal sobre calzada %%
@@ -58,56 +96,81 @@ datetime? deleted_at
         int id PK
         int start_node_id FK
         int end_node_id FK
-        geometry(Linevarchar) geom
-        boolean has_traffic_light
-        boolean is_verified
-        boolean is_accessible
+        geometry(LineString,4326) geom
+        accessibility_level? accessibility_level "FULL, PARTIAL, NONE; NULL = no determinado"
+        boolean is_verified "Un moderador confirmó el valor"
+        timestamptz created_at
+        timestamptz updated_at
     }
 
     %% Obstáculos o barreras físicas puntuales %%
     OBSTACLES {
         int id PK
         int? sidewalk_id FK
-        geometry(Point) geom
-        varchar type "POZO, ARBOL, ESCALON, PENDIENTE_EXCESIVA, ESTRECHAMIENTO"
-        varchar severity "CRITICAL, MODERATE, MINOR"
-        boolean is_resolved
-        datetime created_at
-        datetime updated_at
-        datetime? deleted_at
+        int? kerb_node_id FK
+        int? crossing_id FK
+        int type_id FK
+        obstacle_severity severity "MINOR, MODERATE, CRITICAL"
+        geometry(Point,4326) geom
+        timestamptz? resolved_at "NULL = activo (docs/09 §4.5)"
+        timestamptz created_at
+        timestamptz updated_at
+        timestamptz? deleted_at
+    }
+
+    %% Catálogo de tipos de obstáculo %%
+    OBSTACLE_TYPES {
+        int id PK
+        varchar(40) code "Inmutable en la API; ver docs/09 §4.2"
+        varchar(80) name_es "Etiqueta para el portal"
+        boolean is_active "Baja lógica del catálogo"
+        timestamptz created_at
+        timestamptz updated_at
     }
 
     %% Reporte de obstáculos. No crea el obstáculo %%
     REPORTS {
         int id PK
-        int user_id FK
+        int? user_id FK "Anonimo mientras no haya auth (docs/09 §4.5)"
+        int type_id FK "Percepción del ciudadano"
+        obstacle_severity severity "Percepción del ciudadano"
         varchar(300) description
-        geometry(Point) geom
+        geometry(Point,4326) geom
         varchar(300)? image_url
-        varchar(20) status
+        report_status status "PENDING, APPROVED, UNDER_REPAIR, RESOLVED, REJECTED"
         int? obstacle_id FK "Relación opcional con un obstáculo"
-        datetime created_at
-        datetime updated_at
-        datetime? deleted_at
+        timestamptz created_at
+        timestamptz updated_at
+        timestamptz? deleted_at
     }
 
     TUTORIALS {
         int id PK
+        int category_id FK
         varchar(100) title
         varchar(300) description
-        varchar(30) category
         varchar(300) video_url
-        datetime created_at
-        datetime updated_at
-        datetime? deleted_at
+        timestamptz created_at
+        timestamptz updated_at
+        timestamptz? deleted_at
     }
 
+    %% Catálogo de categorías de tutorial %%
+    TUTORIAL_CATEGORIES {
+        int id PK
+        varchar(40) code "Inmutable en la API"
+        varchar(80) name_es "Etiqueta para el portal"
+        boolean is_active "Baja lógica del catálogo"
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    %% Tutoriales guardados por un usuario. Sin updated_at: sus columnas son inmutables %%
     USER_TUTORIALS {
         int id PK
         int user_id FK
         int tutorial_id FK
-        datetime created_at
-        datetime updated_at
+        timestamptz created_at
     }
 
     USERS ||--o{ USER_PLACES: "Tiene lugares favoritos"
@@ -115,7 +178,12 @@ datetime? deleted_at
     KERB_NODES ||--o{ SIDEWALKS: "Nodo de inicio y fin"
     KERB_NODES ||--o{ CROSSINGS: "Nodo de inicio y fin"
     SIDEWALKS ||--o{ OBSTACLES: "Puede tener obstáculos"
-    USERS ||--o{ REPORTS: "Puede reportar obstáculos"
+    KERB_NODES ||--o{ OBSTACLES: "Puede tener obstáculos"
+    CROSSINGS ||--o{ OBSTACLES: "Puede tener obstáculos"
+    OBSTACLE_TYPES ||--o{ OBSTACLES: "Clasifica"
+    OBSTACLE_TYPES ||--o{ REPORTS: "Clasifica la percepción"
+    USERS |o--o{ REPORTS: "Puede reportar obstáculos"
     OBSTACLES ||--o{ REPORTS: "Reporta un obstáculo"
+    TUTORIAL_CATEGORIES ||--o{ TUTORIALS: "Agrupa"
     USERS ||--o{ USER_TUTORIALS: "Tiene tutoriales guardados"
     TUTORIALS ||--o{ USER_TUTORIALS: "Es guardado por un usuario"

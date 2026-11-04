@@ -8,17 +8,18 @@
 
 ## 1. Alcance
 
-Los comandos exactos para pasar de un repositorio clonado a la API respondiendo,
-el porqué de la base en un contenedor, y el catálogo de problemas frecuentes. No
-repite las decisiones de stack ni la estructura del código: eso está en
+Los comandos exactos para pasar de un repositorio clonado a la API respondiendo, el
+porqué de la base en un contenedor, cómo reiniciarla desde cero cuando algo queda a
+medio camino, cómo consultarla, y el catálogo de problemas frecuentes. No repite las
+decisiones de stack ni la estructura del código: eso está en
 [02-stack-y-estructura.md](02-stack-y-estructura.md).
 
 ## 2. Requisitos previos
 
 | Herramienta | Versión | Para qué |
 | --- | --- | --- |
-| Node.js | 22 LTS | correr el backend |
-| pnpm | 10 o superior | gestor de paquetes |
+| Node.js | 22 LTS | correr el backend y el portal |
+| pnpm | 12.4.1 (fijada en `packageManager`) | gestor de paquetes |
 | Git | — | clonar y versionar |
 | Docker (con Compose v2) | — | levantar la base |
 
@@ -35,7 +36,8 @@ instalar el plugin v2 en lugar del viejo.
 | Debian / Ubuntu / Mint | Docker Engine + plugin Compose | el paquete `docker-compose` de la distro suele ser v1; conviene el plugin v2 |
 | Otros Linux | Docker Engine + plugin Compose | si se prefiere podman, funciona como reemplazo y los comandos son los mismos |
 
-Puertos que deben estar libres: **5432** (base de datos) y **3001** (API).
+Puertos que deben estar libres: **5432** (base de datos), **3001** (API) y
+**3000** (portal).
 
 > Los comandos de esta guía están escritos para una terminal tipo Unix (bash). En
 > Windows, WSL2 la provee; en PowerShell hay que tener en cuenta las diferencias (por
@@ -84,6 +86,12 @@ cp .env.example .env       # el .env no se versiona; los valores por defecto
                            # ya coinciden con el compose
 pnpm migrate               # aplica las migraciones de la base
 pnpm dev                   # API en http://localhost:3001
+
+# 3) Portal, en otra terminal
+cd ../portal
+pnpm install
+cp .env.example .env.local # NEXT_PUBLIC_API_URL=http://localhost:3001
+pnpm dev                   # portal en http://localhost:3000
 ```
 
 La base se **aprovisiona sola**: la primera vez que se inicializa el volumen, el
@@ -93,7 +101,82 @@ contenedor corre `infra/initdb/`, que habilita las extensiones `postgis` y
 `pnpm dev` y `pnpm migrate` toman las variables de `.env` automáticamente. En
 PowerShell, el `cp` del paso 3 equivale a `Copy-Item .env.example .env`.
 
-## 5. Verificación
+El portal necesita el backend arriba y el origen `http://localhost:3000` en
+`CORS_ORIGINS` —el `.env.example` del backend ya lo trae—: sin ese encabezado el
+navegador bloquea la respuesta del grafo aunque la API conteste `200`
+([15 §3](15-integracion-con-el-cliente.md)). Qué muestra y cómo está armado el
+portal es de [16](16-el-portal.md).
+
+Las imágenes de los reportes se guardan en **`backend/uploads/`** (o en el
+`UPLOAD_DIR` que se configure), que el backend crea si no existe. La URL con la que
+se devuelve cada imagen sale de `UPLOAD_BASE_URL`, y el backend sirve esos bytes en
+**`/uploads`**, fuera de `/api`: los archivos no son un recurso de la API y así el
+día que los sirva el proxy el cliente no cambia de URL
+([17 §4](17-la-api-de-reportes.md#4-las-imágenes)). Las dos variables están en
+`backend/.env.example`.
+
+## 5. Reiniciar la base desde cero
+
+En desarrollo el esquema cambia mucho: una migración a medio escribir, un archivo de
+migración que se corrige después de aplicarlo, datos de prueba que estorban. La salida
+rápida es tirar la base y reconstruirla.
+
+> [!WARNING]
+> Este procedimiento **borra todos los datos** de la base de desarrollo y no se puede
+> deshacer. En producción nunca se hace así: ver
+> [03-despliegue-y-operacion.md](03-despliegue-y-operacion.md).
+
+```sh
+cd infra
+docker compose down -v      # -v borra el volumen: no queda nada
+docker compose up -d        # vuelve a crear el contenedor y lo inicializa
+docker compose ps           # esperar a que el estado sea "healthy"
+
+cd ../backend
+pnpm migrate                # volver a aplicar todas las migraciones
+```
+
+El último paso es el que más se olvida: **levantar la base no aplica las migraciones.**
+Un volumen nuevo queda sin tablas hasta que corra `pnpm migrate`.
+
+Qué hace exactamente `down -v`, y por eso es lo que arregla los problemas raros:
+
+- Borra el volumen, no solo el contenedor.
+- Al levantar de nuevo, el contenedor corre `infra/initdb/` una vez, que es donde se
+  habilitan `postgis` y `pgrouting`. Esa es la razón por la que un volumen creado antes
+  de agregar `initdb/` nunca tiene las extensiones: no hay forma de arreglarlo sin
+  recrearlo.
+
+Para confirmar que quedó limpia y migrada:
+
+```sh
+cd infra
+docker compose exec db psql -U rodando -d rodando -c '\dt'
+docker compose exec db psql -U rodando -d rodando -c 'select name, run_on from pgmigrations'
+```
+
+Si preferís no borrar el volumen, se puede deshacer migración por migración con
+`pnpm migrate:down` (revierte la última) o
+`pnpm exec node-pg-migrate down N --envPath .env` en `backend/`
+(revierte las últimas `N`). Eso conserva lo que no hayan tocado esas migraciones.
+
+## 6. Consultar la base
+
+Las credenciales son las del compose y son **solo para desarrollo**:
+`rodando` / `rodando`, base `rodando`, puerto `5432`.
+
+Con `psql` dentro del contenedor, sin instalar nada:
+
+```sh
+cd infra
+docker compose exec db psql -U rodando -d rodando
+docker compose exec db psql -U rodando -d rodando -c '\dt'
+```
+
+Con un cliente gráfico como pgAdmin, DBeaver o TablePlus: host `localhost`, puerto
+`5432`, base `rodando`, usuario `rodando`, contraseña `rodando`.
+
+## 7. Verificación
 
 ```sh
 curl http://localhost:3001/api/health        # {"status":"ok"}
@@ -104,7 +187,58 @@ curl http://localhost:3001/api/health/ready  # {"status":"ok","db":"up"}
 - `/api/health/ready` (readiness): **además** la base responde. Es el que confirma
   que está todo bien.
 
-## 6. Comandos frecuentes
+### Probar un recorrido
+
+Con la base importada, el backend arriba y el contrato de
+[13](13-api-de-ruteo.md) delante. Plaza Independencia → Plaza España, las dos puntas
+adentro del perímetro de búsqueda:
+
+```sh
+curl -sS -X POST http://localhost:3001/api/routes/calculate \
+  -H 'content-type: application/json' \
+  -d '{"origin":{"lat":-32.889727,"lon":-68.844499},"destination":{"lat":-32.892960,"lon":-68.842028}}'
+```
+
+Esperado: `200` con `found: true`, unos 400 m de recorrido, y `unverified_meters` igual a
+`meters` —mientras nadie haya relevado, todos los tramos se apoyan en una suposición—. Los
+`distance_m` de origen y destino no son cero: el pin está en el interior de la plaza y el
+recorrido arranca en el cordón más cercano, que es lo que el cliente tiene que mostrar.
+
+Una punta fuera de la red de seguridad, con cordones cerca pero afuera del perímetro:
+
+```sh
+curl -sS -i -X POST http://localhost:3001/api/routes/calculate \
+  -H 'content-type: application/json' \
+  -d '{"origin":{"lat":-32.884697,"lon":-68.84719},"destination":{"lat":-32.889727,"lon":-68.844499}}'
+```
+
+Esperado: `400` con
+`{"error":{"code":"VALIDATION_ERROR","details":[{"field":"origin","code":"OUTSIDE_SERVICE_AREA"}]}}`.
+
+Con `-sS` y no con `-s`: si el backend no está escuchando, `-s` no imprime nada y el error
+parece un problema de la API. Y `curl http://localhost:3001/api/openapi.json` devuelve el
+contrato completo, que es lo que consume el cliente.
+
+**Los `id` de nodo y de elemento son de la base de cada uno**: si el grafo se importó en
+otro orden, no coinciden con los de otro entorno, pero los metros y los niveles sí.
+
+### Datos de prueba de reportes
+
+La pantalla `/reports` del portal se prueba con datos cargados a mano, y esos datos son
+un comando del backend:
+
+```sh
+cd backend
+pnpm seed:reports
+```
+
+Escribe **diez reportes** en la base que diga `DATABASE_URL`, dentro de la zona piloto y
+con los tres estados que el selector necesita (pendientes, aprobados y rechazados).
+**Agrega en cada corrida**: dos corridas dejan veinte. Para volver a cero, `DELETE FROM
+reports`. No hay endpoint que los cree ni los borre: es una herramienta de desarrollo
+([17 §7](17-la-api-de-reportes.md)).
+
+## 8. Comandos frecuentes
 
 Desde `backend/`:
 
@@ -117,6 +251,18 @@ Desde `backend/`:
 | `pnpm build` | compila a `dist/` |
 | `pnpm migrate` | aplica las migraciones pendientes |
 | `pnpm migrate:down` | revierte la última migración |
+| `pnpm db:types` | regenera `src/db/types.ts` desde la base (requiere la base levantada) |
+| `pnpm db:types:verify` | falla si los tipos generados no coinciden con el esquema |
+| `pnpm seed:reports` | carga diez reportes de prueba para la pantalla de reportes |
+
+Desde `portal/`:
+
+| Comando | Qué hace |
+| --- | --- |
+| `pnpm dev` | portal con recarga automática, en `http://localhost:3000` |
+| `pnpm build` | build de producción; incluye el chequeo de tipos |
+| `pnpm lint` | ESLint |
+| `pnpm api:types` | regenera `src/api/schema.d.ts` desde la API levantada (ver abajo) |
 
 Base de datos, desde `infra/`:
 
@@ -127,8 +273,72 @@ Base de datos, desde `infra/`:
 | `docker compose logs -f db` | logs de la base |
 | `docker compose down` | detiene el contenedor (conserva los datos) |
 | `docker compose down -v` | además borra los datos: base de cero |
+| `docker compose exec db psql -U rodando -d rodando` | abre `psql` en la base (§6) |
 
-## 7. Problemas comunes
+### Regenerar los tipos de la API
+
+`portal/src/api/schema.d.ts` no se escribe a mano: lo genera `openapi-typescript`
+leyendo `GET /api/openapi.json`, y se versiona para que el build del portal
+funcione sin un backend levantado (el CI no tiene uno). Después de tocar un
+esquema del backend:
+
+```sh
+# con el backend arriba
+cd portal
+pnpm api:types
+```
+
+Y el archivo regenerado se commitea junto con el cambio del backend. No se edita
+a mano: si algo está mal ahí, el error está en el esquema Zod
+([16 §6](16-el-portal.md)).
+
+### Regenerar los tipos de la base
+
+`src/db/types.ts` no se escribe a mano: lo genera `kysely-codegen` introspeccionando la
+base real, y se versiona para que `pnpm typecheck` funcione con la base apagada. Por
+eso, después de escribir o aplicar una migración:
+
+```sh
+cd infra && docker compose up -d     # la generación necesita la base
+cd ../backend
+pnpm migrate                          # aplica la migración
+pnpm db:types                         # regenera src/db/types.ts
+```
+
+Y el archivo regenerado se commitea junto con la migración. Si se olvida, el CI lo
+detecta: el workflow corre `pnpm db:types:verify` contra una base recién migrada y
+falla si el archivo quedó viejo.
+
+Los nombres de tabla y columna se respetan tal cual (`kerb_nodes`,
+`accessibility_level`), sin camelCase ni singularización.
+
+### La geometría es un valor opaco para el backend
+
+La columna `geom` se tipa como `string`, y no es una limitación que haya que arreglar:
+es la forma en que el sistema está diseñado. El backend **nunca interpreta** una
+geometría; la geometría se lee y se escribe en SQL, y lo que cruza el borde entre
+TypeScript y Postgres es siempre texto o números.
+
+| Operación | Cómo se hace | Qué viaja desde TypeScript |
+| --- | --- | --- |
+| Escribir un punto (un reporte, un lugar favorito) | `ST_SetSRID(ST_MakePoint($lon, $lat), 4326)` | Dos números |
+| Leer para la API | `ST_AsGeoJSON(geom)` | Un `string` de GeoJSON |
+| Buscar o medir (vecino más cercano, distancia) | `ST_DWithin`, `ST_Distance`, `<->` | Números y parámetros |
+| Comparar en un test | `ST_Equals`, `ST_AsText` | Nada especial |
+
+**La regla corta: no se hace `select` de una columna `geom` cruda.** Si un `geom:
+string` aparece en el resultado de una consulta, es un error de la consulta, no del
+tipo: ese string es WKB en hexadecimal, el driver no lo decodifica, y nada útil se
+puede hacer con él en JavaScript.
+
+La razón de fondo es que la matemática geoespacial es lo que Postgres hace mejor, con
+los índices GiST que un cálculo en memoria no tendría.
+
+Esta decisión se revisa si alguna vez hace falta transformar geometría fuera del SQL
+—reimplementar `ST_Simplify` o `ST_Buffer` en TypeScript, por ejemplo— o si el ruteo
+se moviera al dispositivo. Ahí se evalúa un tipo con marca o un parser en el driver.
+
+## 9. Problemas comunes
 
 | Síntoma | Causa y solución |
 | --- | --- |
@@ -137,15 +347,23 @@ Base de datos, desde `infra/`:
 | `/api/health/ready` devuelve `503 {"db":"down"}` | la base no responde. Revisar `docker compose ps` (¿`healthy`?) y que las credenciales del `.env` coincidan con las del compose |
 | `pnpm migrate` imprime la ayuda del CLI y sale con error | falta la acción `up`; usar el script `pnpm migrate`, que ya la incluye |
 | El puerto 5432 o 3001 está ocupado | hay otro servicio usándolo. Detener lo que lo usa o cambiar el puerto en el compose / `.env` |
-| Se quiere empezar con la base de cero | `docker compose down -v` y volver a levantarla con `docker compose up -d` |
+| Se quiere empezar con la base de cero | `docker compose down -v`, `up -d` y después `pnpm migrate` (ver §5) |
 | La app falla porque falta la extensión `postgis` o `pgrouting` | el volumen se creó antes de agregar `infra/initdb/`. Recrearla con `docker compose down -v` y `docker compose up -d` |
+| `pnpm migrate` falla con `type "geometry" does not exist` | la base no tiene PostGIS habilitado. Pasa en una base creada a mano con `createdb`, porque las extensiones las pone `infra/initdb/` al inicializar el volumen. Recrear la base (§5) o correr `CREATE EXTENSION postgis; CREATE EXTENSION pgrouting;` en ella |
 | En Fedora/RHEL el contenedor de la base no arranca y el log dice `Permission denied` sobre `/docker-entrypoint-initdb.d` | SELinux bloquea el bind mount. El montaje debe llevar el flag `z` (`:ro,z`, ya está en el compose); no quitarlo |
+| El portal carga pero el mapa queda vacío y el cartel dice que no se pudo conectar con la API | el backend no está levantado, o `CORS_ORIGINS` no incluye el origen del portal (`http://localhost:3000`). El bloqueo de CORS no se anuncia como CORS en la consola del navegador ([15 §3](15-integracion-con-el-cliente.md)) |
 
-## 8. Documentos relacionados
+## 10. Documentos relacionados
 
 - [00-reglas-documentacion.md](00-reglas-documentacion.md): reglas de la
-documentación.
+  documentación.
 - [02-stack-y-estructura.md](02-stack-y-estructura.md): stack, estructura y
-convenciones.
+  convenciones.
 - [04-errores-y-mensajes.md](04-errores-y-mensajes.md): contrato de errores.
 - [06-windows-wsl.md](06-windows-wsl.md): trabajar desde Windows con WSL2.
+- [08-integracion-continua.md](08-integracion-continua.md): la verificación que corre
+  en cada pull request, con los mismos comandos de §8.
+- [09-modelo-de-datos.md](09-modelo-de-datos.md): convenciones del esquema y de
+  las migraciones que aplica §4.
+- [16-el-portal.md](16-el-portal.md): el portal de moderación, su estructura y
+  cómo se corre.

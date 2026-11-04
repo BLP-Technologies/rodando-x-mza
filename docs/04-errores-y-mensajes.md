@@ -63,8 +63,32 @@ Códigos iniciales. Una funcionalidad agrega los suyos siguiendo §7.
 | `INTERNAL_ERROR` | 500 | error no esperado |
 
 Los `details` de `VALIDATION_ERROR` tienen la forma
-`[{ "field": "<campo>", "code": "<MOTIVO>" }]` (p. ej. `INVALID_EMAIL`,
-`REQUIRED`).
+`[{ "field": "<campo>", "code": "<MOTIVO>" }]`. `field` es la ruta del campo en el
+cuerpo (`origin`, `origin.lat`) y puede haber varios `details` en un mismo error.
+
+Los motivos son de dos clases, y la diferencia importa para no duplicarlos:
+
+| Clase | Motivos | Quién los produce |
+| --- | --- | --- |
+| **Genéricos** | `REQUIRED` (falta el campo), `INVALID` (está, pero no sirve) | Uno solo para toda la API: `backend/src/http/error-response.ts` |
+| **De dominio** | `OUTSIDE_SERVICE_AREA`, `NO_NEARBY_ELEMENT` y los que agregue cada funcionalidad | La funcionalidad, después de validar la forma |
+
+Los genéricos son política del catálogo: si cada módulo inventara los suyos, el cliente
+tendría que traducir un vocabulario distinto por endpoint. Los de dominio describen algo
+que sólo esa funcionalidad sabe —una punta fuera del perímetro, un email ya registrado— y
+viven con su caso de uso ([13 §8](13-api-de-ruteo.md#8-cómo-se-rechaza)).
+
+**Los motivos de dominio, con su caso de uso y su campo:**
+
+| Motivo | Campo | Cuándo | Documento |
+| --- | --- | --- | --- |
+| `OUTSIDE_SERVICE_AREA` | `origin`, `destination` | Una punta del recorrido cae fuera del perímetro de búsqueda | [13 §8](13-api-de-ruteo.md#8-cómo-se-rechaza) |
+| `NO_NEARBY_ELEMENT` | `geom` | El punto de un obstáculo no tiene ningún elemento del grafo cerca, así que no hay a qué colgarlo | [18 §3](18-la-api-de-obstaculos.md#3-el-alta) |
+
+`NO_NEARBY_ELEMENT` no es un `INVALID`: el punto está bien formado y está en rango; lo que
+falta es el grafo alrededor. Y existe porque la acción del cliente es distinta —elegir un
+punto más cerca del recorrido peatonal, no corregir un número— y el texto que el portal
+muestra sale de ese motivo ([18 §3](18-la-api-de-obstaculos.md#31-el-pegamento-el-elemento-más-cercano)).
 
 ## 5. Errores esperables y no esperables
 
@@ -117,7 +141,9 @@ el monorepo (ver [02](02-stack-y-estructura.md) §3).
 
 ## 8. Documentos relacionados
 
-- [00-reglas-documentacion.md](00-reglas-documentacion.md): reglas de la
-documentación.
+- [00-reglas-documentacion.md](00-reglas-documentacion.md): las reglas de la
+  documentación.
 - [02-stack-y-estructura.md](02-stack-y-estructura.md): convenciones de idioma y
   estructura del proyecto.
+- [13-api-de-ruteo.md](13-api-de-ruteo.md): el caso de uso que usa
+  `OUTSIDE_SERVICE_AREA` como motivo de validación.

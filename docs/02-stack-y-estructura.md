@@ -28,13 +28,14 @@ deliberada, no automática.
 | Componente | Tecnología | Versión |
 | --- | --- | --- |
 | Runtime | Node.js | 22 LTS |
-| Gestor de paquetes | pnpm | 10+ |
+| Gestor de paquetes | pnpm | 12.4.1 (`packageManager`) |
 | Lenguaje | TypeScript | 6.0 (`strict`) |
 | Backend | Express | 5 |
 | Acceso a datos | Kysely | 0.29 |
 | Driver Postgres | pg | 8 |
 | Migraciones | node-pg-migrate | 9 |
 | Validación y contrato | Zod | 4 |
+| Estado de datos del cliente | TanStack Query | 5 |
 | OpenAPI | @asteasolutions/zod-to-openapi | 9 |
 | Base de datos | PostgreSQL + PostGIS + pgRouting | contenedor |
 | Portal web | Next.js | 16 |
@@ -55,10 +56,11 @@ propio `package.json`.
 
 ```
 rodando-x-mza/
-├── backend/      # API REST: Express 5 + TypeScript
+├── .github/      # configuración de GitHub: workflows (08) y plantilla de tareas (07)
+├── backend/      # API REST: Express 5 + TypeScript y las migraciones SQL
 ├── portal/       # Portal de moderación: Next.js
 ├── mobile/       # App principal: Expo React Native
-├── infra/        # docker-compose, aprovisionamiento (initdb/) y migraciones SQL
+├── infra/        # docker-compose, aprovisionamiento (initdb/) y build de la base
 ├── docs/         # documentación del proyecto (este directorio)
 └── scripts/      # herramientas de desarrollo (render de diagramas, etc.)
 ```
@@ -94,20 +96,38 @@ backend/src/
 ├── routes.ts     # compone los routers de cada funcionalidad
 ├── http/         # capa de transporte compartida (no es una funcionalidad)
 ├── db/           # conexión y tipos de la base
+├── obstacles/    # una funcionalidad: los obstáculos publicados
 └── auth/         # una funcionalidad (p. ej. C001/C002)
 ```
 
-Regla para decidir dónde va un archivo:
+```
+portal/src/
+├── app/          # rutas y layouts: orquestan, no implementan
+├── api/          # cliente HTTP tipado y contrato generado de la API
+├── map/          # una funcionalidad: el mapa, sus capas y sus herramientas
+├── reports/      # una funcionalidad: la pantalla de reportes
+├── obstacles/    # una funcionalidad: la herramienta de obstáculos
+├── routes/       # una funcionalidad: la herramienta de ruta
+├── session/      # de dónde sale la sesión del portal
+└── config.ts     # valores por entorno y la caja del piloto
+```
+
+La misma regla decide el destino en las dos aplicaciones:
 
 | Pregunta | Destino |
 | --- | --- |
 | ¿Habla HTTP/Express pero no del dominio? | `http/` |
 | ¿Es una capacidad del negocio? | su carpeta de funcionalidad (`auth/`, `reports/`, …) |
 | ¿Es acceso a datos genérico? | `db/` |
+| ¿Guarda los bytes de un archivo? | `storage/` |
 
 Dentro de una funcionalidad, el rol del archivo se marca en el nombre:
 `auth.router.ts`, `auth.schemas.ts`, `auth.service.ts`, `auth.repository.ts`. El
 test va junto al archivo que prueba (`auth.router.test.ts`).
+
+En el portal, lo que no es una funcionalidad se llama por lo que hace —`api/`,
+`session/`— y los componentes de `app/` no implementan: montan. El detalle de la
+estructura del portal está en [16 §3](16-el-portal.md).
 
 ## 4. TypeScript y calidad
 
@@ -168,6 +188,15 @@ backend**. De ahí salen dos consumidores:
 Esto evita mantener a mano la forma de la API en tres lugares. Cuando cambia un
 esquema, cambia el OpenAPI y los clientes se regeneran.
 
+El documento se publica en **`GET /api/openapi.json`**, generado al arrancar desde los
+esquemas registrados; hoy lo alimentan los contratos de ruteo ([13](13-api-de-ruteo.md)),
+de lectura y edición del grafo ([14](14-la-api-del-grafo.md)), de reportes
+([17](17-la-api-de-reportes.md)) y de obstáculos ([18](18-la-api-de-obstaculos.md)).
+
+Para leerlo a ojo, el mismo documento se publica como página navegable en
+**`GET /api/docs`**: la página pide el documento al backend, que también le sirve la UI,
+así que no hay copia ni CDN de por medio.
+
 Los **errores** también son parte del contrato, y se describen en
 [04-errores-y-mensajes.md](04-errores-y-mensajes.md).
 
@@ -179,7 +208,8 @@ Se usa **Kysely + migraciones SQL** (`node-pg-migrate`), no un ORM como Prisma.
 
 Casi toda entidad del modelo tiene una columna `geometry` (ver
 [`01-DER.mmd`](diagrams/01-DER.mmd)): `user_places`, `saved_routes`, `kerb_nodes`,
-`sidewalks`, `crossings`, `obstacles`, `reports`. Prisma no soporta PostGIS de forma
+`sidewalks`, `crossings`, `obstacles`, `reports`, `service_areas`. Prisma no soporta PostGIS
+de forma
 nativa y esas columnas quedan como `Unsupported("geometry")`:
 
 - Las columnas `Unsupported` **no aparecen en el cliente generado**, así que no se
@@ -218,11 +248,17 @@ en [05-desarrollo.md](05-desarrollo.md). Reglas que sí son de este documento:
 - **Migraciones**: en `infra/`, versionadas en git, aplicadas con `node-pg-migrate`.
   Un cambio de schema no está terminado hasta que su migración está en el commit.
 - **Variables de entorno**: sin secretos versionados; se documentan en el
-  `.env.example` y cada desarrollador provee el valor real.
+  `.env.example` y cada desarrollador provee el valor real. La única excepción son
+  las **credenciales fijas de desarrollo** de `infra/docker-compose.yml`
+  (`rodando`/`rodando`): existen para que levantar la base no exija configurar nada
+  y no protegen ningún dato real. Los secretos de verdad viven fuera del
+  repositorio ([03](03-despliegue-y-operacion.md) §7).
 
 ## 9. Verificación
 
-Corre en CI y antes de cada commit:
+Corre en CI —en cada pull request y en cada push a `main` (ver
+[08-integracion-continua.md](08-integracion-continua.md))— y conviene correrlo también
+antes de cada commit:
 
 - `eslint` (incluye la prohibición de `any`),
 - `tsc --noEmit` (chequeo de tipos),
@@ -253,3 +289,9 @@ documentación.
   mensajes al usuario.
 - [05-desarrollo.md](05-desarrollo.md): puesta en marcha y problemas comunes.
 - [06-windows-wsl.md](06-windows-wsl.md): trabajar desde Windows con WSL2.
+- [07-plan-de-trabajo.md](07-plan-de-trabajo.md): fases, definición de terminado y
+  flujo de trabajo del equipo.
+- [08-integracion-continua.md](08-integracion-continua.md): verificación automática en
+  GitHub Actions y reglas que protegen `main`.
+- [09-modelo-de-datos.md](09-modelo-de-datos.md): convenciones del esquema y
+  representación de los valores cerrados (enums y catálogos).

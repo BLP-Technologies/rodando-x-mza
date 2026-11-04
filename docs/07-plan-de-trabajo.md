@@ -60,8 +60,10 @@ Una tarea está terminada cuando:
 - [ ] Los criterios de aceptación de la tarea se cumplen.
 - [ ] El cambio se integró a `main` mediante un pull request que referencia la tarea.
 
-El repositorio todavía no tiene verificación automática (CI); se agrega cuando exista
-el flujo de pull requests.
+El primer punto no depende de la memoria de nadie: en cada pull request y en cada
+push a `main` corre el workflow de CI, y un resultado en rojo impide el merge. Qué
+corre exactamente, cuándo se activa y qué reglas protegen `main` está en
+[08-integracion-continua.md](08-integracion-continua.md).
 
 ## 5. Cómo se toma una tarea
 
@@ -170,3 +172,7 @@ alcance de la fase en §3—, así que no hace falta recuperar ninguna conversac
 - [03-despliegue-y-operacion.md](03-despliegue-y-operacion.md): despliegue y
   operación.
 - [05-desarrollo.md](05-desarrollo.md): puesta en marcha.
+- [08-integracion-continua.md](08-integracion-continua.md): la verificación automática
+  que hace cumplir el primer punto de §4.
+- [09-modelo-de-datos.md](09-modelo-de-datos.md): convenciones del esquema y
+  representación de los valores cerrados.
