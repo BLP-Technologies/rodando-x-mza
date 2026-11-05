@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { serviceAreasCollectionSchema } from '../service-areas/service-areas.schemas.js';
 
 /**
  * El contrato de `GET /api/graph`, en esquemas Zod.
@@ -97,47 +98,6 @@ export const lineStringGeometrySchema = z.object({
   coordinates: z.array(z.tuple([z.number(), z.number()])),
 });
 
-/**
- * La geometría de un área de servicio: un polígono, también en orden `[lon, lat]`.
- *
- * Existe aparte de la línea porque el área es una sola pieza y su tipo no se negocia al
- * dibujar ([14 §5.2](../../../docs/14-la-api-del-grafo.md)).
- */
-export const polygonGeometrySchema = z.object({
-  type: z.literal('Polygon'),
-  coordinates: z.array(z.array(z.tuple([z.number(), z.number()]))),
-});
-
-/**
- * Un área de servicio activa, con el `id` como clave estable y el nombre que la operación
- * ya usa ([09 §4.8](../../../docs/09-modelo-de-datos.md)).
- *
- * El `id` viaja acá y no es sólo interno: es lo que el mapa usa para identificar el
- * área entre dos respuestas, y es el hueco que cerraba la lectura.
- */
-const serviceAreaFeatureSchema = z.object({
-  type: z.literal('Feature'),
-  geometry: polygonGeometrySchema,
-  properties: z.object({
-    id: z.number().int(),
-    name: z.string(),
-  }),
-});
-
-/**
- * Las áreas activas, como su propia `FeatureCollection`.
- *
- * Tiene nombre propio en OpenAPI (`ServiceAreaCollection`) por el mismo motivo que
- * `GraphElement`: el cliente necesita el tipo del conjunto y el de la feature sin
- * traducir entre dos formas del mismo dato.
- */
-export const serviceAreasCollectionSchema = z
-  .object({
-    type: z.literal('FeatureCollection'),
-    features: z.array(serviceAreaFeatureSchema),
-  })
-  .meta({ id: 'ServiceAreaCollection' });
-
 /** El nivel de accesibilidad de un elemento; `null` es "nadie lo relevó" ([09 §4.1]). */
 export const graphLevelSchema = z.enum(['FULL', 'PARTIAL', 'NONE']).nullable();
 
@@ -199,7 +159,9 @@ export const graphElementSchema = z
  *
  * `service_areas` es hermano de `type` y no una feature más porque un área de servicio
  * no es un elemento del grafo: no la recorta el tope, no la filtra el bbox y el dibujo la
- * trata distinto ([14 §5.2](../../../docs/14-la-api-del-grafo.md)).
+ * trata distinto ([14 §5.2](../../../docs/14-la-api-del-grafo.md)). El conjunto se define
+ * en [`service-areas.schemas.ts`](../service-areas/service-areas.schemas.ts) porque también
+ * es la respuesta entera de `GET /api/service-areas`: una sola definición para las dos.
  */
 export const graphResponseSchema = z
   .object({
@@ -213,7 +175,6 @@ export const graphResponseSchema = z
 export type GraphElement = z.infer<typeof graphElementSchema>;
 export type GraphFeature = GraphElement;
 export type GraphResponse = z.infer<typeof graphResponseSchema>;
-export type ServiceAreaFeature = GraphResponse['service_areas']['features'][number];
 
 /**
  * La clase de un elemento del grafo, tal como viaja en la ruta del `PATCH`.
