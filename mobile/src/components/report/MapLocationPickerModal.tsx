@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Modal,
   View,
@@ -12,11 +12,15 @@ import { Ionicons } from '@expo/vector-icons';
 import { useStyles, Theme } from '@/theme';
 import { PrimaryButton } from '@/components/common/PrimaryButton';
 import { reverseGeocode } from '@/services/geocoding';
+import { getServiceAreas, ServiceAreasCollection } from '@/services/serviceAreasService';
+import { isPointInServiceArea } from '@/utils/geo';
 
 interface MapLocationPickerModalProps {
   visible: boolean;
   initialLatitude?: number;
   initialLongitude?: number;
+  title?: string;
+  subtitle?: string;
   onConfirm: (data: { latitude: number; longitude: number; address: string }) => void;
   onClose: () => void;
 }
@@ -25,6 +29,8 @@ export const MapLocationPickerModal = ({
   visible,
   initialLatitude = -32.8895, // Mendoza Centro por defecto
   initialLongitude = -68.8458,
+  title = 'Marcar en el mapa',
+  subtitle = 'Mové el mapa hasta situar el pin sobre el punto deseado',
   onConfirm,
   onClose,
 }: MapLocationPickerModalProps) => {
@@ -38,7 +44,27 @@ export const MapLocationPickerModal = ({
     longitude: initialLongitude,
   });
 
+  const [serviceAreas, setServiceAreas] = useState<ServiceAreasCollection | null>(null);
   const [isResolving, setIsResolving] = useState(false);
+
+  // Cargar las áreas de servicio del backend cuando el modal se abre
+  useEffect(() => {
+    let isMounted = true;
+    if (visible) {
+      getServiceAreas()
+        .then((data) => {
+          if (isMounted) {
+            setServiceAreas(data);
+          }
+        })
+        .catch((err) => {
+          console.error('Error al obtener áreas de servicio en modal:', err);
+        });
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [visible]);
 
   // Sincronizar coordenadas cuando el modal se vuelve a abrir o cambian las iniciales
   useEffect(() => {
@@ -49,6 +75,15 @@ export const MapLocationPickerModal = ({
       });
     }
   }, [visible, initialLatitude, initialLongitude]);
+
+  // Evalúa si el punto seleccionado está dentro del área de servicio del backend
+  const isInsideServiceArea = useMemo(() => {
+    return isPointInServiceArea(
+      currentCoords.latitude,
+      currentCoords.longitude,
+      serviceAreas
+    );
+  }, [currentCoords, serviceAreas]);
 
   // Escuchar mensajes en entorno Web
   useEffect(() => {
@@ -63,8 +98,8 @@ export const MapLocationPickerModal = ({
             longitude: data.longitude,
           });
         }
-      } catch (e) {
-        // Ignorar mensajes que no sean del mapa
+      } catch {
+        // Ignorar mensajes que no pertenezcan al mapa
       }
     };
 
@@ -72,8 +107,13 @@ export const MapLocationPickerModal = ({
     return () => window.removeEventListener('message', handleWebMessage);
   }, []);
 
-  // HTML con Leaflet configurado para notificar el centro cada vez que el usuario mueve el mapa
-  const leafletHTML = `
+  const geoJsonString = useMemo(() => {
+    return serviceAreas ? JSON.stringify(serviceAreas) : 'null';
+  }, [serviceAreas]);
+
+  // HTML con Leaflet configurado con L.geoJSON
+  const leafletHTML = useMemo(
+    () => `
     <!DOCTYPE html>
     <html lang="es">
       <head>
@@ -83,6 +123,7 @@ export const MapLocationPickerModal = ({
         <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
         <style>
           body, html, #map { margin: 0; padding: 0; height: 100%; width: 100%; background: #E5E7EB; }
+          .leaflet-control-attribution { font-size: 8px !important; }
         </style>
       </head>
       <body>
@@ -91,11 +132,32 @@ export const MapLocationPickerModal = ({
           const map = L.map('map', {
             zoomControl: false,
             attributionControl: false
-          }).setView([${initialLatitude}, ${initialLongitude}], 16);
+          }).setView([${initialLatitude}, ${initialLongitude}], 15);
 
           L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             maxZoom: 19
           }).addTo(map);
+
+          // Cargar el GeoJSON directo del backend:
+          const serviceAreasData = ${geoJsonString};
+
+          if (serviceAreasData && serviceAreasData.features && serviceAreasData.features.length > 0) {
+            const geoJsonLayer = L.geoJSON(serviceAreasData, {
+              style: {
+                color: '#0D9488',
+                weight: 2,
+                dashArray: '5, 5',
+                fillColor: '#0D9488',
+                fillOpacity: 0.12
+              }
+            }).addTo(map);
+
+            try {
+              map.fitBounds(geoJsonLayer.getBounds(), { padding: [25, 25] });
+            } catch (e) {
+              console.error('Error ajustando bounds:', e);
+            }
+          }
 
           map.on('moveend', function() {
             const center = map.getCenter();
@@ -115,7 +177,9 @@ export const MapLocationPickerModal = ({
         </script>
       </body>
     </html>
-  `;
+  `,
+    [initialLatitude, initialLongitude, geoJsonString]
+  );
 
   const handleMessage = (event: any) => {
     try {
@@ -132,6 +196,7 @@ export const MapLocationPickerModal = ({
   };
 
   const handleConfirmLocation = async () => {
+    if (!isInsideServiceArea) return;
     try {
       setIsResolving(true);
       const resolvedAddress = await reverseGeocode(
@@ -187,10 +252,10 @@ export const MapLocationPickerModal = ({
               accessible={true}
               accessibilityRole="header"
             >
-              Marcar en el mapa
+              {title}
             </Text>
             <Text style={styles.headerSubtitle}>
-              Mové el mapa hasta situar el pin sobre la barrera
+              {subtitle}
             </Text>
           </View>
         </View>
@@ -199,7 +264,7 @@ export const MapLocationPickerModal = ({
         <View
           style={styles.mapContainer}
           accessible={true}
-          accessibilityLabel="Mapa interactivo para marcar la ubicación del reporte. Arrastra el mapa para situar el pin sobre la barrera."
+          accessibilityLabel="Mapa interactivo para marcar la ubicación. Arrastrá el mapa para situar el pin sobre el punto deseado."
         >
           {Platform.OS === 'web' ? (
             <iframe
@@ -232,14 +297,31 @@ export const MapLocationPickerModal = ({
             <Ionicons name="location" size={42} color={theme.colors.brand.teal} />
             <View style={styles.pinShadow} />
           </View>
+
+          {/* Cartel flotante de aviso cuando queda fuera del área */}
+          {!isInsideServiceArea && (
+            <View style={styles.outOfBoundsBadge}>
+              <Ionicons name="alert-circle" size={18} color={theme.colors.state.warning} />
+              <Text style={styles.outOfBoundsText}>
+                Ubicación fuera del área de servicio
+              </Text>
+            </View>
+          )}
         </View>
 
         {/* Barra inferior para confirmar */}
         <View style={styles.footer}>
           <PrimaryButton
-            title={isResolving ? 'OBTENIENDO DIRECCIÓN...' : 'CONFIRMAR ESTA UBICACIÓN'}
+            title={
+              !isInsideServiceArea
+                ? 'UBICACIÓN FUERA DE ÁREA'
+                : isResolving 
+                ? 'OBTENIENDO DIRECCIÓN...' 
+                : 'CONFIRMAR ESTA UBICACIÓN'
+            }
+            variant={!isInsideServiceArea ? 'teal' : 'orange'}
             onPress={handleConfirmLocation}
-            disabled={isResolving}
+            disabled={!isInsideServiceArea || isResolving}
             loading={isResolving}
             accessibilityLabel="Confirmar esta ubicación seleccionada"
             accessibilityHint="Guarda las coordenadas marcadas en el centro del mapa y resuelve la dirección"
@@ -298,6 +380,30 @@ const getStyles = (theme: Theme) => ({
     marginTop: -42,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
+  },
+outOfBoundsBadge: {
+    position: 'absolute' as const,
+    top: 16,
+    alignSelf: 'center' as const,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    backgroundColor: '#FFE4E6',
+    borderWidth: 1,
+    borderColor: '#FDA4AF',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    gap: 6,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+  },
+  outOfBoundsText: {
+    fontSize: 12,
+    fontWeight: '700' as const,
+    color: '#9F1239',
   },
   pinShadow: {
     width: 8,

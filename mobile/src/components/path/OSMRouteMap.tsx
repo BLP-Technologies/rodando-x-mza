@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect, useRef } from 'react';
 import { View, Platform } from 'react-native';
 import { useStyles, Theme } from '@/theme';
 
@@ -11,17 +11,12 @@ if (Platform.OS !== 'web') {
   }
 }
 
-interface Point {
-  label: string;
-  latitude: number | null;
-  longitude: number | null;
-}
-
-interface OSMRouteMapProps {
-  origin: Point;
-  destination: Point;
-  coordinates?: [number, number][]; // Arreglo de [lat, lon] reales calculados
+export interface OSMRouteMapProps {
+  origin: { label: string; latitude: number | null; longitude: number | null };
+  destination: { label: string; latitude: number | null; longitude: number | null };
+  coordinates: [number, number][]; // [lat, lon]
   height?: number;
+  userLocation?: { latitude: number; longitude: number } | null;
 }
 
 const escapeString = (str: string): string => {
@@ -38,8 +33,11 @@ export const OSMRouteMap = ({
   destination,
   coordinates,
   height = 240,
+  userLocation,
 }: OSMRouteMapProps) => {
   const { styles } = useStyles(getStyles);
+  const webViewRef = useRef<any>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
 
   const origLat = origin.latitude ?? -32.8895;
   const origLon = origin.longitude ?? -68.8458;
@@ -52,7 +50,6 @@ export const OSMRouteMap = ({
   const centerLat = (origLat + destLat) / 2;
   const centerLon = (origLon + destLon) / 2;
 
-  // Si hay coordenadas calculadas por OSM las usamos, sino unimos origen y destino
   const routePolylineCoords = useMemo(() => {
     if (coordinates && coordinates.length > 0) {
       return JSON.stringify(coordinates);
@@ -62,6 +59,23 @@ export const OSMRouteMap = ({
       [destLat, destLon],
     ]);
   }, [coordinates, origLat, origLon, destLat, destLon]);
+
+  // Transmitir posición al mapa sin recargar la vista
+  useEffect(() => {
+    if (userLocation?.latitude && userLocation?.longitude) {
+      const payload = JSON.stringify({
+        type: 'UPDATE_USER_LOCATION',
+        latitude: userLocation.latitude,
+        longitude: userLocation.longitude,
+      });
+
+      if (Platform.OS === 'web' && iframeRef.current?.contentWindow) {
+        iframeRef.current.contentWindow.postMessage(payload, '*');
+      } else if (webViewRef.current) {
+        webViewRef.current.postMessage(payload);
+      }
+    }
+  }, [userLocation?.latitude, userLocation?.longitude]);
 
   const leafletHtml = useMemo(
     () => `
@@ -75,6 +89,14 @@ export const OSMRouteMap = ({
         <style>
           html, body, #map { height: 100%; width: 100%; margin: 0; padding: 0; background-color: #e5e3df; }
           .leaflet-control-attribution { font-size: 8px !important; }
+          .user-pulse-marker {
+            width: 18px;
+            height: 18px;
+            background-color: #0284C7;
+            border: 3px solid #FFFFFF;
+            border-radius: 50%;
+            box-shadow: 0 0 8px rgba(2, 132, 199, 0.7);
+          }
         </style>
       </head>
       <body>
@@ -87,16 +109,16 @@ export const OSMRouteMap = ({
             attribution: '© OpenStreetMap'
           }).addTo(map);
 
-          // Marcadores de origen y destino
-          const originMarker = L.marker([${origLat}, ${origLon}])
+          // Marcadores origen y destino
+          L.marker([${origLat}, ${origLon}])
             .addTo(map)
             .bindPopup("<b>${safeOriginLabel}</b>");
 
-          const destMarker = L.marker([${destLat}, ${destLon}])
+          L.marker([${destLat}, ${destLon}])
             .addTo(map)
             .bindPopup("<b>${safeDestLabel}</b>");
 
-          // Trazado de ruta accesible con datos calculados
+          // Traza de recorrido accesible
           const latlngs = ${routePolylineCoords};
           const polyline = L.polyline(latlngs, {
             color: '#00838F',
@@ -104,8 +126,38 @@ export const OSMRouteMap = ({
             opacity: 0.85
           }).addTo(map);
 
-          // Ajustar zoom para encuadrar todo el trazado con margen
           map.fitBounds(polyline.getBounds(), { padding: [35, 35] });
+
+          // Marcador dinámico del usuario
+          let userMarker = null;
+          const userIcon = L.divIcon({
+            className: 'user-pulse-container',
+            html: '<div class="user-pulse-marker"></div>',
+            iconSize: [18, 18],
+            iconAnchor: [9, 9]
+          });
+
+          function handleLocationMessage(payloadText) {
+            try {
+              const data = typeof payloadText === 'string' ? JSON.parse(payloadText) : payloadText;
+              if (data && data.type === 'UPDATE_USER_LOCATION') {
+                const targetPos = [data.latitude, data.longitude];
+                if (!userMarker) {
+                  userMarker = L.marker(targetPos, { icon: userIcon, zIndexOffset: 1000 }).addTo(map);
+                } else {
+                  userMarker.setLatLng(targetPos);
+                }
+              }
+            } catch (err) {}
+          }
+
+          // Escuchar eventos según la plataforma (Web, Android, iOS)
+          window.addEventListener('message', function(event) {
+            handleLocationMessage(event.data);
+          });
+          document.addEventListener('message', function(event) {
+            handleLocationMessage(event.data);
+          });
         </script>
       </body>
     </html>
@@ -119,16 +171,18 @@ export const OSMRouteMap = ({
       accessible={true}
       accessibilityRole="image"
       accessibilityLabel={`Mapa de ruta trazada desde ${origin.label} hasta ${destination.label}`}
-      accessibilityHint="Muestra visualmente el recorrido accesible recomendado entre ambos puntos"
+      accessibilityHint="Muestra visualmente el recorrido accesible recomendado y tu ubicación actual si está activa"
     >
       {Platform.OS === 'web' ? (
         <iframe
+          ref={iframeRef}
           srcDoc={leafletHtml}
           style={{ width: '100%', height: '100%', border: 'none' }}
           title={`Mapa interactivo de recorrido desde ${origin.label} hasta ${destination.label}`}
         />
       ) : WebView ? (
         <WebView
+          ref={webViewRef}
           originWhitelist={['*']}
           source={{ html: leafletHtml }}
           style={styles.webView}

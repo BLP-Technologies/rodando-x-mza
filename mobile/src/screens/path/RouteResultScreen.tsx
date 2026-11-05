@@ -19,6 +19,7 @@ import { ActionButton } from '@/components/common/ActionButton';
 import { StatusModal, StatusType } from '@/components/common/StatusModal';
 import { routesService, RouteCalculationResponse } from '@/services/routesService';
 import { CreateRouteInput } from '@/types/routes';
+import { FullScreenRouteMapModal } from '@/components/path/FullScreenRouteMapModal';
 
 type RouteResultProp = RouteProp<RouteStackParamList, 'RouteResult'>;
 
@@ -42,6 +43,9 @@ export const RouteResultScreen = () => {
     origin: { label: 'Casa', latitude: -32.8895, longitude: -68.8458 },
     destination: { label: 'Escuela', latitude: -32.8791, longitude: -68.8412 },
   };
+
+  // Abrir/cerrar vista completa del mapa
+  const [isMapExpanded, setIsMapExpanded] = useState<boolean>(false);
 
   // Modal para éxito o error
   const [modalConfig, setModalConfig] = useState<{
@@ -305,6 +309,19 @@ export const RouteResultScreen = () => {
             height={230}
           />
 
+          {/* Botón flotante para expandir a pantalla completa */}
+          <TouchableOpacity
+            style={styles.expandMapButton}
+            onPress={() => setIsMapExpanded(true)}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel="Ver mapa en pantalla completa"
+            accessibilityHint="Abre el mapa ampliado para seguir la ruta con mayor detalle"
+          >
+            <Ionicons name="scan-outline" size={20} color="#0D2538" />
+            <Text style={styles.expandMapButtonText}>Ampliar mapa</Text>
+          </TouchableOpacity>
+
           {isLoadingRoute && (
             <View style={styles.mapLoadingOverlay}>
               <ActivityIndicator size="small" color={theme.colors.brand.teal} />
@@ -446,6 +463,17 @@ export const RouteResultScreen = () => {
         }}
         dismissText="Ahora no"
       />
+
+      <FullScreenRouteMapModal
+        visible={isMapExpanded}
+        onClose={() => setIsMapExpanded(false)}
+        origin={origin}
+        destination={destination}
+        coordinates={fullCoordinates}
+        summaryText={`${routeMetrics.distanceText} | ${routeMetrics.durationText}`}
+      />
+
+
     </SafeAreaView>
   );
 };
@@ -513,6 +541,30 @@ const getStyles = (theme: Theme) => ({
     fontSize: 12,
     fontWeight: '700' as const,
     color: '#7A4D00',
+  },
+  expandMapButton: {
+    position: 'absolute' as const,
+    top: 10,
+    right: 10,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.94)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: theme.colors.border.default,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.15,
+    shadowRadius: 2,
+  },
+  expandMapButtonText: {
+    fontSize: 12,
+    fontWeight: '700' as const,
+    color: theme.colors.brand.navy,
   },
   infoSection: {
     marginTop: theme.spacing.xs,
