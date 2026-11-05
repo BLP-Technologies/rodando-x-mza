@@ -9,8 +9,7 @@ import { ScreenHeader } from '@/components/common/ScreenHeader';
 import { PrimaryButton } from '@/components/common/PrimaryButton';
 import { RoutePointCard } from '@/components/path/RoutePointCard';
 import { SwapButton } from '@/components/path/SwapButton';
-import { AddressSearchModal } from '@/components/path/AddressSearchModal';
-import { PlaceSuggestion } from '@/services/geocoding';
+import { MapLocationPickerModal } from '@/components/report/MapLocationPickerModal';
 import { placesService } from '@/services/placesService';
 import { Place } from '@/types/places';
 import { StatusModal, StatusType } from '@/components/common/StatusModal';
@@ -24,10 +23,7 @@ interface RoutePoint {
 export const NewRouteScreen = () => {
   const { styles } = useStyles(getStyles);
   const navigation = useNavigation<any>();
-
-  // Consumimos el contexto global:
-    const { isGuest, user, cerrarSesion } = useAuth();
-  
+  const { isGuest, user, cerrarSesion } = useAuth();
 
   const [origin, setOrigin] = useState<RoutePoint>({
     label: 'Mi ubicación',
@@ -42,7 +38,7 @@ export const NewRouteScreen = () => {
   });
 
   const [savedPlaces, setSavedPlaces] = useState<Place[]>([]);
-  const [searchTarget, setSearchTarget] = useState<'origin' | 'destination' | null>(null);
+  const [mapPickerTarget, setMapPickerTarget] = useState<'origin' | 'destination' | null>(null);
   const [openDropdown, setOpenDropdown] = useState<'origin' | 'destination' | null>(null);
 
   // Solo buscamos lugares guardados si el usuario NO es visitante
@@ -85,20 +81,22 @@ export const NewRouteScreen = () => {
     setDestination(temp);
   };
 
-  const handleSelectModalPlace = (place: PlaceSuggestion) => {
+  // Callback cuando se confirma el punto sobre el mapa interactivo
+  const handleConfirmMapLocation = (data: { latitude: number; longitude: number; address: string }) => {
     const pointData: RoutePoint = {
-      label: place.name,
-      latitude: place.latitude,
-      longitude: place.longitude,
+      label: data.address,
+      latitude: data.latitude,
+      longitude: data.longitude,
     };
 
-    if (searchTarget === 'origin') {
+    if (mapPickerTarget === 'origin') {
       setOrigin(pointData);
-    } else if (searchTarget === 'destination') {
+    } else if (mapPickerTarget === 'destination') {
       setDestination(pointData);
     }
   };
 
+  // Selección de lugar frecuente guardado
   const handleSelectSavedPlace = (target: 'origin' | 'destination', place: Place) => {
     const pointData: RoutePoint = {
       label: place.name,
@@ -159,6 +157,8 @@ export const NewRouteScreen = () => {
     });
   };
 
+  const currentPickerCoords = mapPickerTarget === 'origin' ? origin : destination;
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <AppHeader
@@ -175,7 +175,7 @@ export const NewRouteScreen = () => {
         <ScreenHeader
           eyebrow="TU CIUDAD, A TU MANERA"
           title="Nuevo Recorrido"
-          description="Elegí un lugar guardado o ingresá otra dirección"
+          description="Elegí un lugar guardado o marcalo directamente en el mapa"
           showBackButton={true}
         />
 
@@ -187,13 +187,12 @@ export const NewRouteScreen = () => {
             isOpen={openDropdown === 'origin'}
             onToggleOpen={() => {
               if (isGuest) {
-                // Si es visitante, abre directo el buscador de dirección
-                setSearchTarget('origin');
+                setMapPickerTarget('origin');
               } else {
                 setOpenDropdown((prev) => (prev === 'origin' ? null : 'origin'));
               }
             }}
-            onPressText={() => setSearchTarget('origin')}
+            onPressText={() => setMapPickerTarget('origin')}
             savedPlaces={savedPlaces}
             onSelectPlace={(place) => handleSelectSavedPlace('origin', place)}
           />
@@ -208,19 +207,18 @@ export const NewRouteScreen = () => {
             isOpen={openDropdown === 'destination'}
             onToggleOpen={() => {
               if (isGuest) {
-                // Si es visitante, abre directo el buscador de dirección
-                setSearchTarget('destination');
+                setMapPickerTarget('destination');
               } else {
                 setOpenDropdown((prev) => (prev === 'destination' ? null : 'destination'));
               }
             }}
-            onPressText={() => setSearchTarget('destination')}
+            onPressText={() => setMapPickerTarget('destination')}
             savedPlaces={savedPlaces}
             onSelectPlace={(place) => handleSelectSavedPlace('destination', place)}
           />
         </View>
 
-        {/* Botón Buscar Recorrido Accesible con rol e indicación de accesibilidad */}
+        {/* Botón Buscar Recorrido Accesible */}
         <PrimaryButton
           title="BUSCAR RECORRIDO ACCESIBLE"
           variant="orange"
@@ -245,12 +243,15 @@ export const NewRouteScreen = () => {
         )}
       </ScrollView>
 
-      {/* Modal buscador manual */}
-      <AddressSearchModal
-        visible={searchTarget !== null}
-        title={searchTarget === 'origin' ? 'Elegir origen' : 'Elegir destino'}
-        onClose={() => setSearchTarget(null)}
-        onSelect={handleSelectModalPlace}
+      {/* Modal de selección interactiva en el mapa */}
+      <MapLocationPickerModal
+        visible={mapPickerTarget !== null}
+        initialLatitude={currentPickerCoords.latitude ?? -32.8895}
+        initialLongitude={currentPickerCoords.longitude ?? -68.8458}
+        title={mapPickerTarget === 'origin' ? 'Marcar punto de origen' : 'Marcar punto de destino'}
+        subtitle="Mové el mapa hasta posicionar el pin en el punto deseado"
+        onClose={() => setMapPickerTarget(null)}
+        onConfirm={handleConfirmMapLocation}
       />
 
       {/* Modal de advertencia/validación accesible */}

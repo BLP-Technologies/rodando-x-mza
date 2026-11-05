@@ -17,6 +17,8 @@ interface MapLocationPickerModalProps {
   visible: boolean;
   initialLatitude?: number;
   initialLongitude?: number;
+  title?: string;
+  subtitle?: string;
   onConfirm: (data: { latitude: number; longitude: number; address: string }) => void;
   onClose: () => void;
 }
@@ -25,6 +27,8 @@ export const MapLocationPickerModal = ({
   visible,
   initialLatitude = -32.8895, // Mendoza Centro por defecto
   initialLongitude = -68.8458,
+  title = 'Marcar en el mapa',
+  subtitle = 'Mové el mapa hasta situar el pin sobre el punto deseado',
   onConfirm,
   onClose,
 }: MapLocationPickerModalProps) => {
@@ -187,10 +191,10 @@ export const MapLocationPickerModal = ({
               accessible={true}
               accessibilityRole="header"
             >
-              Marcar en el mapa
+              {title}
             </Text>
             <Text style={styles.headerSubtitle}>
-              Mové el mapa hasta situar el pin sobre la barrera
+              {subtitle}
             </Text>
           </View>
         </View>
