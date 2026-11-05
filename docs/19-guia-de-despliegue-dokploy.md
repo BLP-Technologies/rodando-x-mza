@@ -17,10 +17,11 @@ Este documento responde:
 - **Cómo** se despliega la base de datos, paso por paso (§3).
 - **Cómo** se opera la base por SSH cuando no hay un cliente SQL conectado (§3.7).
 - **Cómo** se respalda la base mientras dura el MVP (§3.8).
+- **Cómo** se actualiza la base sin corromperla y cómo se restaura un dump (§3.9).
 - **Cómo** se despliega el backend, cómo se verifican sus migraciones, cómo se
   actualiza solo con cada push y cómo se leen sus logs (§4).
 - **Cómo** se despliega el portal y qué necesita el servidor (§5).
-- **Cómo** se obtiene el APK de la aplicación móvil (§6).
+- **Cómo** se compila el APK de la aplicación móvil en local (§6).
 - **Qué** falta para completar el despliegue (§7).
 
 | Pieza | Estado | Dónde corre |
@@ -28,7 +29,7 @@ Este documento responde:
 | Base de datos | Desplegada y verificada | Dokploy · Application |
 | Backend | Desplegado y verificado | Dokploy · Application |
 | Portal | Desplegado y verificado | Dokploy · Application |
-| APK | Pendiente | Build de Expo, fuera del VPS |
+| APK | Compilado y probado | Build local, fuera del VPS |
 
 Quedan fuera de este documento:
 
@@ -253,9 +254,9 @@ detenidos que lo referencian: listarlos con
 - **Las extensiones no se vuelven a crear.** `initdb.d` corre una sola vez por
   volumen. Si hace falta una extensión nueva, se instala a mano con
   `CREATE EXTENSION IF NOT EXISTS ...` dentro del contenedor.
-- **No redeployar mientras inicializa.** Un segundo Postgres sobre el mismo `PGDATA`
-  mientras el primero escribe deja el cluster corrupto. Si en *Advanced → Swarm
-  Settings* existe un *Update Order*, tiene que ser `stop-first`, no `start-first`.
+- **Actualizaciones con `stop-first`.** Un segundo Postgres sobre el mismo `PGDATA`
+  corrompe el cluster. La configuración obligatoria del servicio y el procedimiento de
+  recuperación están en §3.9.
 - **Sin puerto publicado.** La base solo se alcanza desde la red de Dokploy, por el
   nombre del servicio, o por SSH al VPS (§3.7). Se evaluó publicar un puerto
   temporal para usar un cliente SQL desde una máquina local y se descartó: obliga a
@@ -372,6 +373,74 @@ Alcance: cubre la base, no las imágenes de `backend-uploads`
 automático a un destino S3 queda diferido hasta que el sistema pase a producción
 sostenida; ese día se configura con Volume Backups de Dokploy sobre
 `rodando-db-data`, con el servicio apagado durante la copia.
+
+### 3.9 Actualización y recuperación de la base
+
+La base es el único servicio con estado. Un redeploy con `start-first` arranca la tarea
+nueva antes de detener la anterior: dos postmasters sobre el mismo `PGDATA` corrompen el
+cluster. La configuración obligatoria del servicio es:
+
+| Ajuste | Valor |
+| --- | --- |
+| Update order | `stop-first` |
+| Stop grace period | `60s` |
+| Failure action | `rollback` |
+
+Se configura en **Advanced → Cluster Settings → Update Config**. El formulario exige
+`Parallelism`, que no puede quedar vacío; con `1` alcanza. Se verifica con:
+
+```bash
+docker service inspect rodando-x-mza-databasae-eswxmc \
+  --format '{{json .Spec.UpdateConfig}}'
+```
+
+Tiene que devolver `"Order":"stop-first"`. **Se comprueba después de cada deploy de la
+base**: si Dokploy reescribe el spec con el valor anterior, el riesgo vuelve.
+
+Reglas de operación:
+
+- No se redeploya la base sin motivo: un deploy solo reinicia el motor.
+- Antes de reiniciar Docker, redeployar la base o tocar el volumen, se toma un dump
+  (§3.8).
+- El disco no puede llenarse: sin espacio para el WAL, el cluster queda inconsistente
+  (§2.1).
+
+#### Restaurar desde un dump
+
+Si el cluster no arranca (`invalid checkpoint record`, `could not locate a valid
+checkpoint record`), no se intenta reparar el volumen en producción. Se recrea y se
+restaura el último dump:
+
+1. Bajar backend y base:
+
+```bash
+docker service scale rodando-x-mza-backend-ymru8m=0
+docker service scale rodando-x-mza-databasae-eswxmc=0
+```
+
+2. Recrear el volumen como en §3.5 y desplegar la base.
+3. Recrear la base vacía, para que el dump cree extensiones y esquema:
+
+```bash
+DB=$(docker ps -q --filter name=rodando-x-mza-databasae --filter status=running | head -n1)
+docker exec "$DB" psql -U rodando -d postgres -c 'DROP DATABASE rodando WITH (FORCE);'
+docker exec "$DB" psql -U rodando -d postgres -c 'CREATE DATABASE rodando;'
+```
+
+4. Copiar el dump al contenedor y restaurarlo omitiendo los datos de `spatial_ref_sys`.
+   `pg_restore` no tiene `--exclude-table-data`: se filtra la lista de TOC.
+
+```bash
+docker cp /root/rodando.dump "$DB":/tmp/rodando.dump
+docker exec "$DB" sh -c "pg_restore -l /tmp/rodando.dump | grep -v 'TABLE DATA public spatial_ref_sys' > /tmp/toc.list"
+docker exec "$DB" pg_restore -U rodando -d rodando -L /tmp/toc.list \
+  --no-owner --no-privileges --exit-on-error /tmp/rodando.dump
+```
+
+5. Verificar conteos, migraciones y extensiones (§4.5).
+6. Levantar el backend. `node-pg-migrate` no aplica nada: `pgmigrations` vino en el dump.
+
+El dump restaura el estado hasta su fecha; todo lo posterior se pierde.
 
 ## 4. Backend
 
@@ -619,11 +688,98 @@ docker service ls | grep frontend
 Esperás un 200 con HTML y el servicio en `1/1`. La prueba real es en el navegador:
 que el mapa cargue y traiga datos del grafo, sin errores de CORS en la consola.
 
-## 6. APK (pendiente)
+## 6. APK
 
-La aplicación móvil no se despliega en el servidor: se compila con Expo y se
+La aplicación móvil no se despliega en el servidor: se compila localmente y se
 distribuye como APK ([03 §8](03-despliegue-y-operacion.md#8-procedimiento-de-despliegue)).
-Solo necesita que la API tenga una URL pública, que es la del backend del §4.
+Se usa `expo prebuild` + Gradle, sin EAS: no requiere cuenta ni servicio externo.
+
+### 6.1 Requisitos
+
+- Node 22 y pnpm 12.4.1.
+- **JDK 17**, que es el que soporta Expo SDK 57 / React Native 0.86. En una máquina con
+  varios JDK hay que forzar `JAVA_HOME` y anteponer su `bin` al `PATH`.
+- Android SDK con platform 36, build-tools 36.0.0, NDK 27.1.12297006 y CMake 3.22.1.
+- Licencias del SDK aceptadas.
+
+### 6.2 Configuración de la app
+
+- `app.json`: `name` `Rodando x Mza` y `android.package`
+  `com.blptechnologies.rodandoxmza`.
+- `EXPO_PUBLIC_API_URL` define la API. Se deja en `mobile/.env`, que está en el
+  `.gitignore`:
+
+```text
+EXPO_PUBLIC_API_URL=https://rodando-api.201-32-133-8.sslip.io
+```
+
+La variable se inlinea en el bundle: cambiarla exige reconstruir el APK.
+
+### 6.3 Compilación
+
+```bash
+cd mobile
+pnpm install
+
+export JAVA_HOME=/usr/lib/jvm/temurin-17-jdk
+export PATH="$JAVA_HOME/bin:$PATH"
+java -version   # tiene que decir 17
+
+pnpm exec expo prebuild --platform android --clean
+cd android
+./gradlew assembleRelease
+```
+
+El APK queda en `android/app/build/outputs/apk/release/app-release.apk`.
+
+`prebuild` genera `android/`, que está en `.gitignore`: no se versiona y se regenera.
+`--clean` descarta cualquier cambio manual hecho ahí, así que la configuración nativa
+va en `app.json` o en config plugins. El primer build tarda unos diez minutos y descarga
+Gradle y dependencias; los siguientes usan cache.
+
+### 6.4 Firma
+
+El proyecto generado firma el release con el **keystore de debug**. El APK instala y
+sirve para probar, pero no para publicar en una tienda. Para distribución real hay que
+generar un keystore propio y configurarlo en `android/app/build.gradle` o en
+`~/.gradle/gradle.properties`, fuera del repositorio.
+
+Consecuencia: si se cambia la clave, Android trata el APK como otra aplicación y hay que
+desinstalar la versión anterior antes de instalar la nueva.
+
+### 6.5 Instalación y prueba
+
+Con el teléfono conectado y la depuración USB activada:
+
+```bash
+adb devices
+adb install -r ~/Descargas/rodando-x-mza-1.0.0.apk
+```
+
+Para ver los logs de la app:
+
+```bash
+adb logcat -s ReactNativeJS
+```
+
+La app apunta a la API de producción; la prueba es navegar el mapa, calcular un
+recorrido, enviar un reporte y usar lugares.
+
+### 6.6 Tamaño
+
+El APK incluye las cuatro arquitecturas y ronda los 80 MB. Para teléfonos reales alcanza
+con arm64, y se puede pedir sin editar `android/`:
+
+```bash
+./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a
+```
+
+Eso baja el APK a unos 25–30 MB.
+
+### 6.7 Integración continua
+
+No hay workflow para `mobile/`: el CI no compila el APK y no cubre errores de React
+Native. La verificación es este build local y la prueba en el dispositivo.
 
 ## 7. Estado y próximos pasos
 
@@ -635,8 +791,9 @@ Solo necesita que la API tenga una URL pública, que es la del backend del §4.
 - [x] Portal desplegado y conectado a la API.
 - [x] Limpieza diaria de Docker activada.
 - [x] Respaldo manual de la base (dump y copia fuera del VPS).
+- [x] Update order de la base en `stop-first`.
+- [x] APK compilado y probado contra la API de producción.
 - [ ] Respaldo automático (diferido; ver §3.8).
-- [ ] APK compilado contra la API de producción.
 
 ## 8. Documentos relacionados
 
