@@ -9,7 +9,6 @@
     "ios": {
       "supportsTablet": true
     },
-    
     "android": {
       "package": "com.blptechnologies.rodandoxmza",
       "adaptiveIcon": {
@@ -30,12 +29,12 @@
       "expo-secure-store",
       "expo-status-bar",
       [
-        "@react-native-voice/voice",
+        "expo-speech-recognition",
         {
-          "microphonePermission": "Permitir que Rodando por MZA acceda al micrófono para dictar direcciones y descripciones por voz."
+          "microphonePermission": "Permitir que Rodando por MZA acceda al micrófono para dictar direcciones y descripciones por voz.",
+          "speechRecognitionPermission": "Permitir que Rodando por MZA use el reconocimiento de voz para dictar direcciones y descripciones."
         }
       ]
     ]
-    }
   }
-
+}
