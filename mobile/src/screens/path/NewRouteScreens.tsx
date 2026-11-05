@@ -13,6 +13,7 @@ import { MapLocationPickerModal } from '@/components/report/MapLocationPickerMod
 import { placesService } from '@/services/placesService';
 import { Place } from '@/types/places';
 import { StatusModal, StatusType } from '@/components/common/StatusModal';
+import { MENDOZA_PILOT_ZONE } from '@/constants/pilotZone';
 
 interface RoutePoint {
   label: string;
@@ -246,6 +247,7 @@ export const NewRouteScreen = () => {
       {/* Modal de selección interactiva en el mapa */}
       <MapLocationPickerModal
         visible={mapPickerTarget !== null}
+        serviceAreaPolygon={MENDOZA_PILOT_ZONE}
         initialLatitude={currentPickerCoords.latitude ?? -32.8895}
         initialLongitude={currentPickerCoords.longitude ?? -68.8458}
         title={mapPickerTarget === 'origin' ? 'Marcar punto de origen' : 'Marcar punto de destino'}

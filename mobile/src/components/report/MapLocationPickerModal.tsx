@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Modal,
   View,
   Text,
   TouchableOpacity,
   Platform,
+  StyleSheet,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
@@ -12,6 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useStyles, Theme } from '@/theme';
 import { PrimaryButton } from '@/components/common/PrimaryButton';
 import { reverseGeocode } from '@/services/geocoding';
+import { isPointInPolygon } from '@/utils/geo';
 
 interface MapLocationPickerModalProps {
   visible: boolean;
@@ -19,6 +21,7 @@ interface MapLocationPickerModalProps {
   initialLongitude?: number;
   title?: string;
   subtitle?: string;
+  serviceAreaPolygon?: [number, number][];
   onConfirm: (data: { latitude: number; longitude: number; address: string }) => void;
   onClose: () => void;
 }
@@ -29,6 +32,7 @@ export const MapLocationPickerModal = ({
   initialLongitude = -68.8458,
   title = 'Marcar en el mapa',
   subtitle = 'Mové el mapa hasta situar el pin sobre el punto deseado',
+  serviceAreaPolygon,
   onConfirm,
   onClose,
 }: MapLocationPickerModalProps) => {
@@ -43,6 +47,14 @@ export const MapLocationPickerModal = ({
   });
 
   const [isResolving, setIsResolving] = useState(false);
+
+  // Evalúa si el punto seleccionado está dentro de la zona delimitada
+  const isInsideServiceArea = useMemo(() => {
+    if (!serviceAreaPolygon || serviceAreaPolygon.length < 3) {
+      return true; // Si no hay polígono configurado aún, se permite cualquier punto
+    }
+    return isPointInPolygon(currentCoords, serviceAreaPolygon);
+  }, [currentCoords, serviceAreaPolygon]);
 
   // Sincronizar coordenadas cuando el modal se vuelve a abrir o cambian las iniciales
   useEffect(() => {
@@ -76,8 +88,13 @@ export const MapLocationPickerModal = ({
     return () => window.removeEventListener('message', handleWebMessage);
   }, []);
 
+  const polygonJson = useMemo(() => {
+    return serviceAreaPolygon ? JSON.stringify(serviceAreaPolygon) : 'null';
+  }, [serviceAreaPolygon]);
+
   // HTML con Leaflet configurado para notificar el centro cada vez que el usuario mueve el mapa
-  const leafletHTML = `
+  const leafletHTML = useMemo(
+    () => `
     <!DOCTYPE html>
     <html lang="es">
       <head>
@@ -87,6 +104,7 @@ export const MapLocationPickerModal = ({
         <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
         <style>
           body, html, #map { margin: 0; padding: 0; height: 100%; width: 100%; background: #E5E7EB; }
+          .leaflet-control-attribution { font-size: 8px !important; }
         </style>
       </head>
       <body>
@@ -95,11 +113,26 @@ export const MapLocationPickerModal = ({
           const map = L.map('map', {
             zoomControl: false,
             attributionControl: false
-          }).setView([${initialLatitude}, ${initialLongitude}], 16);
+          }).setView([${initialLatitude}, ${initialLongitude}], 15);
 
           L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             maxZoom: 19
           }).addTo(map);
+
+          // Renderizar polígono del área de servicio si existe
+          const servicePolygonCoords = ${polygonJson};
+          if (servicePolygonCoords && servicePolygonCoords.length > 0) {
+            const polygon = L.polygon(servicePolygonCoords, {
+              color: '#0D9488',
+              weight: 2,
+              dashArray: '5, 5',
+              fillColor: '#0D9488',
+              fillOpacity: 0.12
+            }).addTo(map);
+
+            // Ajustar la vista para encuadrar la zona piloto al abrir
+            map.fitBounds(polygon.getBounds(), { padding: [20, 20] });
+          }
 
           map.on('moveend', function() {
             const center = map.getCenter();
@@ -119,7 +152,9 @@ export const MapLocationPickerModal = ({
         </script>
       </body>
     </html>
-  `;
+  `,
+    [initialLatitude, initialLongitude, polygonJson]
+  );
 
   const handleMessage = (event: any) => {
     try {
@@ -136,6 +171,7 @@ export const MapLocationPickerModal = ({
   };
 
   const handleConfirmLocation = async () => {
+    if (!isInsideServiceArea) return;
     try {
       setIsResolving(true);
       const resolvedAddress = await reverseGeocode(
@@ -236,14 +272,32 @@ export const MapLocationPickerModal = ({
             <Ionicons name="location" size={42} color={theme.colors.brand.teal} />
             <View style={styles.pinShadow} />
           </View>
+          {/* Cartel flotante de aviso cuando queda fuera del área */}
+          {!isInsideServiceArea && (
+            <View style={styles.outOfBoundsBadge}>
+              <Ionicons name="alert-circle" size={18} color={theme.colors.state.warning} />
+              <Text style={styles.outOfBoundsText}>
+                Ubicación fuera del área de servicio
+              </Text>
+            </View>
+          )}
+
+
         </View>
 
         {/* Barra inferior para confirmar */}
         <View style={styles.footer}>
           <PrimaryButton
-            title={isResolving ? 'OBTENIENDO DIRECCIÓN...' : 'CONFIRMAR ESTA UBICACIÓN'}
+            title={
+              !isInsideServiceArea
+                ? 'UBICACIÓN FUERA DE ÁREA'
+                : isResolving 
+                ? 'OBTENIENDO DIRECCIÓN...' 
+                : 'CONFIRMAR ESTA UBICACIÓN'
+            }
+            variant={!isInsideServiceArea ? 'teal' : 'orange'}
             onPress={handleConfirmLocation}
-            disabled={isResolving}
+            disabled={!isInsideServiceArea || isResolving}
             loading={isResolving}
             accessibilityLabel="Confirmar esta ubicación seleccionada"
             accessibilityHint="Guarda las coordenadas marcadas en el centro del mapa y resuelve la dirección"
@@ -302,6 +356,30 @@ const getStyles = (theme: Theme) => ({
     marginTop: -42,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
+  },
+outOfBoundsBadge: {
+    position: 'absolute' as const,
+    top: 16,
+    alignSelf: 'center' as const,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    backgroundColor: '#FFE4E6',
+    borderWidth: 1,
+    borderColor: '#FDA4AF',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    gap: 6,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+  },
+  outOfBoundsText: {
+    fontSize: 12,
+    fontWeight: '700' as const,
+    color: '#9F1239',
   },
   pinShadow: {
     width: 8,
