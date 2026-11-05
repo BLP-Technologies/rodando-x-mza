@@ -1,22 +1,37 @@
+import { ServiceAreasCollection } from '@/services/serviceAreasService';
+
 /**
- * Verifica si un punto [lat, lon] está dentro de un anillo 
- * de polígono [[lat, lon], ...]
+ * Valida si [lat, lon] cae dentro del polígono del área de servicio.
+ * Coordenadas de GeoJSON vienen en [lon, lat].
  */
-export function isPointInPolygon(
-  point: { latitude: number; longitude: number },
-  polygonCoords: [number, number][] // Array de pares [lat, lon]
+export function isPointInServiceArea(
+  lat: number,
+  lon: number,
+  serviceAreas: ServiceAreasCollection | null
 ): boolean {
-  const { latitude: x, longitude: y } = point;
-  let inside = false;
-
-  for (let i = 0, j = polygonCoords.length - 1; i < polygonCoords.length; j = i++) {
-    const [xi, yi] = polygonCoords[i];
-    const [xj, yj] = polygonCoords[j];
-
-    const intersect =
-      yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi;
-    if (intersect) inside = !inside;
+  if (!serviceAreas || !serviceAreas.features || serviceAreas.features.length === 0) {
+    // Si no cargó aún el área de servicio, por defecto no bloqueamos
+    return true;
   }
 
-  return inside;
+  // Comprobamos contra cualquiera de los polígonos activos
+  return serviceAreas.features.some((feature) => {
+    const ring = feature.geometry.coordinates[0]; // Exterior ring
+    let inside = false;
+
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const xi = ring[i][0]; // lon
+      const yi = ring[i][1]; // lat
+      const xj = ring[j][0]; // lon
+      const yj = ring[j][1]; // lat
+
+      const intersect =
+        yi > lat !== yj > lat &&
+        lon < ((xj - xi) * (lat - yi)) / (yj - yi) + xi;
+
+      if (intersect) inside = !inside;
+    }
+
+    return inside;
+  });
 }

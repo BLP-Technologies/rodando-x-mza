@@ -5,7 +5,6 @@ import {
   Text,
   TouchableOpacity,
   Platform,
-  StyleSheet,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
@@ -13,7 +12,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useStyles, Theme } from '@/theme';
 import { PrimaryButton } from '@/components/common/PrimaryButton';
 import { reverseGeocode } from '@/services/geocoding';
-import { isPointInPolygon } from '@/utils/geo';
+import { getServiceAreas, ServiceAreasCollection } from '@/services/serviceAreasService';
+import { isPointInServiceArea } from '@/utils/geo';
 
 interface MapLocationPickerModalProps {
   visible: boolean;
@@ -21,7 +21,6 @@ interface MapLocationPickerModalProps {
   initialLongitude?: number;
   title?: string;
   subtitle?: string;
-  serviceAreaPolygon?: [number, number][];
   onConfirm: (data: { latitude: number; longitude: number; address: string }) => void;
   onClose: () => void;
 }
@@ -32,7 +31,6 @@ export const MapLocationPickerModal = ({
   initialLongitude = -68.8458,
   title = 'Marcar en el mapa',
   subtitle = 'Mové el mapa hasta situar el pin sobre el punto deseado',
-  serviceAreaPolygon,
   onConfirm,
   onClose,
 }: MapLocationPickerModalProps) => {
@@ -46,15 +44,27 @@ export const MapLocationPickerModal = ({
     longitude: initialLongitude,
   });
 
+  const [serviceAreas, setServiceAreas] = useState<ServiceAreasCollection | null>(null);
   const [isResolving, setIsResolving] = useState(false);
 
-  // Evalúa si el punto seleccionado está dentro de la zona delimitada
-  const isInsideServiceArea = useMemo(() => {
-    if (!serviceAreaPolygon || serviceAreaPolygon.length < 3) {
-      return true; // Si no hay polígono configurado aún, se permite cualquier punto
+  // Cargar las áreas de servicio del backend cuando el modal se abre
+  useEffect(() => {
+    let isMounted = true;
+    if (visible) {
+      getServiceAreas()
+        .then((data) => {
+          if (isMounted) {
+            setServiceAreas(data);
+          }
+        })
+        .catch((err) => {
+          console.error('Error al obtener áreas de servicio en modal:', err);
+        });
     }
-    return isPointInPolygon(currentCoords, serviceAreaPolygon);
-  }, [currentCoords, serviceAreaPolygon]);
+    return () => {
+      isMounted = false;
+    };
+  }, [visible]);
 
   // Sincronizar coordenadas cuando el modal se vuelve a abrir o cambian las iniciales
   useEffect(() => {
@@ -65,6 +75,15 @@ export const MapLocationPickerModal = ({
       });
     }
   }, [visible, initialLatitude, initialLongitude]);
+
+  // Evalúa si el punto seleccionado está dentro del área de servicio del backend
+  const isInsideServiceArea = useMemo(() => {
+    return isPointInServiceArea(
+      currentCoords.latitude,
+      currentCoords.longitude,
+      serviceAreas
+    );
+  }, [currentCoords, serviceAreas]);
 
   // Escuchar mensajes en entorno Web
   useEffect(() => {
@@ -79,8 +98,8 @@ export const MapLocationPickerModal = ({
             longitude: data.longitude,
           });
         }
-      } catch (e) {
-        // Ignorar mensajes que no sean del mapa
+      } catch {
+        // Ignorar mensajes que no pertenezcan al mapa
       }
     };
 
@@ -88,11 +107,11 @@ export const MapLocationPickerModal = ({
     return () => window.removeEventListener('message', handleWebMessage);
   }, []);
 
-  const polygonJson = useMemo(() => {
-    return serviceAreaPolygon ? JSON.stringify(serviceAreaPolygon) : 'null';
-  }, [serviceAreaPolygon]);
+  const geoJsonString = useMemo(() => {
+    return serviceAreas ? JSON.stringify(serviceAreas) : 'null';
+  }, [serviceAreas]);
 
-  // HTML con Leaflet configurado para notificar el centro cada vez que el usuario mueve el mapa
+  // HTML con Leaflet configurado con L.geoJSON
   const leafletHTML = useMemo(
     () => `
     <!DOCTYPE html>
@@ -119,19 +138,25 @@ export const MapLocationPickerModal = ({
             maxZoom: 19
           }).addTo(map);
 
-          // Renderizar polígono del área de servicio si existe
-          const servicePolygonCoords = ${polygonJson};
-          if (servicePolygonCoords && servicePolygonCoords.length > 0) {
-            const polygon = L.polygon(servicePolygonCoords, {
-              color: '#0D9488',
-              weight: 2,
-              dashArray: '5, 5',
-              fillColor: '#0D9488',
-              fillOpacity: 0.12
+          // Cargar el GeoJSON directo del backend:
+          const serviceAreasData = ${geoJsonString};
+
+          if (serviceAreasData && serviceAreasData.features && serviceAreasData.features.length > 0) {
+            const geoJsonLayer = L.geoJSON(serviceAreasData, {
+              style: {
+                color: '#0D9488',
+                weight: 2,
+                dashArray: '5, 5',
+                fillColor: '#0D9488',
+                fillOpacity: 0.12
+              }
             }).addTo(map);
 
-            // Ajustar la vista para encuadrar la zona piloto al abrir
-            map.fitBounds(polygon.getBounds(), { padding: [20, 20] });
+            try {
+              map.fitBounds(geoJsonLayer.getBounds(), { padding: [25, 25] });
+            } catch (e) {
+              console.error('Error ajustando bounds:', e);
+            }
           }
 
           map.on('moveend', function() {
@@ -153,7 +178,7 @@ export const MapLocationPickerModal = ({
       </body>
     </html>
   `,
-    [initialLatitude, initialLongitude, polygonJson]
+    [initialLatitude, initialLongitude, geoJsonString]
   );
 
   const handleMessage = (event: any) => {
@@ -239,7 +264,7 @@ export const MapLocationPickerModal = ({
         <View
           style={styles.mapContainer}
           accessible={true}
-          accessibilityLabel="Mapa interactivo para marcar la ubicación del reporte. Arrastra el mapa para situar el pin sobre la barrera."
+          accessibilityLabel="Mapa interactivo para marcar la ubicación. Arrastrá el mapa para situar el pin sobre el punto deseado."
         >
           {Platform.OS === 'web' ? (
             <iframe
@@ -272,6 +297,7 @@ export const MapLocationPickerModal = ({
             <Ionicons name="location" size={42} color={theme.colors.brand.teal} />
             <View style={styles.pinShadow} />
           </View>
+
           {/* Cartel flotante de aviso cuando queda fuera del área */}
           {!isInsideServiceArea && (
             <View style={styles.outOfBoundsBadge}>
@@ -281,8 +307,6 @@ export const MapLocationPickerModal = ({
               </Text>
             </View>
           )}
-
-
         </View>
 
         {/* Barra inferior para confirmar */}
