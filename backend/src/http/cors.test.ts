@@ -1,7 +1,7 @@
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../app.js';
-import { PREFLIGHT_MAX_AGE_SECONDS } from './cors.js';
+import { PREFLIGHT_MAX_AGE_SECONDS, warnIfCorsAllowlistIsEmpty } from './cors.js';
 
 const PORTAL_ORIGIN = 'http://localhost:3000';
 
@@ -87,5 +87,35 @@ describe('cors', () => {
 
     expect(res.status).toBe(200);
     expect(corsHeaders(res)).toEqual([]);
+  });
+});
+
+describe('warnIfCorsAllowlistIsEmpty', () => {
+  it('avisa en desarrollo cuando la allowlist está vacía', () => {
+    const warnings: string[] = [];
+    warnIfCorsAllowlistIsEmpty([], 'development', {
+      warn: (message: string) => warnings.push(message),
+    });
+
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('CORS_ORIGINS');
+  });
+
+  it('no avisa si hay al menos un origen permitido', () => {
+    const warnings: string[] = [];
+    warnIfCorsAllowlistIsEmpty([PORTAL_ORIGIN], 'development', {
+      warn: (message: string) => warnings.push(message),
+    });
+
+    expect(warnings).toEqual([]);
+  });
+
+  it('no avisa en producción: una allowlist vacía ahí puede ser deliberada', () => {
+    const warnings: string[] = [];
+    warnIfCorsAllowlistIsEmpty([], 'production', {
+      warn: (message: string) => warnings.push(message),
+    });
+
+    expect(warnings).toEqual([]);
   });
 });
