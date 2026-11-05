@@ -1,3 +1,4 @@
+import type { Logger } from 'pino';
 import type { RequestHandler } from 'express';
 
 /** Métodos que la API acepta hoy; uno nuevo se agrega acá. */
@@ -12,6 +13,31 @@ const ALLOWED_HEADERS = 'Content-Type, Authorization';
 
 /** Cuánto puede cachear el navegador el resultado del preflight, en segundos. */
 export const PREFLIGHT_MAX_AGE_SECONDS = 600;
+
+/**
+ * Avisa al arrancar si la allowlist de CORS quedó vacía en desarrollo.
+ *
+ * Una allowlist vacía es una decisión válida —hay despliegues donde la API no la usa
+ * ningún navegador—, pero en desarrollo el caso normal es el otro: un `.env` anterior a
+ * la variable, que `pnpm dev` carga igual y sin avisar. Sin este aviso, el síntoma
+ * aparece en el navegador como "no se pudo conectar con la API" aunque la API conteste
+ * `200` ([05](05-desarrollo.md) §4, [15 §3](15-integracion-con-el-cliente.md)).
+ *
+ * No avisa en producción: ahí la lista vacía puede ser deliberada, y un aviso que se
+ * ignora enseña a ignorar los avisos.
+ */
+export function warnIfCorsAllowlistIsEmpty(
+  origins: readonly string[],
+  nodeEnv: string,
+  logger: Pick<Logger, 'warn'>,
+): void {
+  if (origins.length > 0 || nodeEnv !== 'development') return;
+
+  logger.warn(
+    'CORS_ORIGINS está vacío: ningún cliente de navegador va a poder leer la API. ' +
+      'Si el portal no carga, agregá http://localhost:3000 en backend/.env (docs/05 §4).',
+  );
+}
 
 /**
  * Normaliza un origen para compararlo: sin espacios, en minúsculas y sin barra
