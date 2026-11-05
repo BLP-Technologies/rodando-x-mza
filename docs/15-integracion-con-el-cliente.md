@@ -85,6 +85,7 @@ no se usa el paquete `cors`. Las reglas, que son las que un cliente percibe:
 | --- | --- |
 | Consultar un recorrido accesible | `POST /api/routes/calculate` ([13](13-api-de-ruteo.md)) |
 | Leer el grafo —veredas, cruces, cordones— de un área | `GET /api/graph?bbox=…` ([14](14-la-api-del-grafo.md)) |
+| Leer las áreas de servicio activas, sin el grafo | `GET /api/service-areas` ([14 §5.2](14-la-api-del-grafo.md#52-el-área-de-servicio)) |
 | Cambiar el nivel de accesibilidad de un elemento | `PATCH /api/graph/elements/{kind}/{id}` ([14 §7](14-la-api-del-grafo.md#7-la-edición-del-nivel)) |
 | Reportar un obstáculo, con foto | `POST /api/reports` y `POST /api/reports/images` ([17](17-la-api-de-reportes.md)) |
 | Leer los reportes de un estado | `GET /api/reports?status=…` ([17 §7](17-la-api-de-reportes.md#7-la-lectura-de-reportes)) |

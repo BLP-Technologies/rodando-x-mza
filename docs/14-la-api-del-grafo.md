@@ -15,7 +15,7 @@ Este documento responde:
 - **Con qué entrada** se lee el grafo, y por qué un bbox (§3).
 - **Qué significa "interseca"** en el filtro (§4).
 - **Qué devuelve**, campo por campo, cómo avisa que recortó y qué área de servicio activa
-  incluye (§5).
+  incluye (§5), y por qué esa área tiene además su propio endpoint (§5.2).
 - **Cómo se rechaza** un pedido (§6).
 - **Cómo se escribe** el nivel de un elemento, y qué queda verificado (§7).
 
@@ -155,7 +155,7 @@ consultas que el servicio tenga que juntar.
 | --- | --- |
 | `type` | `FeatureCollection`, para que un cliente de GeoJSON lo lea sin condicionales |
 | `truncated` | Si la respuesta trae **todas** las features del área o sólo las primeras (§5.1). No es parte de GeoJSON |
-| `service_areas` | Las áreas de servicio activas, como su propia `FeatureCollection` (§5.2). No consume el tope de §5.1 ni se filtra por bbox |
+| `service_areas` | Las áreas de servicio activas, como su propia `FeatureCollection` (§5.2). No consume el tope de §5.1 ni se filtra por bbox. Es la misma colección que sirve `GET /api/service-areas` |
 | `features[].geometry` | La geometría guardada, vía `ST_AsGeoJSON`, en orden `[lon, lat]`: `LineString` en veredas y cruces, `Point` en cordones |
 | `features[].properties.element_kind` | De qué clase es el elemento: `sidewalk`, `crossing` o `kerb` |
 | `features[].properties.element_id` | El `id` de su fila. Es la clave con la que el portal pide o edita el elemento: junto con `element_kind` identifica un elemento del grafo (§7) |
@@ -225,16 +225,34 @@ máquina; se vuelven a medir con el backend arriba y un `curl -w '%{time_total}'
 La fila es la de [09 §4.8](09-modelo-de-datos.md): el perímetro dentro del que el ruteo
 acepta las puntas de una consulta, que hoy es la zona piloto corrida 50 m hacia afuera.
 
+El mismo conjunto se lee por **dos lados, con la misma forma**:
+
+- **`GET /api/graph`**, en el campo `service_areas` de §5. Es lo que usa el portal, que ya
+  pide el grafo: el área viaja en la respuesta que de todos modos está en camino.
+- **`GET /api/service-areas`**, sin parámetros. Es lo que usa el mobile, que no pide el
+  grafo: dibuja el polígono para decir si el pin de origen o destino está dentro de la
+  zona, y para eso no necesita las ~1000 features ni tiene un bbox que mandar.
+
+Las dos respuestas arman la colección con **la misma función** del backend —`readServiceAreas`,
+en `backend/src/service-areas/`—: el dato es uno y no puede tener dos verdades, así que la
+forma, el filtro y el orden salen de un solo lugar.
+
 - **Se devuelven las activas, y se filtra por `is_active` y no por `id`.** El `id` de la
   zona vigente puede cambiar sin que el cliente se entere: reemplazar un perímetro es
   desactivar el viejo y activar el nuevo, y filtrar por `id` obligaría a fijar de antemano
   cuál es la fila buena ([09 §4.8](09-modelo-de-datos.md)).
-- **Una colección vacía es válida.** Una base sin área activa no rompe la lectura: el grafo
-  se devuelve igual y `service_areas.features` llega vacío. El ruteo sí la necesita y
-  responde `500` sin ella ([13](13-api-de-ruteo.md)).
-- **Viaja acá y no en un endpoint propio.** Es un polígono fijo que el mapa dibuja junto
-  con lo que ya pide: un `GET /api/service-areas` agregaría un segundo viaje por pantalla
-  para un dato que cabe en la respuesta que ya está en camino.
+- **Una colección vacía es válida.** Una base sin área activa no rompe ninguna de las dos
+  lecturas: el grafo se devuelve igual y `service_areas.features` llega vacío, y el
+  endpoint propio responde `features: []`. El ruteo sí la necesita y responde `500` sin
+  ella ([13](13-api-de-ruteo.md)).
+- **El endpoint propio no lleva parámetros ni autenticación.** Sin entrada que validar, el
+  único caso es `200` (o `500` si falla la base). Es lo que necesita un cliente que no pide
+  el grafo: el perímetro y nada más, sin un bbox de relleno.
+- **No agrega encabezados de caché.** El MVP no resuelve caché (§8), así que la respuesta no
+  lleva `Cache-Control` ni `Last-Modified` propios. Sí llega el `ETag` débil que Express le
+  pone a **toda** respuesta JSON de la API, igual que en `GET /api/graph`: no es de este
+  endpoint y el cliente no tiene que aprovecharlo. Apagarlo sólo acá sería una excepción sin
+  motivo; si algún día molesta, la decisión es de la app entera.
 - **Si algún día hay muchas zonas, se filtra por bbox y se pagina aparte.** Hoy hay una y
   el cliente las dibuja todas; cuando sean muchas, el recorte por área vuelve a tener
   sentido y el dato se pide solo.
@@ -249,6 +267,7 @@ acepta las puntas de una consulta, que hoy es la zona piloto corrida 50 m hacia 
 | Esquinas invertidas o de área cero | 400 | `VALIDATION_ERROR` con `details: [{ field: "bbox", code: "INVALID" }]` |
 | El área no tiene grafo | 200 | Una `FeatureCollection` con `features: []`. No es un error |
 | No hay área activa en `service_areas` | 200 | `service_areas.features: []`; el grafo se devuelve igual |
+| No hay área activa, en `GET /api/service-areas` | 200 | `features: []`. No es un error, y es el único caso posible además de `500` (§5.2) |
 | Cualquier fallo de la base | 500 | `INTERNAL_ERROR`, sin detalles ([04 §5](04-errores-y-mensajes.md)) |
 
 **Un solo `INVALID` para los tres motivos, y no un `INVALID_RANGE` propio.** Los cuatro
@@ -333,8 +352,6 @@ hay versión ni `If-Match`, y agregarlos no es del MVP.
   ([09 §4.7](09-modelo-de-datos.md)), no un campo más acá.
 - **La proyección y el estilo del mapa.** Cada cliente decide cómo lo dibuja; la API no
   manda colores ni simplificación.
-- **Un endpoint propio del área de servicio.** Viaja en la respuesta del grafo (§5.2), que
-  es lo que el mapa ya pide al moverse.
 - **El filtro de las áreas por bbox.** Se devuelven todas las activas: el área es el
   contexto de la zona y no un elemento del área pedida (§5.2).
 - **Las áreas multiparte.** El tipo es `Polygon` y no `MultiPolygon`: una zona partida

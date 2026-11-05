@@ -19,6 +19,7 @@ import {
   reportStatusSchema,
 } from './reports/reports.schemas.js';
 import { routeRequestSchema, routeResponseSchema } from './routing/routing.schemas.js';
+import { serviceAreasCollectionSchema } from './service-areas/service-areas.schemas.js';
 
 /**
  * El documento `OpenAPI`, generado desde los esquemas Zod.
@@ -94,6 +95,33 @@ registry.registerPath({
     404: {
       description: 'No hay ningún elemento de esa clase con ese id.',
       content: { 'application/json': { schema: errorResponseSchema } },
+    },
+    500: {
+      description: 'Error no esperado.',
+      content: { 'application/json': { schema: errorResponseSchema } },
+    },
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/service-areas',
+  summary: 'Leer las áreas de servicio activas',
+  description:
+    'Devuelve las áreas de servicio activas —hoy la zona piloto corrida 50 m hacia ' +
+    'afuera—, como una FeatureCollection de GeoJSON con el polígono en orden ' +
+    '[lon, lat] y su id y su nombre. Es el mismo campo `service_areas` de ' +
+    'GET /api/graph, sin el grafo al lado: el mobile necesita dibujar el borde para ' +
+    'avisar si un pin está dentro de la zona, y para eso no pide las ~1000 features ' +
+    'ni tiene que inventar un bbox. No lleva parámetros, así que el único caso es ' +
+    '200; una base sin área activa devuelve `features: []`, que no es un error. ' +
+    'Sólo lee: no escribe ni cachea nada. Ver docs/14-la-api-del-grafo.md §5.2.',
+  responses: {
+    200: {
+      description:
+        'Las áreas de servicio activas. Una colección vacía es una respuesta válida: ' +
+        'no hay ninguna área activa.',
+      content: { 'application/json': { schema: serviceAreasCollectionSchema } },
     },
     500: {
       description: 'Error no esperado.',
