@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useStyles, Theme } from '@/theme';
+import { LogoutConfirmModal } from '@/components/common/LogoutConfirmModal';
 
 interface AppHeaderProps {
   userInitial?: string;
@@ -19,6 +20,7 @@ export const AppHeader = ({
 }: AppHeaderProps) => {
   const { styles, theme } = useStyles(getStyles);
   const navigation = useNavigation<any>();
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   const handleProfilePress = () => {
     if (onPressProfile) {
@@ -29,12 +31,10 @@ export const AppHeader = ({
     }
   };
 
-  const handleLogoutPress = (e: any) => {
-    e.stopPropagation?.(); // Evita disparar el click del contenedor si estuviera anidado
+  const handleConfirmLogout = () => {
+    setShowLogoutModal(false);
     if (onLogout) {
       onLogout();
-    } else {
-      console.log('Cerrar sesión');
     }
   };
 
@@ -44,51 +44,61 @@ export const AppHeader = ({
     : theme.colors.brand.teal;
 
   return (
-    <View
-      style={styles.headerContainer}
-      accessible={false} // Permite que los lectores naveguen a los botones hijos
-    >
-      {/* Logotipo accesible */}
-      <View
-        style={styles.logoPlaceholder}
-        accessible={true}
-        accessibilityRole="header"
-        accessibilityLabel="Rodando por Mendoza"
-      >
-        <Text style={styles.logoText}>
-          RODANDO<Text style={{ color: theme.colors.state.warning }}>X</Text>
-          <Text style={{ color: theme.colors.brand.teal }}>MZA</Text>
-        </Text>
-      </View>
-
-      {/* Contenedor Perfil + Salir */}
-      <View style={styles.profileBadge}>
-        {/* Avatar -> Perfil */}
+    <>
+      <View style={styles.headerContainer} accessible={false}>
+        {/* Logotipo */}
         <TouchableOpacity
-          onPress={handleProfilePress}
-          style={[styles.avatarCircle, { backgroundColor: avatarBgColor }]}
+          onPress={() => navigation.navigate('Inicio')}
+          style={styles.logoPlaceholder}
           accessible={true}
-          accessibilityRole="button"
-          accessibilityLabel={`Perfil de usuario, inicial ${userInitial}`}
-          accessibilityHint="Abre la pantalla de perfil y configuración de accesibilidad"
+          accessibilityRole="header"
+          accessibilityLabel="Rodando por Mendoza, ir al inicio"
         >
-          <Text style={styles.avatarText}>{userInitial}</Text>
+          <Text style={styles.logoText}>
+            RODANDO<Text style={{ color: theme.colors.state.warning }}>X</Text>
+            <Text style={{ color: theme.colors.brand.teal }}>MZA</Text>
+          </Text>
         </TouchableOpacity>
 
-        {/* Salir */}
-        <TouchableOpacity
-          onPress={handleLogoutPress}
-          style={styles.logoutButton}
-          accessible={true}
-          accessibilityRole="button"
-          accessibilityLabel="Salir"
-          accessibilityHint={isGuest ? 'Finaliza el modo invitado' : 'Cierra tu sesión actual'}
-        >
-          <Ionicons name="exit-outline" size={18} color={theme.colors.brand.navy} />
-          <Text style={styles.logoutText}>Salir</Text>
-        </TouchableOpacity>
+        {/* Acciones de usuario: botones separados */}
+        <View style={styles.userActionsWrapper}>
+          {/* Avatar -> Perfil */}
+          <TouchableOpacity
+            onPress={handleProfilePress}
+            style={[styles.avatarCircle, { backgroundColor: avatarBgColor }]}
+            accessible={true}
+            accessibilityRole="button"
+            accessibilityLabel={`Perfil de usuario, inicial ${userInitial}`}
+            accessibilityHint="Abre la pantalla de perfil"
+            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+          >
+            <Text style={styles.avatarText}>{userInitial}</Text>
+          </TouchableOpacity>
+
+          {/* Salir */}
+          <TouchableOpacity
+            onPress={() => setShowLogoutModal(true)}
+            style={styles.logoutButton}
+            accessible={true}
+            accessibilityRole="button"
+            accessibilityLabel="Salir"
+            accessibilityHint={isGuest ? 'Finaliza el modo invitado' : 'Cierra tu sesión'}
+            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+          >
+            <Ionicons name="exit-outline" size={18} color={theme.colors.brand.navy} />
+            <Text style={styles.logoutText}>Salir</Text>
+          </TouchableOpacity>
+        </View>
       </View>
-    </View>
+
+      {/* Modal dedicado de salida */}
+      <LogoutConfirmModal
+        visible={showLogoutModal}
+        isGuest={isGuest}
+        onConfirm={handleConfirmLogout}
+        onClose={() => setShowLogoutModal(false)}
+      />
+    </>
   );
 };
 
@@ -102,9 +112,11 @@ const getStyles = (theme: Theme) => ({
     paddingBottom: theme.spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.surface.subtle,
+    backgroundColor: theme.colors.surface.card,
   },
   logoPlaceholder: {
     justifyContent: 'center' as const,
+    minHeight: theme.metrics.minTouch,
   },
   logoText: {
     fontSize: theme.metrics.font.title.size,
@@ -112,29 +124,26 @@ const getStyles = (theme: Theme) => ({
     fontWeight: '900' as const,
     letterSpacing: 0.5,
   },
-  profileBadge: {
+  userActionsWrapper: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    backgroundColor: theme.colors.surface.subtle,
-    borderRadius: theme.metrics.radius.card,
-    borderWidth: 1,
-    borderColor: theme.colors.border.focus,
-    paddingVertical: 4,
-    paddingHorizontal: theme.spacing.xs + 2,
-    gap: theme.spacing.sm,
-    minHeight: theme.metrics.btnHeight.sm,
+    gap: 12, // Separación clara entre avatar y salir
   },
   avatarCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: theme.metrics.radius.pill,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
-    backgroundColor: theme.colors.brand.teal,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.12,
+    shadowRadius: 2,
   },
   avatarText: {
     color: theme.colors.text.inverse,
-    fontWeight: '700' as const,
+    fontWeight: '800' as const,
     fontSize: theme.metrics.font.body.size,
     lineHeight: theme.metrics.font.body.lineHeight,
   },
@@ -142,8 +151,12 @@ const getStyles = (theme: Theme) => ({
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: 4,
-    paddingRight: theme.spacing.xs,
-    paddingVertical: 4,
+    height: 38,
+    paddingHorizontal: 12,
+    borderRadius: theme.metrics.radius.pill,
+    backgroundColor: theme.colors.surface.subtle,
+    borderWidth: 1,
+    borderColor: theme.colors.border.default,
   },
   logoutText: {
     fontSize: theme.metrics.font.caption.size,
