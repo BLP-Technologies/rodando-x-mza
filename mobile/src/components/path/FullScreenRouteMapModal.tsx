@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Modal,
   View,
@@ -10,6 +10,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { OSMRouteMap } from '@/components/path/OSMRouteMap';
+import * as Location from 'expo-location';
 
 interface FullScreenRouteMapModalProps {
   visible: boolean;
@@ -32,6 +33,34 @@ export const FullScreenRouteMapModal: React.FC<FullScreenRouteMapModalProps> = (
   // Restamos aproximadamente el alto de la barra superior (aprox. 70px)
   const mapHeight = Math.max(300, height - 70);
 
+  const [userPos, setUserPos] = useState<{ latitude: number; longitude: number } | null>(null);
+
+  useEffect(() => {
+    let sub: Location.LocationSubscription | null = null;
+
+    (async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') return;
+
+      sub = await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.Balanced,
+          timeInterval: 2000,
+          distanceInterval: 3,
+        },
+        (loc) => {
+          setUserPos({
+            latitude: loc.coords.latitude,
+            longitude: loc.coords.longitude,
+          });
+        }
+      );
+    })();
+
+    return () => {
+      sub?.remove();
+    };
+  }, []);
 
   return (
     <Modal
@@ -70,6 +99,7 @@ export const FullScreenRouteMapModal: React.FC<FullScreenRouteMapModalProps> = (
             destination={destination}
             coordinates={coordinates}
             height={mapHeight}
+            userLocation={userPos}
           />
         </View>
       </SafeAreaView>
