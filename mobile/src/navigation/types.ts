@@ -52,7 +52,13 @@ export type RouteStackParamList = {
     destination: RoutePointParam;
     routeId?: string;//Cuando viene de un recorrido guardado
   };
-  RouteDetail: RouteDetailParams;
+ RouteDetail: {
+    originLabel: string;
+    destinationLabel: string;
+    legs?: any[];
+    summary?: any;
+    steps?: RouteStep[];
+  };
   CreatePlace: undefined;
   EditPlace: {placeId: string};
   Perfil: undefined;
