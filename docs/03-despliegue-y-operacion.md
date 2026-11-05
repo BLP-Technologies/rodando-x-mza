@@ -237,8 +237,12 @@ APK desde la misma rama integrada, para que lo que se prueba sea lo documentado.
   caída de un proceso.
 - **Aviso de caída.** Un chequeo externo gratuito golpea `/api/health/ready` y avisa
   por el canal de mensajería del equipo si no responde.
-- **Logs.** Se consultan con `docker compose logs` y rotan por tamaño para no
-  llenar el disco.
+- **Logs.** La API registra cada request con `pino-http` (método, ruta, status,
+  duración, IP e id de correlación en `x-request-id`), sin cuerpos ni credenciales;
+  los health checks y `/uploads` quedan afuera. Se consultan con `docker service
+  logs` o el visor de Dokploy, y rotan por tamaño (`max-size`/`max-file` en el
+  daemon) para no llenar el disco. El detalle operativo está en
+  [19 §4.7](19-guia-de-despliegue-dokploy.md#47-logs).
 - **Disco.** Es el recurso que primero se agota (imágenes de reportes). Se controla
   su uso y se avisa al superar un umbral.
 - **Mantenimiento.** Actualizaciones del sistema operativo y de las imágenes base

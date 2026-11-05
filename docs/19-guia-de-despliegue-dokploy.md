@@ -17,8 +17,8 @@ Este documento responde:
 - **Cómo** se despliega la base de datos, paso por paso (§3).
 - **Cómo** se opera la base por SSH cuando no hay un cliente SQL conectado (§3.7).
 - **Cómo** se respalda la base mientras dura el MVP (§3.8).
-- **Cómo** se despliega el backend, cómo se verifican sus migraciones y cómo se
-  actualiza solo con cada push (§4).
+- **Cómo** se despliega el backend, cómo se verifican sus migraciones, cómo se
+  actualiza solo con cada push y cómo se leen sus logs (§4).
 - **Cómo** se despliega el portal y qué necesita el servidor (§5).
 - **Cómo** se obtiene el APK de la aplicación móvil (§6).
 - **Qué** falta para completar el despliegue (§7).
@@ -531,6 +531,46 @@ portal: un push que no toca esa carpeta responde 301 y no despliega.
 El orden importa al configurar `RAILPACK_START_CMD`: al ser una variable de build,
 tiene que estar cargada **antes** del merge que la necesita; si no, el build sale con
 el comando anterior.
+
+### 4.7 Logs
+
+La API registra cada request con `pino-http`: método, ruta, status, duración, IP del
+cliente e id de correlación. El id va en el encabezado `x-request-id` y en el `req.log`
+de la request, así que un error y su request se pueden unir por ese valor.
+
+```json
+{"level":40,"req":{"id":"…","method":"GET","url":"/api/no-existe"},"ip":"…","res":{"statusCode":404},"responseTime":3,"msg":"request completed"}
+```
+
+- Nivel: `info` para 2xx y 3xx, `warn` para 4xx, `error` para 5xx.
+- No se loguean cuerpos; `authorization` y `cookie` salen redactados.
+- `/api/health`, `/api/health/ready` y `/uploads` no se registran.
+- `LOG_LEVEL` controla el nivel; en producción va `info`.
+
+Para seguirlos:
+
+```bash
+SERVICE=$(docker service ls --format '{{.Name}}' | grep backend)
+docker service logs -f "$SERVICE"
+```
+
+`docker service logs --since 24h "$SERVICE"` acota la consulta al último día. La misma
+información aparece en el visor de logs de Dokploy.
+
+**Rotación.** Docker guarda la salida en `json-file` sin límite por defecto. En el
+servidor se configura en `/etc/docker/daemon.json`:
+
+```json
+{
+  "log-driver": "json-file",
+  "log-opts": { "max-size": "20m", "max-file": "1" }
+}
+```
+
+Si el archivo ya existe, se agregan esas claves sin reemplazar el resto. Después hay que
+reiniciar Docker y redesplegar cada app para que las tareas nuevas usen la configuración.
+El límite es **por tamaño, no por tiempo**: 20 MB por contenedor alcanzan para varios
+días de este MVP, y `--since` se usa para acotar la consulta cuando hace falta.
 
 ## 5. Portal
 
