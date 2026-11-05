@@ -351,7 +351,7 @@ se moviera al dispositivo. Ahí se evalúa un tipo con marca o un parser en el d
 | La app falla porque falta la extensión `postgis` o `pgrouting` | el volumen se creó antes de agregar `infra/initdb/`. Recrearla con `docker compose down -v` y `docker compose up -d` |
 | `pnpm migrate` falla con `type "geometry" does not exist` | la base no tiene PostGIS habilitado. Pasa en una base creada a mano con `createdb`, porque las extensiones las pone `infra/initdb/` al inicializar el volumen. Recrear la base (§5) o correr `CREATE EXTENSION postgis; CREATE EXTENSION pgrouting;` en ella |
 | En Fedora/RHEL el contenedor de la base no arranca y el log dice `Permission denied` sobre `/docker-entrypoint-initdb.d` | SELinux bloquea el bind mount. El montaje debe llevar el flag `z` (`:ro,z`, ya está en el compose); no quitarlo |
-| El portal carga pero el mapa queda vacío y el cartel dice que no se pudo conectar con la API | el backend no está levantado, o `CORS_ORIGINS` no incluye el origen del portal (`http://localhost:3000`). El bloqueo de CORS no se anuncia como CORS en la consola del navegador ([15 §3](15-integracion-con-el-cliente.md)) |
+| El portal carga pero el mapa queda vacío y el cartel dice que no se pudo conectar con la API | el backend no está levantado, o `CORS_ORIGINS` no incluye el origen del portal (`http://localhost:3000`). El bloqueo de CORS no se anuncia como CORS en la consola del navegador ([15 §3](15-integracion-con-el-cliente.md)). Si el `.env` es anterior a la variable, el backend lo avisa al arrancar |
 
 ## 10. Documentos relacionados
 

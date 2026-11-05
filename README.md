@@ -33,3 +33,4 @@ Vive en [`docs/`](docs/):
 - [17 — La API de reportes](docs/17-la-api-de-reportes.md)
 - [18 — La API de obstáculos](docs/18-la-api-de-obstaculos.md)
 - [19 — Guía de despliegue con Dokploy](docs/19-guia-de-despliegue-dokploy.md)
+- [20 — Autenticación](docs/20-autenticacion.md)

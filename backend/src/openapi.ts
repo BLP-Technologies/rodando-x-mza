@@ -1,5 +1,11 @@
 import { OpenAPIRegistry, OpenApiGeneratorV31 } from '@asteasolutions/zod-to-openapi';
 import { z } from 'zod';
+import {
+  loginRequestSchema,
+  loginResponseSchema,
+  registerRequestSchema,
+  userResponseSchema,
+} from './auth/auth.schemas.js';
 import { bboxParamSchema, graphResponseSchema, updateGraphElementBodySchema, graphElementSchema, elementKindSchema } from './graph/graph.schemas.js';
 import { errorResponseSchema } from './http/error-response.js';
 import {
@@ -19,6 +25,7 @@ import {
   reportStatusSchema,
 } from './reports/reports.schemas.js';
 import { routeRequestSchema, routeResponseSchema } from './routing/routing.schemas.js';
+import { serviceAreasCollectionSchema } from './service-areas/service-areas.schemas.js';
 
 /**
  * El documento `OpenAPI`, generado desde los esquemas Zod.
@@ -28,6 +35,126 @@ import { routeRequestSchema, routeResponseSchema } from './routing/routing.schem
  * genera al importar este módulo: es una constante, no un cálculo por pedido.
  */
 const registry = new OpenAPIRegistry();
+
+/**
+ * El token viaja en `Authorization: Bearer <token>`, y no en una cookie: por eso el
+ * preflight de CORS permite ese encabezado y no hace falta `Allow-Credentials`
+ * ([20 §5](../docs/20-autenticacion.md), [15 §3](../docs/15-integracion-con-el-cliente.md)).
+ *
+ * El documento no declara un `securityScheme` todavía: ningún endpoint de negocio exige
+ * el token, así que sería un requisito global que la API no aplica. Se declara cuando
+ * los endpoints de moderación lo exijan ([20 §7](../docs/20-autenticacion.md)).
+ */
+const BEARER_HINT = 'Manda el token de `POST /api/auth/login` en `Authorization: Bearer <token>`.';
+
+registry.registerPath({
+  method: 'post',
+  path: '/api/auth/register',
+  summary: 'Crear una cuenta',
+  description:
+    'Crea la cuenta y devuelve `{ user }`, sin abrir sesión: el cliente inicia sesión ' +
+    'aparte, así hay un solo lugar donde nace un token. El email se normaliza (sin ' +
+    'espacios, en minúsculas) antes de validarlo, y uno ya registrado es `409 CONFLICT`. ' +
+    'La contraseña pide al menos 8 caracteres. Ver docs/20-autenticacion.md §2.',
+  request: {
+    body: { content: { 'application/json': { schema: registerRequestSchema } } },
+  },
+  responses: {
+    201: {
+      description: 'La cuenta creada. No incluye el hash de la contraseña.',
+      content: { 'application/json': { schema: userResponseSchema } },
+    },
+    400: {
+      description:
+        'El cuerpo no cumple el contrato: falta un campo, el email no tiene formato o ' +
+        'la contraseña tiene menos de 8 caracteres.',
+      content: { 'application/json': { schema: errorResponseSchema } },
+    },
+    409: {
+      description: 'Ya hay una cuenta con ese email.',
+      content: { 'application/json': { schema: errorResponseSchema } },
+    },
+    500: {
+      description: 'Error no esperado.',
+      content: { 'application/json': { schema: errorResponseSchema } },
+    },
+  },
+});
+
+registry.registerPath({
+  method: 'post',
+  path: '/api/auth/login',
+  summary: 'Iniciar sesión',
+  description:
+    'Verifica las credenciales, abre una sesión de 30 días en `sessions` y devuelve el ' +
+    'token con la cuenta. La base guarda el SHA-256 del token, no el token. Email ' +
+    'inexistente y contraseña incorrecta dan el mismo `401`, a propósito: distinguirlos ' +
+    'diría qué emails tienen cuenta. Ver docs/20-autenticacion.md §3.',
+  request: {
+    body: { content: { 'application/json': { schema: loginRequestSchema } } },
+  },
+  responses: {
+    200: {
+      description: 'El token de la sesión y la cuenta, sin el hash de la contraseña.',
+      content: { 'application/json': { schema: loginResponseSchema } },
+    },
+    400: {
+      description: 'El cuerpo no cumple el contrato: falta el email o la contraseña.',
+      content: { 'application/json': { schema: errorResponseSchema } },
+    },
+    401: {
+      description: 'Las credenciales no sirven. No distingue email de contraseña.',
+      content: { 'application/json': { schema: errorResponseSchema } },
+    },
+    500: {
+      description: 'Error no esperado.',
+      content: { 'application/json': { schema: errorResponseSchema } },
+    },
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/auth/me',
+  summary: 'Leer la cuenta dueña del token',
+  description: `Devuelve la cuenta de la sesión vigente. ${BEARER_HINT} Una sesión vencida o de una cuenta dada de baja es \`401 UNAUTHENTICATED\`. Ver docs/20-autenticacion.md §5.`,
+  responses: {
+    200: {
+      description: 'La cuenta dueña del token.',
+      content: { 'application/json': { schema: userResponseSchema } },
+    },
+    401: {
+      description:
+        'Falta el encabezado, no es un `Bearer`, o la sesión no existe, venció o es de ' +
+        'una cuenta dada de baja.',
+      content: { 'application/json': { schema: errorResponseSchema } },
+    },
+    500: {
+      description: 'Error no esperado.',
+      content: { 'application/json': { schema: errorResponseSchema } },
+    },
+  },
+});
+
+registry.registerPath({
+  method: 'post',
+  path: '/api/auth/logout',
+  summary: 'Cerrar la sesión del token',
+  description: `${BEARER_HINT} Borra la fila de \`sessions\`, así que ese token deja de servir en el acto. Es idempotente en el resultado: un token que ya no existe responde \`401\` como cualquier sesión inválida. Ver docs/20-autenticacion.md §3.`,
+  responses: {
+    204: {
+      description: 'La sesión quedó cerrada. Sin cuerpo.',
+    },
+    401: {
+      description: 'El token no corresponde a ninguna sesión vigente.',
+      content: { 'application/json': { schema: errorResponseSchema } },
+    },
+    500: {
+      description: 'Error no esperado.',
+      content: { 'application/json': { schema: errorResponseSchema } },
+    },
+  },
+});
 
 registry.registerPath({
   method: 'get',
@@ -94,6 +221,33 @@ registry.registerPath({
     404: {
       description: 'No hay ningún elemento de esa clase con ese id.',
       content: { 'application/json': { schema: errorResponseSchema } },
+    },
+    500: {
+      description: 'Error no esperado.',
+      content: { 'application/json': { schema: errorResponseSchema } },
+    },
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/service-areas',
+  summary: 'Leer las áreas de servicio activas',
+  description:
+    'Devuelve las áreas de servicio activas —hoy la zona piloto corrida 50 m hacia ' +
+    'afuera—, como una FeatureCollection de GeoJSON con el polígono en orden ' +
+    '[lon, lat] y su id y su nombre. Es el mismo campo `service_areas` de ' +
+    'GET /api/graph, sin el grafo al lado: el mobile necesita dibujar el borde para ' +
+    'avisar si un pin está dentro de la zona, y para eso no pide las ~1000 features ' +
+    'ni tiene que inventar un bbox. No lleva parámetros, así que el único caso es ' +
+    '200; una base sin área activa devuelve `features: []`, que no es un error. ' +
+    'Sólo lee: no escribe ni cachea nada. Ver docs/14-la-api-del-grafo.md §5.2.',
+  responses: {
+    200: {
+      description:
+        'Las áreas de servicio activas. Una colección vacía es una respuesta válida: ' +
+        'no hay ninguna área activa.',
+      content: { 'application/json': { schema: serviceAreasCollectionSchema } },
     },
     500: {
       description: 'Error no esperado.',

@@ -28,8 +28,8 @@ const AppNavigator = () => {
 
 // Sin sesión se muestra el flujo de auth; con sesión (usuario o invitado), la navegación principal
 const Root = () => {
-  const { sesion } = useAuth();
-
+  const { cargando, sesion } = useAuth();
+  if (cargando) return null
   return sesion === null ? <AuthFlow /> : <AppNavigator />;
 };
 

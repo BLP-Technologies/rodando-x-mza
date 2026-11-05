@@ -1,13 +1,43 @@
+import type { Logger } from 'pino';
 import type { RequestHandler } from 'express';
 
 /** Métodos que la API acepta hoy; uno nuevo se agrega acá. */
 const ALLOWED_METHODS = 'GET, POST, PATCH, OPTIONS';
 
-/** Encabezados que el cliente puede mandar en un pedido simple o JSON. */
-const ALLOWED_HEADERS = 'Content-Type';
+/** Encabezados que el cliente puede mandar en un pedido simple o JSON.
+ *
+ * `Authorization` va incluido porque el token de `POST /api/auth/login` viaja ahí
+ * ([20 §5](../../../docs/20-autenticacion.md)): sin él, el preflight de un navegador
+ * bloquea cualquier pedido autenticado antes de que salga. */
+const ALLOWED_HEADERS = 'Content-Type, Authorization';
 
 /** Cuánto puede cachear el navegador el resultado del preflight, en segundos. */
 export const PREFLIGHT_MAX_AGE_SECONDS = 600;
+
+/**
+ * Avisa al arrancar si la allowlist de CORS quedó vacía en desarrollo.
+ *
+ * Una allowlist vacía es una decisión válida —hay despliegues donde la API no la usa
+ * ningún navegador—, pero en desarrollo el caso normal es el otro: un `.env` anterior a
+ * la variable, que `pnpm dev` carga igual y sin avisar. Sin este aviso, el síntoma
+ * aparece en el navegador como "no se pudo conectar con la API" aunque la API conteste
+ * `200` ([05](05-desarrollo.md) §4, [15 §3](15-integracion-con-el-cliente.md)).
+ *
+ * No avisa en producción: ahí la lista vacía puede ser deliberada, y un aviso que se
+ * ignora enseña a ignorar los avisos.
+ */
+export function warnIfCorsAllowlistIsEmpty(
+  origins: readonly string[],
+  nodeEnv: string,
+  logger: Pick<Logger, 'warn'>,
+): void {
+  if (origins.length > 0 || nodeEnv !== 'development') return;
+
+  logger.warn(
+    'CORS_ORIGINS está vacío: ningún cliente de navegador va a poder leer la API. ' +
+      'Si el portal no carga, agregá http://localhost:3000 en backend/.env (docs/05 §4).',
+  );
+}
 
 /**
  * Normaliza un origen para compararlo: sin espacios, en minúsculas y sin barra
@@ -30,8 +60,8 @@ function normalizeOrigin(origin: string): string {
  * - Un origen fuera de la allowlist no recibe encabezados y el pedido sigue su
  *   curso normal. No se responde 403: el navegador ya bloquea la respuesta, y un
  *   403 convertiría un problema de política en un error de la API.
- * - No se emite `Access-Control-Allow-Credentials`: la API todavía no tiene
- *   autenticación, y cuando la tenga es una decisión aparte.
+ * - No se emite `Access-Control-Allow-Credentials`: el token viaja en `Authorization`
+ *   y no en una cookie, así que no hace falta ([20 §5](../../../docs/20-autenticacion.md)).
  * - `OPTIONS` con origen permitido es un preflight: responde `204` sin cuerpo.
  *   Por eso este middleware se monta antes del router y de `notFound`.
  * - `Vary: Origin` va siempre, incluso sin `Origin`: la respuesta depende de ese
