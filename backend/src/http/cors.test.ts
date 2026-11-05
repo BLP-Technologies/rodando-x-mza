@@ -40,7 +40,10 @@ describe('cors', () => {
     expect(res.text).toBe('');
     expect(res.headers['access-control-allow-origin']).toBe(PORTAL_ORIGIN);
     expect(res.headers['access-control-allow-methods']).toBe('GET, POST, PATCH, OPTIONS');
-    expect(res.headers['access-control-allow-headers']).toBe('Content-Type');
+    // `Authorization` tiene que estar: es lo que el cliente manda con el token, y un
+    // encabezado que el preflight no permite bloquea el pedido en el navegador
+    // ([20 §5]).
+    expect(res.headers['access-control-allow-headers']).toBe('Content-Type, Authorization');
     expect(res.headers['access-control-max-age']).toBe(String(PREFLIGHT_MAX_AGE_SECONDS));
   });
 

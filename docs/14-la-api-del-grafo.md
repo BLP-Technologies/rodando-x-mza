@@ -324,10 +324,11 @@ lectura le permite repintarla sin traducir nada.
 el nivel nuevo, sin invalidar caché ni recalcular una tabla. Lo que sí cambia es
 `updated_at`, que mueve el trigger de la tabla.
 
-**El endpoint todavía no pide autenticación** (Fase 3, [07 §3](07-plan-de-trabajo.md)):
-cualquiera que llegue a la API puede escribir el nivel. Es coherente con el resto del MVP
-y queda dicho acá para que no se descubra después; cuando exista el auth, el permiso se
-valida en este mismo endpoint.
+**El endpoint todavía no pide autenticación**: cualquiera que llegue a la API puede
+escribir el nivel, aunque la autenticación ya exista ([20](20-autenticacion.md)). Es
+coherente con el resto del MVP —ningún endpoint de negocio exige el token todavía
+([20 §7](20-autenticacion.md))— y queda dicho acá para que nadie lea el `PATCH` como
+protegido. Cuando se proteja, el permiso de moderador se valida en este mismo endpoint.
 
 ## 8. Lo que este documento no decide
 

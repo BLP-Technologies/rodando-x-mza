@@ -3,8 +3,12 @@ import type { RequestHandler } from 'express';
 /** Métodos que la API acepta hoy; uno nuevo se agrega acá. */
 const ALLOWED_METHODS = 'GET, POST, PATCH, OPTIONS';
 
-/** Encabezados que el cliente puede mandar en un pedido simple o JSON. */
-const ALLOWED_HEADERS = 'Content-Type';
+/** Encabezados que el cliente puede mandar en un pedido simple o JSON.
+ *
+ * `Authorization` va incluido porque el token de `POST /api/auth/login` viaja ahí
+ * ([20 §5](../../../docs/20-autenticacion.md)): sin él, el preflight de un navegador
+ * bloquea cualquier pedido autenticado antes de que salga. */
+const ALLOWED_HEADERS = 'Content-Type, Authorization';
 
 /** Cuánto puede cachear el navegador el resultado del preflight, en segundos. */
 export const PREFLIGHT_MAX_AGE_SECONDS = 600;
@@ -30,8 +34,8 @@ function normalizeOrigin(origin: string): string {
  * - Un origen fuera de la allowlist no recibe encabezados y el pedido sigue su
  *   curso normal. No se responde 403: el navegador ya bloquea la respuesta, y un
  *   403 convertiría un problema de política en un error de la API.
- * - No se emite `Access-Control-Allow-Credentials`: la API todavía no tiene
- *   autenticación, y cuando la tenga es una decisión aparte.
+ * - No se emite `Access-Control-Allow-Credentials`: el token viaja en `Authorization`
+ *   y no en una cookie, así que no hace falta ([20 §5](../../../docs/20-autenticacion.md)).
  * - `OPTIONS` con origen permitido es un preflight: responde `204` sin cuerpo.
  *   Por eso este middleware se monta antes del router y de `notFound`.
  * - `Vary: Origin` va siempre, incluso sin `Origin`: la respuesta depende de ese

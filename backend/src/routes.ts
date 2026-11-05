@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { authRouter } from './auth/auth.routes.js';
 import { graphRouter } from './graph/graph.routes.js';
 import { docsRouter } from './http/docs.js';
 import { healthRouter } from './http/health.js';
@@ -13,6 +14,7 @@ import { serviceAreasRouter } from './service-areas/service-areas.routes.js';
 export const apiRouter = Router();
 
 apiRouter.use('/health', healthRouter);
+apiRouter.use('/auth', authRouter);
 apiRouter.use('/graph', graphRouter);
 apiRouter.use('/service-areas', serviceAreasRouter);
 apiRouter.use('/routes', routingRouter);
