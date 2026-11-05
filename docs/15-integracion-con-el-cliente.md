@@ -66,14 +66,16 @@ no se usa el paquete `cors`. Las reglas, que son las que un cliente percibe:
   hace el navegador, y el mensaje que deja en la consola **no menciona CORS**. Cuando un
   cliente de navegador "no recibe nada" y la API sí responde, la causa más probable es
   un origen que falta en `CORS_ORIGINS`.
-- **Sin credenciales.** No se emite `Access-Control-Allow-Credentials`: la API todavía no
-  tiene autenticación (§4). Mandar cookies o tokens desde el navegador es una decisión
-  aparte, y llegado el caso se toma sobre esta misma allowlist, más estricta.
+- **Sin credenciales.** No se emite `Access-Control-Allow-Credentials`: el token viaja en
+  `Authorization: Bearer`, no en una cookie ([20 §5](20-autenticacion.md)). El día que un
+  cliente quiera cookies, la decisión se toma sobre esta misma allowlist, más estricta.
 - **El preflight `OPTIONS` se responde antes del ruteo**, con `204` sin cuerpo,
-  `GET, POST, PATCH, OPTIONS` como métodos, `Content-Type` como único encabezado
-  permitido y `Access-Control-Max-Age` para que el navegador cachee el resultado. Un
-  método nuevo de la API se agrega a esa lista en `backend/src/http/cors.ts`, o el
-  navegador bloquea el pedido aunque la ruta exista.
+  `GET, POST, PATCH, OPTIONS` como métodos, `Content-Type` y `Authorization` como únicos
+  encabezados permitidos y `Access-Control-Max-Age` para que el navegador cachee el
+  resultado. Un método nuevo de la API se agrega a esa lista en `backend/src/http/cors.ts`,
+  o el navegador bloquea el pedido aunque la ruta exista; lo mismo vale para un encabezado
+  nuevo —uno que el preflight no permita bloquea el pedido antes de que salga, y el caso
+  típico es un cliente que empieza a mandar el token.
 - **La comparación normaliza el origen**: mayúsculas y barra final no importan, así que
   `http://localhost:3000/` y `http://localhost:3000` son el mismo origen. Una entrada con
   ruta o query no matchea nunca, así que el backend la rechaza al arrancar en vez de
@@ -93,12 +95,15 @@ no se usa el paquete `cors`. Las reglas, que son las que un cliente percibe:
 | Leer, publicar y resolver obstáculos | `GET /api/obstacles`, `POST /api/obstacles` y `POST /api/obstacles/{id}/resolve` ([18](18-la-api-de-obstaculos.md)) |
 | Leer el contrato | `GET /api/openapi.json`, o la página navegable en `GET /api/docs` |
 | Saber si el servicio está arriba | `GET /api/health`, `GET /api/health/ready` |
-| Llamar a la API desde un navegador | Los orígenes de `CORS_ORIGINS`, sin credenciales (§3) |
-| Registrarse, iniciar sesión | No existe ([07 §3](07-plan-de-trabajo.md), Fase 3) |
+| Llamar a la API desde un navegador | Los orígenes de `CORS_ORIGINS`, sin credenciales; el preflight permite `Content-Type` y `Authorization` (§3) |
+| Registrarse, iniciar y cerrar sesión, y leer la cuenta propia | `POST /api/auth/register`, `/login`, `/logout` y `GET /api/auth/me` ([20](20-autenticacion.md)) |
 | Guardar rutas y lugares frecuentes | No existe (C006 a C009) |
 
-**Hoy no hay autenticación**: la API está abierta y ningún endpoint la pide. Un cliente que
-planifique contra un token que todavía no existe está planificando contra la nada.
+**La autenticación existe, pero ningún endpoint de negocio la exige todavía.** Hoy sólo
+`GET /api/auth/me` y `POST /api/auth/logout` piden el token: leer el grafo, calcular un
+recorrido, reportar un obstáculo o editar el nivel de un elemento siguen abiertos a
+cualquiera ([20 §7](20-autenticacion.md)). Un cliente puede iniciar sesión y guardar el
+token, pero ningún otro pedido lo usa todavía.
 
 ## 5. Lo que no es obvio del contrato de ruteo
 
@@ -140,17 +145,19 @@ una cortesía: los datos son ODbL 1.0 y la atribución es obligatoria
 - **El contrato de cada caso de uso.** Vive en su documento; hoy [13](13-api-de-ruteo.md).
 - **Qué orígenes se permiten en cada entorno, y con qué credenciales.** La allowlist y
   su funcionamiento son de este documento (§3); los valores concretos son configuración
-  de despliegue ([03](03-despliegue-y-operacion.md) §7), y el día que haya autenticación,
-  lo que el navegador manda para identificarse es la Fase 3
-  ([07](07-plan-de-trabajo.md)).
-- **La autenticación.** Cómo se registra, cómo se guarda el token y cómo lo manda el cliente
-  es la Fase 3.
+  de despliegue ([03](03-despliegue-y-operacion.md) §7). Qué manda el navegador para
+  identificarse ya está decidido: `Authorization: Bearer`, y el preflight lo permite (§3).
+- **La autenticación.** Cómo se registra, cómo se guarda el token del lado del servidor y
+  cómo lo manda el cliente es de [20](20-autenticacion.md). Lo que decide este documento
+  es sólo la parte del navegador: `Authorization` en la allowlist del preflight (§3).
 - **La versión de la API.** No hay `/v1`: el contrato cambia y los clientes se regeneran. Si
   en algún momento hay clientes que no se pueden regenerar juntos, se versiona.
 
 ## 9. Documentos relacionados
 
 - [13-api-de-ruteo.md](13-api-de-ruteo.md): el contrato del recorrido, campo por campo.
+- [20-autenticacion.md](20-autenticacion.md): el registro, la sesión y cómo el cliente manda
+  el token.
 - [04-errores-y-mensajes.md](04-errores-y-mensajes.md): la forma del error y quién escribe el
   texto.
 - [02-stack-y-estructura.md](02-stack-y-estructura.md): el contrato en Zod y el OpenAPI.
