@@ -19,12 +19,15 @@ export type DatosRegistro = {
 
 interface PantallaRegistro {
   onVolver: () => void;
-  onRegistro: (datos: DatosRegistro)  => Promise<string | null>;
+  onRegistro: (datos: DatosRegistro) => Promise<string | null>;
   onLogin: () => void;
 }
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PASSWORD_MIN = 8;
+const NOMBRE_MAX = 50;
+const EMAIL_MAX = 200;
+const PASSWORD_MAX = 128;
 
 // Devuelve el mensaje de error a mostrar, o null si el formulario es válido
 function validar(
@@ -34,13 +37,22 @@ function validar(
   confirmar: string,
 ): string | null {
   if (!nombre || !email || !password || !confirmar) {
-    return "Completá todos los campos.";
+    return "Complete todos los campos.";
+  }
+  if (nombre.length > NOMBRE_MAX) {
+    return `El nombre debe tener como máximo ${NOMBRE_MAX} caracteres.`;
+  }
+  if (email.length > EMAIL_MAX) {
+    return `El email debe tener como máximo ${EMAIL_MAX} caracteres.`;
   }
   if (!EMAIL_REGEX.test(email)) {
-    return "Ingresá un email válido.";
+    return "Ingrese un email válido.";
   }
   if (password.length < PASSWORD_MIN) {
     return `La contraseña debe tener al menos ${PASSWORD_MIN} caracteres.`;
+  }
+  if (password.length > PASSWORD_MAX) {
+    return `La contraseña debe tener como máximo ${PASSWORD_MAX} caracteres.`;
   }
   if (password !== confirmar) {
     return "Las contraseñas no coinciden.";
@@ -54,23 +66,33 @@ export function Registro({ onVolver, onRegistro, onLogin }: PantallaRegistro) {
   const [password, setPassword] = useState("");
   const [confirmar, setConfirmar] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [enviando, setEnviando] = useState(false);
 
   // Refs para pasar al siguiente campo con la tecla "Siguiente" del teclado
   const emailRef = useRef<TextInput>(null);
   const passwordRef = useRef<TextInput>(null);
   const confirmarRef = useRef<TextInput>(null);
 
-  const handleRegistro = async() => {
+  const handleRegistro = async () => {
+    if (enviando) return;
     const nombreLimpio = nombre.trim();
     const emailLimpio = email.trim().toLowerCase();
     const mensaje = validar(nombreLimpio, emailLimpio, password, confirmar);
     setError(mensaje);
     if (mensaje === null) {
-      const resultado = await onRegistro({ nombre: nombreLimpio, email: emailLimpio, password });
-      setError(resultado);
+      try {
+        setEnviando(true);
+        const resultado = await onRegistro({
+          nombre: nombreLimpio,
+          email: emailLimpio,
+          password,
+        });
+        setError(resultado);
+      } finally {
+        setEnviando(false);
+      }
     }
   };
-
   return (
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView
@@ -177,12 +199,19 @@ export function Registro({ onVolver, onRegistro, onLogin }: PantallaRegistro) {
               </Text>
             )}
             <Pressable
-              style={styles.submitButton}
               onPress={handleRegistro}
               accessibilityRole="button"
               accessibilityLabel="Crear cuenta"
+              disabled={enviando}
+              accessibilityState={{ disabled: enviando, busy: enviando }}
+              style={[
+                styles.submitButton,
+                enviando && styles.submitButtonDisabled,
+              ]}
             >
-              <Text style={styles.submitButtonText}>CREAR CUENTA</Text>
+              <Text style={styles.submitButtonText}>
+                {enviando ? "CREANDO..." : "CREAR CUENTA"}
+              </Text>
             </Pressable>
             <Pressable
               style={styles.linkButton}
@@ -299,6 +328,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "900",
     letterSpacing: 0.6,
+  },
+  submitButtonDisabled: {
+    opacity: 0.6,
   },
   linkButton: {
     alignItems: "center",

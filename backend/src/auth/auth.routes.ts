@@ -9,7 +9,7 @@ import { login, logout, register } from './auth.service.js';
 
 /**
  * Rutas de autenticación, montadas en `/api/auth`: registro (C001), inicio de sesión
- * (C002), perfil y cierre de sesión. Ver [17](../../../docs/17-autenticacion.md).
+ * (C002), perfil y cierre de sesión.
  *
  * Cada ruta valida la forma del pedido y delega el resto en el servicio. Express 5
  * reenvía sola la promesa rechazada al manejador de errores.

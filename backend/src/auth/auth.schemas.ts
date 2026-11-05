@@ -6,8 +6,7 @@ import { z } from 'zod';
  *
  * Es la única fuente: de acá salen los tipos del backend, la validación de los pedidos y
  * —cuando se registren en el `OpenAPI`— el contrato que leen los clientes
- * ([02 §6](../../../docs/02-stack-y-estructura.md)). Las decisiones están en
- * [17](../../../docs/17-autenticacion.md).
+ * ([02 §6](../../../docs/02-stack-y-estructura.md)).
  */
 
 /**

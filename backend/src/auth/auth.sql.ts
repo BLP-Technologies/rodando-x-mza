@@ -5,7 +5,7 @@ import type { DB } from '../db/types.js';
  * Las consultas de la autenticación: cuentas en `users` y sesiones en `sessions`.
  *
  * Ninguna devuelve el hash de la contraseña salvo `findUserByEmail`, que lo necesita el
- * servicio para verificar el inicio de sesión. Ver [17](../../../docs/17-autenticacion.md).
+ * servicio para verificar el inicio de sesión.
  */
 
 /** Una cuenta, sin el hash: lo que el servicio puede devolver al cliente. */

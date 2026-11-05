@@ -1,75 +1,78 @@
-import { useState } from 'react';
-import { StatusBar } from 'expo-status-bar';
-import { Bienvenida } from './bienvenida';
-import { Registro, type DatosRegistro } from './registro';
-import { Login, type DatosLogin } from './login';
-import { useAuth } from './AuthContext';
-import * as authService from './authService';
+import { useState } from "react";
+import { StatusBar } from "expo-status-bar";
+import { Bienvenida } from "./bienvenida";
+import { Registro, type DatosRegistro } from "./registro";
+import { Login, type DatosLogin } from "./login";
+import { useAuth } from "./AuthContext";
+import * as authService from "./authService";
 
-type PantallaActual = 'bienvenida' | 'registro' | 'login';
-
+type PantallaActual = "bienvenida" | "registro" | "login";
 
 function mensajeDeError(error: unknown): string {
-  if (error instanceof Error && error.message === 'CONFLICT') {
-    return 'Ya existe una cuenta con ese correo';
+  if (error instanceof Error && error.message === "CONFLICT") {
+    return "Ese email ya está registrado";
   }
-  if (error instanceof Error && error.message === 'UNAUTHENTICATED') {
-    return 'El correo o la contraseña son incorrectos';
+  if (error instanceof Error && error.message === "UNAUTHENTICATED") {
+    return "El email o la contraseña son incorrectos";
   }
-  return 'Error inesperado';
+  if (error instanceof Error && error.message === "VALIDATION_ERROR") {
+    return "Revise los datos ingresados";
+  }
+  return "Ha ocurrido un error. Intente nuevamente. Si el problema persiste, contacte al soporte.";
 }
 
-
-export function AuthFlow(){
+export function AuthFlow() {
   const { iniciarSesion, entrarComoInvitado } = useAuth();
-  const [pantallaActual, setPantallaActual] = useState<PantallaActual>('bienvenida');
+  const [pantallaActual, setPantallaActual] =
+    useState<PantallaActual>("bienvenida");
 
-  const handleRegistro = async (datos: DatosRegistro): Promise<string | null> => {
+  const handleRegistro = async (
+    datos: DatosRegistro,
+  ): Promise<string | null> => {
     try {
       await authService.registrarCuenta(datos);
-      setPantallaActual('login');
-      return null
+      setPantallaActual("login");
+      return null;
     } catch (error) {
-      console.log('Error al guardar la cuenta', error);
+      console.log("Error al guardar la cuenta", error);
       return mensajeDeError(error);
     }
   };
 
-  
   const handleLogin = async (datos: DatosLogin): Promise<string | null> => {
     try {
       const cuenta = await authService.iniciarSesion(datos);
       iniciarSesion(cuenta);
       return null;
     } catch (error) {
-      console.log('Error al iniciar sesión', error);
+      console.log("Error al iniciar sesión", error);
       return mensajeDeError(error);
     }
   };
 
   const renderPantalla = () => {
     switch (pantallaActual) {
-      case 'bienvenida':
+      case "bienvenida":
         return (
           <Bienvenida
             onInvitado={entrarComoInvitado}
-            onRegistro={() => setPantallaActual('registro')}
-            onLogin={() => setPantallaActual('login')}
+            onRegistro={() => setPantallaActual("registro")}
+            onLogin={() => setPantallaActual("login")}
           />
         );
-      case 'registro':
+      case "registro":
         return (
           <Registro
-            onVolver={() => setPantallaActual('bienvenida')}
+            onVolver={() => setPantallaActual("bienvenida")}
             onRegistro={handleRegistro}
-            onLogin={() => setPantallaActual('login')}
+            onLogin={() => setPantallaActual("login")}
           />
         );
-      case 'login':
+      case "login":
         return (
           <Login
-            onVolver={() => setPantallaActual('bienvenida')}
-            onRegistro={() => setPantallaActual('registro')}
+            onVolver={() => setPantallaActual("bienvenida")}
+            onRegistro={() => setPantallaActual("registro")}
             onLogin={handleLogin}
           />
         );

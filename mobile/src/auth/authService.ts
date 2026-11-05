@@ -1,6 +1,7 @@
 import { leerToken } from "./almacenamiento";
 import { type DatosRegistro } from "./registro";
 import { type DatosLogin } from "./login";
+import { Platform } from "react-native";
 
 type Cuenta = {
     nombre: string;
@@ -9,7 +10,7 @@ type Cuenta = {
 
 type ResultadoLogin = Cuenta & { token: string };
 
-// Lo que devuelve la API (docs/18). Acá se traduce `name` a `nombre`.
+// Lo que devuelve la API. Acá se traduce `name` a `nombre`.
 type UsuarioApi = {
     id: number;
     name: string;
@@ -17,7 +18,12 @@ type UsuarioApi = {
     is_moderator: boolean;
 }
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3001";
+const API_URL =
+  process.env.EXPO_PUBLIC_API_URL ??
+  Platform.select({
+    android: "http://10.0.2.2:3001",
+    default: "http://localhost:3001",
+  });
 
 // Hace el pedido. Si la API responde un error, lanza su código (CONFLICT, UNAUTHENTICATED...).
 async function pedir<T>(ruta: string, metodo: string, cuerpo?: unknown, token?: string): Promise<T> {

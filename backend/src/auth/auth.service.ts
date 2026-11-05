@@ -16,7 +16,7 @@ import {
 
 /**
  * Los casos de uso de la autenticación: registrarse (C001), iniciar sesión (C002), saber
- * quién es el dueño de un token y cerrar la sesión. Ver [17](../../../docs/17-autenticacion.md).
+ * quién es el dueño de un token y cerrar la sesión.
  */
 
 /** Cuánto dura una sesión desde que se inicia: 30 días. */
