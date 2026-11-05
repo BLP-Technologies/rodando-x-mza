@@ -1,72 +1,78 @@
-import { useState } from 'react';
-import { StatusBar } from 'expo-status-bar';
-import { Bienvenida } from './bienvenida';
-import { Registro, type DatosRegistro } from './registro';
-import { Login, type DatosLogin } from './login';
-import { guardarCuenta, leerCuenta } from './almacenamiento';
-import { useAuth } from './AuthContext';
+import { useState } from "react";
+import { StatusBar } from "expo-status-bar";
+import { Bienvenida } from "./bienvenida";
+import { Registro, type DatosRegistro } from "./registro";
+import { Login, type DatosLogin } from "./login";
+import { useAuth } from "./AuthContext";
+import * as authService from "./authService";
 
-type PantallaActual = 'bienvenida' | 'registro' | 'login';
+type PantallaActual = "bienvenida" | "registro" | "login";
 
-const MENSAJE_ERROR = 'El email o la contraseña son incorrectos';
+function mensajeDeError(error: unknown): string {
+  if (error instanceof Error && error.message === "CONFLICT") {
+    return "Ese email ya está registrado";
+  }
+  if (error instanceof Error && error.message === "UNAUTHENTICATED") {
+    return "El email o la contraseña son incorrectos";
+  }
+  if (error instanceof Error && error.message === "VALIDATION_ERROR") {
+    return "Revise los datos ingresados";
+  }
+  return "Ha ocurrido un error. Intente nuevamente. Si el problema persiste, contacte al soporte.";
+}
 
-// Flujo previo a tener sesión: Bienvenida, Registro y Login.
-// Al iniciar sesión o entrar como invitado, App pasa a mostrar la navegación principal.
 export function AuthFlow() {
   const { iniciarSesion, entrarComoInvitado } = useAuth();
-  const [pantallaActual, setPantallaActual] = useState<PantallaActual>('bienvenida');
+  const [pantallaActual, setPantallaActual] =
+    useState<PantallaActual>("bienvenida");
 
-  const handleRegistro = async (datos: DatosRegistro) => {
+  const handleRegistro = async (
+    datos: DatosRegistro,
+  ): Promise<string | null> => {
     try {
-      await guardarCuenta(datos);
-      setPantallaActual('login');
+      await authService.registrarCuenta(datos);
+      setPantallaActual("login");
+      return null;
     } catch (error) {
-      console.log('Error al guardar la cuenta', error);
+      console.log("Error al guardar la cuenta", error);
+      return mensajeDeError(error);
     }
   };
 
-  // Devuelve el mensaje de error a mostrar en Login, o null si el inicio fue correcto
   const handleLogin = async (datos: DatosLogin): Promise<string | null> => {
     try {
-      const cuenta = await leerCuenta();
-      if (
-        cuenta === null ||
-        cuenta.email !== datos.email ||
-        cuenta.password !== datos.password
-      ) {
-        return MENSAJE_ERROR;
-      }
-      iniciarSesion({ nombre: cuenta.nombre, email: cuenta.email });
+      const cuenta = await authService.iniciarSesion(datos);
+      iniciarSesion(cuenta);
       return null;
     } catch (error) {
-      console.log('Error al iniciar sesión', error);
-      return MENSAJE_ERROR;
+      console.log("Error al iniciar sesión", error);
+      return mensajeDeError(error);
     }
   };
 
   const renderPantalla = () => {
     switch (pantallaActual) {
-      case 'bienvenida':
+      case "bienvenida":
         return (
           <Bienvenida
             onInvitado={entrarComoInvitado}
-            onRegistro={() => setPantallaActual('registro')}
-            onLogin={() => setPantallaActual('login')}
+            onRegistro={() => setPantallaActual("registro")}
+            onLogin={() => setPantallaActual("login")}
           />
         );
-      case 'registro':
+      case "registro":
         return (
           <Registro
-            onVolver={() => setPantallaActual('bienvenida')}
+            onVolver={() => setPantallaActual("bienvenida")}
             onRegistro={handleRegistro}
-            onLogin={() => setPantallaActual('login')}
+            onLogin={() => setPantallaActual("login")}
           />
         );
-      case 'login':
+      case "login":
         return (
           <Login
-            onVolver={() => setPantallaActual('bienvenida')}
-            onRegistro={() => setPantallaActual('registro')}
+            onVolver={() => setPantallaActual("bienvenida")}
+            onRegistro={() => setPantallaActual("registro")}
             onLogin={handleLogin}
           />
         );

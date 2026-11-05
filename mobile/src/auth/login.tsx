@@ -26,10 +26,10 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function validar(email: string, password: string): string | null {
   if (!email || !password) {
-    return "Completá todos los campos.";
+    return "Complete todos los campos.";
   }
   if (!EMAIL_REGEX.test(email)) {
-    return "Ingresá un email válido.";
+    return "Ingrese un email válido.";
   }
   return null;
 }
@@ -39,14 +39,21 @@ export function Login({ onVolver, onLogin, onRegistro }: PantallaLogin) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const passwordRef = useRef<TextInput>(null);
+  const [enviando, setEnviando] = useState(false);
 
-  const  handleLogin = async () => {
+  const handleLogin = async () => {
+    if (enviando) return;
     const emailLimpio = email.trim().toLowerCase();
     const mensaje = validar(emailLimpio, password);
     setError(mensaje);
     if (mensaje === null) {
-      const resultado = await onLogin({ email: emailLimpio, password });
-      setError(resultado)
+      try {
+        setEnviando(true);
+        const resultado = await onLogin({ email: emailLimpio, password });
+        setError(resultado);
+      } finally {
+        setEnviando(false);
+      }
     }
   };
 
@@ -74,10 +81,6 @@ export function Login({ onVolver, onLogin, onRegistro }: PantallaLogin) {
               <Text style={styles.tagline}>TU CIUDAD, A TU MANERA</Text>
               <Text style={styles.title} accessibilityRole="header">
                 Iniciar sesión
-              </Text>
-              <Text style={styles.description}>
-                Ingresá con el correo de la cuenta simulada creada en este
-                dispositivo
               </Text>
             </View>
             <View style={styles.fieldGroup}>
@@ -125,12 +128,19 @@ export function Login({ onVolver, onLogin, onRegistro }: PantallaLogin) {
               </Text>
             )}
             <Pressable
-              style={styles.submitButton}
               onPress={handleLogin}
               accessibilityRole="button"
               accessibilityLabel="Iniciar sesión"
+              disabled={enviando}
+              accessibilityState={{ disabled: enviando, busy: enviando }}
+              style={[
+                styles.submitButton,
+                enviando && styles.submitButtonDisabled,
+              ]}
             >
-              <Text style={styles.submitButtonText}>INICIAR SESIÓN</Text>
+              <Text style={styles.submitButtonText}>
+                {enviando ? "INGRESANDO..." : "INICIAR SESIÓN"}
+              </Text>
             </Pressable>
             <Pressable
               style={styles.linkButton}
@@ -240,6 +250,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 8,
     marginBottom: 12,
+  },
+  submitButtonDisabled: {
+    opacity: 0.6,
   },
   submitButtonText: {
     color: "#0F2942",
