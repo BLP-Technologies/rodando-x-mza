@@ -36,6 +36,8 @@ Todo vive bajo `/api/auth`. El código está en `backend/src/auth/` y el contrat
 
 - **El registro no abre sesión.** Devuelve la cuenta creada y el cliente inicia sesión
   aparte: así hay un solo lugar donde nace un token.
+- **Toda cuenta nueva nace moderadora.** Es una decisión del MVP (§7), no del modelo:
+  el default de la columna sigue en `false`.
 - **El email se normaliza** antes de validarlo: sin espacios y en minúsculas. El índice
   único de `users` es sobre `lower(email)`, así que `Ana@Mail.com` y `ana@mail.com` son
   la misma cuenta.
@@ -90,6 +92,11 @@ Desde un navegador hace falta además que el backend permita el encabezado
 `Authorization` en CORS ([15 §3](15-integracion-con-el-cliente.md)). La app mobile no
 pasa por CORS.
 
+**El portal no guarda el token en el navegador.** Lo deja en una cookie `httpOnly`
+(`rodando_session`) y hace los pedidos desde el servidor de Next: el JavaScript de la
+página nunca ve el token, así que un XSS no se lo puede llevar. La cookie dura lo mismo
+que la sesión en la base y se borra al cerrar sesión ([16 §4](16-el-portal.md)).
+
 ## 6. Cómo se rechaza
 
 | Situación | Status | Respuesta |
@@ -106,8 +113,17 @@ No hay códigos nuevos: todos están en el catálogo de
 
 ## 7. Lo que este documento no decide
 
-- **Los permisos de moderador.** `is_moderator` viaja en `user`, pero qué endpoints lo
-  exigen se decide con los casos de uso del portal (C011 a C014).
+- **Qué endpoints exigen moderador.** `is_moderator` viaja en `user` y el portal lo
+  exige para dejar entrar ([16 §4](16-el-portal.md)), pero ninguna ruta de la API lo
+  pide todavía: se decide con los casos de uso (C011 a C014). El login protege la
+  interfaz, no los datos.
+- **Quién es moderador.** Mientras dure el MVP, **toda cuenta creada con
+  `POST /api/auth/register` nace moderadora**: es una línea de `insertUser`
+  (`backend/src/auth/auth.sql.ts`), con el default de la columna en `false` para que
+  otra vía de alta no herede el permiso. Sirve para que quien se registra pueda entrar
+  al portal sin que nadie toque la base a mano; el costo es que el registro queda
+  abierto a cualquiera que llegue a la pantalla. Se revierte borrando esa línea, y hay
+  un test (`auth.db.test.ts`) que avisa.
 - **La recuperación de contraseña.** No hay endpoint todavía.
 - **El límite de intentos de inicio de sesión.** No hay; se agrega si el uso lo pide.
 - **Limpiar las sesiones vencidas.** Quedan en la tabla sin efecto; si crece, se agrega

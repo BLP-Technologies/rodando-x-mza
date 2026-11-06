@@ -296,11 +296,13 @@ nullable y sin `UNIQUE`— y no al revés. Un único `obstacles.report_id` no po
 representar dos reportes del mismo obstáculo sin duplicar el obstáculo.
 
 **El autor.** `reports.user_id` es **nullable**, aunque la columna nació `NOT NULL`
-con FK a `users`. La razón es de fase: no hay autenticación (Fase 3) ni una sola fila
-en `users`, así que exigir el autor haría imposible el único caso que existe hoy, que
-alguien reporte un pozo sin tener cuenta. Un reporte anónimo es legítimo mientras no
-haya login; cuando lo haya, el reporte autenticado vuelve a completar el campo. La
-alternativa descartada —sembrar un usuario "ciudadano"— deja una fila de mentira que
+con FK a `users`. La razón es de fase: la app no tiene login (Fase 3) y una persona
+puede reportar un pozo sin tener cuenta; la autenticación que existe hoy es la del
+portal de moderación ([20](20-autenticacion.md)), no la del cliente móvil. Exigir el
+autor haría imposible el único caso que existe hoy. Un reporte anónimo es legítimo
+mientras la app no pida cuenta; cuando lo haga, el reporte autenticado vuelve a
+completar el campo. La alternativa descartada —sembrar un usuario "ciudadano"— deja
+una fila de mentira que
 después hay que deshacer con un `UPDATE` masivo
 ([17 §6](17-la-api-de-reportes.md#6-el-reporte-anónimo)).
 
