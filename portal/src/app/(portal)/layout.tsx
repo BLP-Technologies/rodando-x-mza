@@ -2,14 +2,18 @@
  * El portal de moderación: barra con la sesión y el contenido de cada página.
  *
  * **Es el único consumidor de la sesión.** Llama a `getSession()` una vez, y ese
- * `if` es la única guarda del portal: cuando `getSession` llame al auth real, el
- * resto del portal no se entera ([16 §4](../../docs/16-el-portal.md)).
+ * `if` es la única guarda del portal: el resto del portal no sabe cómo se resuelve
+ * la sesión ([16 §4](../../docs/16-el-portal.md)).
  */
 
 import { redirect } from 'next/navigation';
 import { getSession } from '@/session/session';
 import { Nav } from './nav';
 import { Providers } from './providers';
+import { logout } from '@/session/actions';
+
+// Sin sesión no hay nada que mostrar: el layout la resuelve antes de responder.
+export const instant = false;
 
 export default async function PortalLayout({ children }: LayoutProps<'/'>) {
   const session = await getSession();
@@ -28,11 +32,14 @@ export default async function PortalLayout({ children }: LayoutProps<'/'>) {
 
         <div className="flex items-center gap-3 text-sm text-slate-600">
           <span>{session.name}</span>
-          {/* La marca de sesión simulada no es adorno: mientras no haya auth,
-              nadie tiene que confundir este moderador con un login real. */}
-          <span className="rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800">
-            sesión simulada
-          </span>
+          <form action={logout}>
+            <button
+              type="submit"
+              className="rounded-lg border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100"
+            >
+              Salir
+            </button>
+          </form>
         </div>
       </header>
 

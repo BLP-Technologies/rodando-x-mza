@@ -1,24 +1,29 @@
 'use client';
 
-import { useState } from 'react';
+import { useActionState, useEffect, useState } from 'react';
 import Link from 'next/link';
+import { login } from '@/session/actions';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    console.log({ email, password });
-  };
+  const [result, formAction, pending] = useActionState(login, null);
+  const error = result && 'error' in result ? result.error : null;
+  const loggedIn = result !== null && 'ok' in result;
+
+  // Carga completa a propósito: ver `login` en `session/actions.ts`.
+  useEffect(() => {
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- ver arriba
+    if (loggedIn) window.location.assign('/');
+  }, [loggedIn]);
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form action={formAction} className="space-y-4">
       <div>
-        <label className="block text-sm font-medium text-slate-700 mb-1">
-          Correo electrónico
-        </label>
+        <label className="block text-sm font-medium text-slate-700 mb-1">Correo electrónico</label>
         <input
+          name="email"
           type="email"
           required
           value={email}
@@ -30,17 +35,13 @@ export default function LoginPage() {
 
       <div>
         <div className="flex justify-between items-center mb-1">
-          <label className="block text-sm font-medium text-slate-700">
-            Contraseña
-          </label>
-          <Link
-            href="/reset-password"
-            className="text-xs text-blue-600 hover:underline"
-          >
+          <label className="block text-sm font-medium text-slate-700">Contraseña</label>
+          <Link href="/reset-password" className="text-xs text-blue-600 hover:underline">
             ¿Olvidaste tu contraseña?
           </Link>
         </div>
         <input
+          name="password"
           type="password"
           required
           value={password}
@@ -49,12 +50,17 @@ export default function LoginPage() {
           className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
       </div>
-
+      {error && (
+        <p role="alert" className="text-sm text-red-600">
+          {error}
+        </p>
+      )}
       <button
         type="submit"
-        className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg text-sm transition-colors"
+        disabled={pending || loggedIn}
+        className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-medium rounded-lg text-sm transition-colors"
       >
-        Ingresar
+        {pending || loggedIn ? 'Ingresando…' : 'Ingresar'}
       </button>
 
       <div className="text-center mt-4">

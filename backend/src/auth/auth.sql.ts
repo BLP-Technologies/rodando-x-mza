@@ -41,6 +41,11 @@ export async function findUserByEmail(
 /**
  * Crea la cuenta. Si el email ya existe, la base rechaza el insert con la violación de
  * unicidad (`23505`), y el servicio la traduce a `CONFLICT`.
+ *
+ * **Toda cuenta nace moderadora.** Es una decisión del MVP, no del modelo: el default de
+ * la columna sigue en `false`, así que cualquier otra vía de alta —un seed, un script de
+ * administración— no hereda el permiso por olvido. El día que haya roles reales, se
+ * quita esta línea y las cuentas vuelven a esperar habilitación ([20 §7](../../../docs/20-autenticacion.md)).
  */
 export async function insertUser(
   db: Kysely<DB>,
@@ -48,7 +53,12 @@ export async function insertUser(
 ): Promise<UserRow> {
   return db
     .insertInto('users')
-    .values({ name: user.name, email: user.email, password_hash: user.passwordHash })
+    .values({
+      name: user.name,
+      email: user.email,
+      password_hash: user.passwordHash,
+      is_moderator: true,
+    })
     .returning(['id', 'name', 'email', 'is_moderator as isModerator'])
     .executeTakeFirstOrThrow();
 }

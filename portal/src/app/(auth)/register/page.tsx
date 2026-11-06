@@ -1,27 +1,42 @@
 'use client';
 
-import { useState } from 'react';
+import { useActionState, useState } from 'react';
 import Link from 'next/link';
+import { register } from '@/session/actions';
 
 export default function RegisterPage() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    console.log({ name, email, password });
-  };
+  const [result, formAction, pending] = useActionState(register, null);
+  const error = result && 'error' in result ? result.error : null;
+
+  if (result && 'ok' in result) {
+    return (
+      <div className="space-y-4 text-center">
+        <p role="status" className="text-sm text-slate-700">
+          Cuenta creada. Ya podés iniciar sesión.
+        </p>
+        {/* Carga completa: con `Link`, Next conserva esta pantalla y al volver seguiría este cartel. */}
+        <a href="/login" className="text-xs text-blue-600 font-medium hover:underline">
+          Ir a iniciar sesión
+        </a>
+      </div>
+    );
+  }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form action={formAction} className="space-y-4">
       <div>
         <label className="block text-sm font-medium text-slate-700 mb-1">
           Nombre completo
         </label>
         <input
+          name="name"
           type="text"
           required
+          maxLength={50}
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="Tu nombre"
@@ -34,8 +49,10 @@ export default function RegisterPage() {
           Correo electrónico
         </label>
         <input
+          name="email"
           type="email"
           required
+          maxLength={200}
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="tu-correo@ejemplo.com"
@@ -48,20 +65,30 @@ export default function RegisterPage() {
           Contraseña
         </label>
         <input
+          name="password"
           type="password"
           required
+          minLength={8}
+          maxLength={128}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          placeholder="••••••••"
+          placeholder="Mínimo 8 caracteres"
           className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
       </div>
 
+      {error && (
+        <p role="alert" className="text-sm text-red-600">
+          {error}
+        </p>
+      )}
+
       <button
         type="submit"
-        className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg text-sm transition-colors"
+        disabled={pending}
+        className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-medium rounded-lg text-sm transition-colors"
       >
-        Registrarme
+        {pending ? 'Creando cuenta…' : 'Registrarme'}
       </button>
 
       <div className="text-center mt-4">

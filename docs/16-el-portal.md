@@ -77,9 +77,8 @@ herramientas adentro, y estas son las cosas que hace:
   desde la moderación: el recorrido que va a pedir la app, pedido a mano.
 
 Lo que **no** hace todavía: guardar un recorrido o un lugar frecuente (C006 a C009),
-buscar una calle, autenticar personas (la sesión es simulada, §4) ni recordar entre
-visitas qué capas estaban prendidas (§5.8). Tampoco edita un obstáculo ya publicado: se
-resuelve y se publica otro
+buscar una calle ni recordar entre visitas qué capas estaban prendidas (§5.8). Tampoco
+edita un obstáculo ya publicado: se resuelve y se publica otro
 ([18 §8](18-la-api-de-obstaculos.md#8-lo-que-este-documento-no-decide)).
 
 **Por qué el mapa y no una tabla.** La unidad de trabajo del portal es el área,
@@ -152,44 +151,57 @@ El grupo `(portal)` define **dos** URLs: `/`, el mapa con sus tres pestañas, y
 `/reports`, la tabla. No hay `/obstacles` ni `/routes`: las dos son herramientas
 dentro del mapa, no secciones, y por eso no tienen entrada en la barra (§8).
 
-`(auth)` es trabajo de otra tanda y este documento no lo decide: el portal sólo
-comparte el layout raíz con esas pantallas.
+`(auth)` sólo aporta las pantallas y comparte el layout raíz; lo que sí le toca a
+este documento es el final del camino: `login` escribe la cookie de sesión que §4 lee,
+y `register` no abre sesión (el registro y el inicio son dos pasos separados
+([20 §2](20-autenticacion.md))).
 
 ## 4. La sesión: un módulo, un consumidor
 
 `src/session/session.ts` es el único lugar donde el portal responde "quién está
 moderando":
 
-- Exporta `Session` —`id`, `name`, `email`, `isModerator`— con la forma que va a
-  tener la tabla `users` ([09](09-modelo-de-datos.md)).
-- Exporta `getSession(): Promise<Session | null>`, y hoy devuelve **un moderador
-  literal** de mentira.
+- Exporta `Session` —`id`, `name`, `email`, `isModerator`— con la forma de la tabla
+  `users` ([09](09-modelo-de-datos.md)), en camelCase porque es del portal y no del
+  contrato de la API.
+- Exporta `getSession(): Promise<Session | null>`, que lee la cookie y devuelve la
+  cuenta o `null`.
 
-**Por qué `async` y por qué puede ser `null` desde hoy.** El mock nunca es
-`null`, pero el día que `getSession` consulte el auth real va a leer una cookie,
-esperar y poder no encontrar a nadie. Si la firma cambiara ese día, todos los
-llamadores cambiarían con ella; como ya es la definitiva, el reemplazo es el
-cuerpo de la función y nada más.
+**El token vive en una cookie `httpOnly`.** `login` ([`session/actions.ts`](../portal/src/session/actions.ts))
+le pide el token a `POST /api/auth/login`, comprueba que la cuenta sea moderadora y lo
+guarda en la cookie `rodando_session`: `httpOnly`, `secure` en producción, `sameSite`
+`lax`, `path` `/` y 30 días, lo mismo que dura la sesión en la base
+([20 §3](20-autenticacion.md)). El JavaScript del navegador no puede leerla, y no hace
+falta que pueda: **los pedidos que la usan salen del servidor de Next**, no del
+navegador —`getSession` llama a `GET /api/auth/me` con el token como `Bearer`.
+
+**Qué devuelve `null`.** Que no haya cookie, que el token no valga (`401`), que la API
+no responda y que la cuenta haya perdido el permiso de moderador. Los cuatro casos
+terminan igual, en el `redirect('/login')` de la guarda.
 
 **Un solo consumidor.** `app/(portal)/layout.tsx` llama a `getSession()` una vez,
-hace `if (!session) redirect('/login')` y le pasa el moderador a la barra. Ese
-`if` es la costura del auth real y **la única guarda del portal**: no hay
-`middleware.ts`, ni contexto de React, ni cookies de mentira, ni un login
-simulado, ni un `redirect` a `/login` desde ningún otro lado.
+hace `if (!session) redirect('/login')` y le pasa el moderador a la barra. Ese `if`
+es **la única guarda del portal**: no hay `middleware.ts`, ni contexto de React, ni
+un `redirect` a `/login` desde ningún otro lado. Como la sesión se resuelve contra la
+API, las páginas del portal son dinámicas: sin sesión no se renderiza ninguna.
 
-**Cómo se reemplaza.** Se reescribe el cuerpo de `getSession` para leer la sesión
-del auth real; cuando devuelva `null`, la redirección ya está escrita y el resto
-del portal no se entera. Lo único que hay que sacar ese día es la marca de
-"sesión simulada" de la barra.
+**`instant = false` no es decorativo.** El layout lee cookies, y con
+`cacheComponents` (ver `next.config.ts`) eso impide prerenderizar la ruta: sin esa
+línea el `next build` falla con "encountered uncached or runtime data during
+prerendering". La opción es de Next 16
+(`node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/02-route-segment-config/instant.md`)
+y desactiva la validación de navegación instantánea para este segmento, nada más. El
+CI corre `pnpm build`, así que borrarla se ve antes de mergear.
 
-**La marca es parte del diseño.** La barra dice **"sesión simulada"** al lado del
-nombre justamente para que nadie confunda estas pantallas con un login real
-mientras no haya auth ([07](07-plan-de-trabajo.md), Fase 3).
+**La barra.** Muestra el nombre y un botón **"Salir"**, que es un formulario con la
+server action `logout`: cierra la sesión en la API, borra la cookie y vuelve a
+`/login`. La marca "sesión simulada" que la barra tuvo mientras no había auth ya no
+existe, y no hay que reponerla: ahora la sesión es real.
 
 **Lo que no se hace, y por qué.** Nada fuera de `session/` consulta ni deduce la
-sesión: ni los componentes del mapa, ni el cliente de la API, ni las páginas. Lo
-caro de la sesión falsa no es el módulo —son treinta líneas—, es repartir el "soy
-moderador" por componentes y guardas: ahí el reemplazo deja de ser un archivo.
+sesión: ni los componentes del mapa, ni el cliente de la API, ni las páginas. Esa es
+la razón por la que el auth real entró cambiando el cuerpo de `getSession` y nada más
+fuera de `session/`.
 
 ## 5. El mapa
 

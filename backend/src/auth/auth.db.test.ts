@@ -23,6 +23,13 @@ async function errorOf(promise: Promise<unknown>): Promise<string> {
  * no deja cuentas ni sesiones en la base de desarrollo.
  */
 describe.skipIf(!process.env.DATABASE_URL)('autenticación contra la base', () => {
+  it('crea la cuenta como moderadora, que es la decisión del MVP', async () => {
+    // Si se revierte esa decisión (auth.sql.ts), este test es el que avisa.
+    const user = await inRolledBackTransaction((trx) => register(trx, ANA));
+
+    expect(user.is_moderator).toBe(true);
+  });
+
   it('guarda un hash y no la contraseña', async () => {
     const stored = await inRolledBackTransaction(async (trx) => {
       const user = await register(trx, ANA);
