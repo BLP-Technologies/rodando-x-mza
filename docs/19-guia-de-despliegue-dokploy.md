@@ -270,28 +270,39 @@ detenidos que lo referencian: listarlos con
 
 La base no se publica en Internet. Para consultas sueltas o trabajo en lote se entra
 por SSH al VPS y desde ahí al contenedor. Es el único camino de acceso desde fuera de
-la red de Dokploy.
+la red de Dokploy: no hay reenvío de puerto ni cliente SQL que se conecte directo, el
+`psql` corre dentro del servidor.
 
-Entrar al servidor:
-
-```bash
-ssh usuario@IP_DEL_VPS
-```
-
-Identificar el contenedor en ejecución. El nombre incluye el identificador de la
-tarea y cambia en cada redeploy, así que se resuelve por filtro en vez de
-hardcodearlo:
+Esta es la secuencia completa, en el orden en que se ejecuta:
 
 ```bash
+# 1. entrar al VPS (el SSH NO está en el 22, hay que pasar -p)
+ssh -p5116 root@201.32.133.8
+
+# 2. ya adentro, resolver el contenedor de la base (el nombre cambia en cada redeploy)
 C=$(docker ps -q --filter name=rodando-x-mza-databasae --filter status=running | head -n1)
-echo "$C"
-```
+echo "$C"   # si sale vacío, el servicio no está Running y el siguiente comando falla raro
 
-Sesión interactiva:
-
-```bash
+# 3. sesión interactiva
 docker exec -it "$C" psql -U rodando -d rodando
 ```
+
+Datos de conexión del servidor de producción:
+
+| Dato | Valor |
+| --- | --- |
+| IP | `201.32.133.8` |
+| Puerto SSH | `5116` |
+| Usuario | `root` |
+
+El puerto SSH es `5116`, no el 22: si se conecta sin `-p5116` la conexión queda
+esperando y no avisa nada. **Si el puerto cambia, hay que actualizarlo acá y en el
+`scp` de §3.8**, que usa el mismo puerto con `-P` mayúscula. El usuario (`root`) y la
+IP también están sujetos a cambio si se rehace el servidor.
+
+El paso 2 resuelve el contenedor por filtro en vez de hardcodear el nombre, porque el
+nombre incluye el identificador de la tarea y cambia en cada redeploy. Si el servicio
+se recrea hay que volver a resolver `C`.
 
 Para aplicar un archivo `.sql` que está en el VPS, como una sola transacción y
 cortando en el primer error:
@@ -319,7 +330,6 @@ Advertencias:
   ([09](09-modelo-de-datos.md)).
 - Antes de un `UPDATE` o `DELETE` masivo, correr el mismo `WHERE` con
   `select count(*)` y revisar el número.
-- Si el servicio se recrea, el contenedor cambia: hay que volver a resolver `C`.
 
 ### 3.8 Respaldo manual
 
@@ -327,8 +337,8 @@ Mientras el sistema esté en el MVP el respaldo es manual: se hace antes de cual
 operación riesgosa, como una carga masiva, un cambio de datos o una migración. No hay
 backups automáticos configurados.
 
-Generar el dump en el VPS, directamente en el home del usuario con el que se entra por
-SSH:
+Generar el dump en el VPS, en el home del usuario con el que se entra por SSH
+(`/root`, porque se entra como `root`):
 
 ```bash
 DB=$(docker ps -q --filter name=rodando-x-mza-databasae --filter status=running | head -n1)
@@ -338,18 +348,17 @@ ls -lh ~/rodando-*.dump
 
 `-Fc` es formato custom comprimido: ocupa poco y se puede inspeccionar sin restaurar.
 `pg_dump` toma una foto consistente aunque la API esté escribiendo, pero no incluye
-roles ni contraseñas. Si el archivo se generó como root, se mueve al home del usuario y
-se ajusta el dueño antes de copiarlo.
+roles ni contraseñas.
 
 Copiar a la máquina de trabajo:
 
 ```bash
-scp -P <puerto> usuario@IP_DEL_VPS:'~/rodando-*.dump' ~/backups/rodando/
+scp -P5116 root@201.32.133.8:'~/rodando-*.dump' ~/backups/rodando/
 ```
 
-`scp` usa **`-P` mayúscula** para el puerto; `ssh` usa `-p` minúscula. Si el servidor
-escucha en el 22 se omite, pero acá el SSH está en un puerto distinto: sin `-P` la
-conexión queda esperando y no avisa nada.
+`scp` usa **`-P` mayúscula** para el puerto; `ssh` usa `-p` minúscula. Si el puerto SSH
+del servidor cambia, hay que actualizarlo acá y en §3.7: sin `-P` la conexión queda
+esperando y no avisa nada.
 
 Verificar que el archivo sea un dump válido:
 

@@ -108,8 +108,11 @@ no se recomienda. El crecimiento esperado lo absorbe primero el disco
   nombre no afecta ninguna otra decisión del documento.
 - **TLS.** Los certificados se emiten con Let's Encrypt y se renuevan
   automáticamente. nginx redirige todo HTTP a HTTPS.
-- **Reglas de exposición.** Solo 80 y 443 son alcanzables desde Internet. El
-  acceso administrativo por SSH se restringe a clave pública, sin contraseña.
+- **Reglas de exposición.** Solo 80 y 443 son alcanzables desde Internet como HTTP/HTTPS.
+  El acceso administrativo por SSH se restringe a clave pública, sin contraseña, y
+  escucha en un puerto distinto del 22. El usuario, la IP y el puerto del servidor de
+  producción están en [19 §3.7](19-guia-de-despliegue-dokploy.md); si cambian, se
+  actualizan ahí y en el `scp` de §3.8.
 - **HSTS y redirección.** Se activan una vez que los certificados están en
   producción; en desarrollo local no aplican.
 
@@ -127,8 +130,10 @@ no se recomienda. El crecimiento esperado lo absorbe primero el disco
   las migraciones— y operar la aplicación, pero no administra el cluster. A futuro,
   con usuarios reales, se separa en dos roles: `migrator` (dueño del esquema) y
   `app` (solo permisos de datos).
-- **Puerto.** No se publica al exterior; se accede solo desde la red interna de
-  Compose o por SSH con un túnel cuando hace falta operar a mano.
+- **Puerto.** No se publica al exterior ni se reenvía: se accede solo desde la red
+  interna de Compose, o entrando por SSH al VPS y abriendo `psql` dentro del
+  contenedor cuando hace falta operar a mano. La secuencia de comandos está en
+  [19 §3.7](19-guia-de-despliegue-dokploy.md).
 - **Migraciones.** Se aplican con `node-pg-migrate` como paso previo al arranque
   de la versión nueva (§8). Las migraciones se escriben **compatibles hacia
   atrás** (primero agregar, después migrar datos, recién después eliminar lo
