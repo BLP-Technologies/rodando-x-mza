@@ -1,3 +1,4 @@
+// PlaceFormScreen.tsx
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -9,19 +10,21 @@ import { PlaceCategory, PlaceSchema } from '@/types/places';
 import { placesService } from '@/services/placesService';
 import { useAuth } from '@/auth/AuthContext';
 import { searchAddressSuggestions, PlaceSuggestion } from '@/services/geocoding';
+import { getServiceAreas, ServiceAreasCollection } from '@/services/serviceAreasService';
+import { isPointInServiceArea } from '@/utils/geo';
 import { AppHeader } from '@/components/common/AppHeader';
 import { ScreenHeader } from '@/components/common/ScreenHeader';
 import { FormInput } from '@/components/common/FormInput';
 import { CategoryDropdown } from '@/components/path/places/CategoryDropDown';
 import { PrimaryButton } from '@/components/common/PrimaryButton';
 import { StatusModal, StatusType } from '@/components/common/StatusModal';
+import { MapLocationPickerModal } from '@/components/report/MapLocationPickerModal';
 
 type PlaceFormRouteProp = RouteProp<RouteStackParamList, 'EditPlace'>;
 type CoordinatesState = {
   latitude: number | null;
   longitude: number | null;
 };
-
 
 export const PlaceFormScreen = () => {
   const { styles, theme } = useStyles(getStyles);
@@ -40,11 +43,15 @@ export const PlaceFormScreen = () => {
   const [address, setAddress] = useState('');
   const [category, setCategory] = useState<PlaceCategory>('CASA');
 
-  // Coordenadas simuladas/fijas para Mendoza
+  // Coordenadas
   const [coordinates, setCoordinates] = useState<CoordinatesState>({
     latitude: null,
     longitude: null,
   });
+
+  // Áreas de servicio del backend y modal de mapa
+  const [serviceAreas, setServiceAreas] = useState<ServiceAreasCollection | null>(null);
+  const [isMapModalVisible, setIsMapModalVisible] = useState(false);
 
   // Estados para sugerencias de Photon
   const [suggestions, setSuggestions] = useState<PlaceSuggestion[]>([]);
@@ -76,6 +83,21 @@ export const PlaceFormScreen = () => {
     }, [isGuest])
   );
 
+  // Cargar áreas de servicio activas del backend
+  useEffect(() => {
+    let isMounted = true;
+    getServiceAreas()
+      .then((data) => {
+        if (isMounted) setServiceAreas(data);
+      })
+      .catch((err) => {
+        console.error('Error al obtener áreas de servicio en PlaceForm:', err);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   // Si edita y el usuario está autenticado, cargar datos existentes
   useEffect(() => {
     if (placeId && !isGuest) {
@@ -84,15 +106,16 @@ export const PlaceFormScreen = () => {
           setName(place.name);
           setAddress(place.address);
           setCategory(place.category);
-          setCoordinates({ 
-            latitude: place.latitude, 
-            longitude: place.longitude });
+          setCoordinates({
+            latitude: place.latitude,
+            longitude: place.longitude,
+          });
         }
       });
     }
   }, [placeId, isGuest]);
 
-// Manejo de búsqueda en tiempo real con debounce
+  // Manejo de búsqueda en tiempo real con debounce
   const handleAddressChange = (text: string) => {
     setAddress(text);
     setCoordinates({ latitude: null, longitude: null });
@@ -129,33 +152,51 @@ export const PlaceFormScreen = () => {
     setShowSuggestions(false);
   };
 
+  // Confirmación desde el selector del mapa
+  const handleMapConfirm = (selected: { latitude: number; longitude: number; address: string }) => {
+    setCoordinates({
+      latitude: selected.latitude,
+      longitude: selected.longitude,
+    });
+    setAddress(selected.address);
+  };
 
-  const handleLogout = () => cerrarSesion();;
+  const handleLogout = () => cerrarSesion();
 
   const handleSubmit = async () => {
-
     if (isGuest) {
       setShowAuthModal(true);
       return;
     }
 
-// 1. Obtener coordenadas exactas usando Photon si no están fijadas
+    // 1. Obtener coordenadas exactas usando Photon si no están fijadas
     let lat = coordinates.latitude;
     let lon = coordinates.longitude;
 
     if (!lat || !lon) {
-      const suggestions = await searchAddressSuggestions(address);
-      if (suggestions.length > 0) {
-        lat = suggestions[0].latitude;
-        lon = suggestions[0].longitude;
+      const searchResults = await searchAddressSuggestions(address);
+      if (searchResults.length > 0) {
+        lat = searchResults[0].latitude;
+        lon = searchResults[0].longitude;
       } else {
-        // Fallback geográfico dentro del Gran Mendoza
         lat = -32.8895;
         lon = -68.8458;
       }
     }
 
-    // 2. Validación con Zod
+    // 2. Validación de zona piloto (Geofencing)
+    const isInside = isPointInServiceArea(lat, lon, serviceAreas);
+    if (!isInside) {
+      setModalConfig({
+        visible: true,
+        type: 'warning',
+        title: 'Ubicación fuera de área',
+        message: 'Durante la etapa piloto, solo se pueden registrar lugares dentro del área delimitada (Centro de Mendoza).',
+      });
+      return;
+    }
+
+    // 3. Validación con Zod
     const validation = PlaceSchema.safeParse({
       name,
       address,
@@ -165,7 +206,7 @@ export const PlaceFormScreen = () => {
     });
 
     if (!validation.success) {
-      const firstError = validation.error.issues[0]?.message || 'Verifica los datos ingresados';
+      const firstError = validation.error.issues[0]?.message || 'Verificá los datos ingresados';
       setModalConfig({
         visible: true,
         type: 'error',
@@ -175,8 +216,7 @@ export const PlaceFormScreen = () => {
       return;
     }
 
-
-    // 3. Persistir en el almacenamiento JSON con las coordenadas exactas
+    // 4. Persistir en el almacenamiento JSON
     try {
       if (isEditing && placeId) {
         await placesService.update(placeId, {
@@ -219,7 +259,7 @@ export const PlaceFormScreen = () => {
     const wasSuccess = modalConfig.type === 'success';
     setModalConfig((prev) => ({ ...prev, visible: false }));
     if (wasSuccess) {
-      navigation.goBack(); 
+      navigation.goBack();
     }
   };
 
@@ -231,6 +271,11 @@ export const PlaceFormScreen = () => {
   const userInitial = isGuest
     ? 'A'
     : user?.nombre?.[0]?.toUpperCase() || 'U';
+
+  const isCurrentPointInvalid =
+    coordinates.latitude !== null &&
+    coordinates.longitude !== null &&
+    !isPointInServiceArea(coordinates.latitude, coordinates.longitude, serviceAreas);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -249,7 +294,7 @@ export const PlaceFormScreen = () => {
         <ScreenHeader
           eyebrow="TU CIUDAD, A TU MANERA"
           title={isEditing ? 'Editar lugar' : 'Crear lugar'}
-          description="La posición en el mapa es simulada y permanecerá fija."
+          description="Elegí la dirección o marcala directamente en el mapa."
           showBackButton={true}
         />
 
@@ -265,17 +310,32 @@ export const PlaceFormScreen = () => {
             enableVoiceInput={false}
           />
 
-          {/* Dirección */}
+          {/* Dirección con botón de mapa */}
           <View style={styles.addressInputWrapper}>
-            <FormInput
-              label="DIRECCIÓN"
-              placeholder="Ej. Brasil 1550"
-              value={address}
-              onChangeText={handleAddressChange}
-              multiline={false}
-              numberOfLines={1}
-              enableVoiceInput={false}
-            />
+            <View style={styles.addressRow}>
+              <View style={styles.addressInputFlex}>
+                <FormInput
+                  label="DIRECCIÓN"
+                  placeholder="Ej. Chile 945"
+                  value={address}
+                  onChangeText={handleAddressChange}
+                  multiline={false}
+                  numberOfLines={1}
+                  enableVoiceInput={false}
+                />
+              </View>
+              <TouchableOpacity
+                style={styles.mapButton}
+                onPress={() => setIsMapModalVisible(true)}
+                activeOpacity={0.8}
+                accessible={true}
+                accessibilityRole="button"
+                accessibilityLabel="Seleccionar ubicación en el mapa"
+                accessibilityHint="Abre el mapa interactivo con la zona piloto delimitada"
+              >
+                <Ionicons name="map-outline" size={24} color={theme.colors.brand.navy} />
+              </TouchableOpacity>
+            </View>
 
             {/* Spinner mientras busca en Photon */}
             {isLoadingSuggestions && (
@@ -286,8 +346,8 @@ export const PlaceFormScreen = () => {
 
             {/* Desplegable de Sugerencias de Photon */}
             {showSuggestions && suggestions.length > 0 && (
-              <View style=
-                {styles.suggestionsContainer}
+              <View
+                style={styles.suggestionsContainer}
                 accessible={true}
                 accessibilityRole="list"
                 accessibilityLabel="Sugerencias de direcciones encontradas"
@@ -302,7 +362,6 @@ export const PlaceFormScreen = () => {
                     accessibilityRole="button"
                     accessibilityLabel={`${item.name}, ${item.fullAddress}`}
                     accessibilityHint="Selecciona esta dirección para el formulario"
-
                   >
                     <Ionicons
                       name="location-outline"
@@ -324,20 +383,42 @@ export const PlaceFormScreen = () => {
             )}
           </View>
 
+          {/* Aviso contextual si la ubicación elegida está fuera de la zona piloto */}
+          {isCurrentPointInvalid && (
+            <View style={styles.outOfBoundsBadge}>
+              <Ionicons name="alert-circle" size={18} color="#9F1239" />
+              <Text style={styles.outOfBoundsText}>
+                Este punto queda fuera de la zona piloto delimitada.
+              </Text>
+            </View>
+          )}
+
           {/* Selector de Categoría */}
           <CategoryDropdown value={category} onSelect={setCategory} />
 
-          {/* Botón Guardar / Modificar en color naranja */}
+          {/* Botón Guardar / Modificar */}
           <PrimaryButton
-            title="GUARDAR LUGAR"
-            variant="orange"
+            title={isEditing ? 'MODIFICAR LUGAR' : 'GUARDAR LUGAR'}
+            variant={isCurrentPointInvalid ? 'teal' : 'orange'}
             onPress={handleSubmit}
+            disabled={isCurrentPointInvalid}
             style={styles.submitButton}
             accessibilityLabel={isEditing ? 'Modificar lugar' : 'Guardar lugar'}
             accessibilityHint="Guarda la información del lugar en tus direcciones frecuentes"
           />
         </View>
       </ScrollView>
+
+      {/* Modal de ubicación en el mapa con geocercado */}
+      <MapLocationPickerModal
+        visible={isMapModalVisible}
+        initialLatitude={coordinates.latitude ?? -32.8895}
+        initialLongitude={coordinates.longitude ?? -68.8458}
+        title="Ubicación del lugar"
+        subtitle="Mové el mapa hasta situar el pin sobre la ubicación deseada"
+        onConfirm={handleMapConfirm}
+        onClose={() => setIsMapModalVisible(false)}
+      />
 
       {/* Modal de confirmación de guardado o error */}
       <StatusModal
@@ -393,9 +474,28 @@ const getStyles = (theme: Theme) => ({
     position: 'relative' as const,
     zIndex: 10,
   },
+  addressRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'flex-end' as const,
+    gap: theme.spacing.sm,
+  },
+  addressInputFlex: {
+    flex: 1,
+  },
+  mapButton: {
+    width: theme.metrics.minTouch + 8,
+    height: theme.metrics.minTouch + 12,
+    borderRadius: theme.metrics.radius.card + 2,
+    backgroundColor: theme.colors.surface.card,
+    borderWidth: 1.5,
+    borderColor: theme.colors.border.default,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    marginBottom: 12,
+  },
   loaderContainer: {
     position: 'absolute' as const,
-    right: theme.spacing.md,
+    right: theme.spacing.xl + 40,
     top: 38,
   },
   suggestionsContainer: {
@@ -430,6 +530,23 @@ const getStyles = (theme: Theme) => ({
     fontSize: theme.metrics.font.caption.size,
     color: theme.colors.text.muted,
     marginTop: 2,
+  },
+  outOfBoundsBadge: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    backgroundColor: '#FFE4E6',
+    borderWidth: 1,
+    borderColor: '#FDA4AF',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    gap: 8,
+  },
+  outOfBoundsText: {
+    fontSize: 12,
+    fontWeight: '600' as const,
+    color: '#9F1239',
+    flex: 1,
   },
   submitButton: {
     marginTop: theme.spacing.lg,
