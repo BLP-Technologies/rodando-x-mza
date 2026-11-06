@@ -16,7 +16,7 @@ export default function RegisterPage() {
     return (
       <div className="space-y-4 text-center">
         <p role="status" className="text-sm text-slate-700">
-          Cuenta creada. Un administrador tiene que habilitarla antes de que puedas ingresar.
+          Cuenta creada. Ya podés iniciar sesión.
         </p>
         {/* Carga completa: con `Link`, Next conserva esta pantalla y al volver seguiría este cartel. */}
         <a href="/login" className="text-xs text-blue-600 font-medium hover:underline">
