@@ -2,24 +2,21 @@ import type { Kysely } from 'kysely';
 import type { AccessibilityLevel, DB } from '../db/types.js';
 import { ERROR_CODES } from '../http/error-codes.js';
 import { HttpError } from '../http/errors.js';
+import { readServiceAreas } from '../service-areas/service-areas.service.js';
 import {
-  findActiveServiceAreas,
   findGraphFeatures,
   updateElementLevel,
   type GraphFeatureRow,
-  type ServiceAreaRow,
 } from './graph.sql.js';
 import {
   graphResponseSchema,
   lineStringGeometrySchema,
   pointGeometrySchema,
-  polygonGeometrySchema,
   type BBox,
   type ElementKind,
   type GraphElement,
   type GraphFeature,
   type GraphResponse,
-  type ServiceAreaFeature,
 } from './graph.schemas.js';
 
 /**
@@ -44,18 +41,20 @@ const MAX_FEATURES = 2000;
  */
 export async function readGraph(db: Kysely<DB>, bbox: BBox): Promise<GraphResponse> {
   // Las dos consultas son independientes: el área no se filtra por bbox ni compite por el
-  // tope, así que no hay motivo para esperar una antes de pedir la otra.
-  const [rows, areas] = await Promise.all([
+  // tope, así que no hay motivo para esperar una antes de pedir la otra. La colección la
+  // arma `readServiceAreas`, que es la misma función que sirve `GET /api/service-areas`:
+  // las dos respuestas no pueden separarse.
+  const [rows, serviceAreas] = await Promise.all([
     // Se pide una de más para distinguir "entraron justo 2000" de "había más".
     findGraphFeatures(db, bbox, MAX_FEATURES + 1),
-    findActiveServiceAreas(db),
+    readServiceAreas(db),
   ]);
   const truncated = rows.length > MAX_FEATURES;
 
   return graphResponseSchema.parse({
     type: 'FeatureCollection',
     truncated,
-    service_areas: { type: 'FeatureCollection', features: areas.map(toServiceAreaFeature) },
+    service_areas: serviceAreas,
     features: (truncated ? rows.slice(0, MAX_FEATURES) : rows).map(toFeature),
   });
 }
@@ -126,18 +125,3 @@ function toFeature(row: GraphFeatureRow): GraphFeature {
   }
 }
 
-/**
- * Un área de servicio, con la forma que tiene en la respuesta.
- *
- * Misma regla del borde que `toFeature`: el GeoJSON sale de la base como texto y se
- * valida antes de entrar al tipado, en vez de afirmarlo.
- */
-function toServiceAreaFeature(row: ServiceAreaRow): ServiceAreaFeature {
-  const geometry: unknown = JSON.parse(row.geometry);
-
-  return {
-    type: 'Feature',
-    geometry: polygonGeometrySchema.parse(geometry),
-    properties: { id: row.id, name: row.name },
-  };
-}

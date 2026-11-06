@@ -14,11 +14,14 @@ const BASE_URL = Platform.select({
   default: 'http://localhost:3001',
 });
 
-// Configuración de IP local según el dispositivo donde corras la app
-const LOCAL_BACKEND_URL = Platform.select({
-  android: 'http://10.0.2.2:3001',
-  default: 'http://localhost:3001',
-});
+// URL del backend. En el APK se define con EXPO_PUBLIC_API_URL (mobile/.env);
+// sin la variable cae en el backend local para desarrollo.
+const LOCAL_BACKEND_URL =
+  process.env.EXPO_PUBLIC_API_URL ??
+  Platform.select({
+    android: 'http://10.0.2.2:3001',
+    default: 'http://localhost:3001',
+  });
 
 // export const apiFetch = async (endpoint: string, options: RequestInit = {}) => {
 //   if (USE_MOCK) {

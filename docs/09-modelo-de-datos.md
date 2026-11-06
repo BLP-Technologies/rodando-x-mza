@@ -578,10 +578,11 @@ esquinas en ángulo recto** (`ST_Buffer(...::geography, 50, 'join=mitre')`). El 
 WKT quedan en la migración `1793503685017_create-service-areas.sql`, que es donde se puede
 reproducir.
 
-**La lectura de las activas la hace `GET /api/graph`.** La respuesta trae las áreas
-vigentes en `service_areas`, con su `id`, su nombre y su polígono, y el contrato está en
-[14 §5.2](14-la-api-del-grafo.md). No hay endpoint propio del área: es un polígono fijo
-que el mapa dibuja junto con el grafo que ya pide.
+**La lectura de las activas la hacen dos endpoints, con la misma forma.** El grafo la trae
+en `service_areas`, al lado de los elementos, y `GET /api/service-areas` la sirve sola para
+quien no pide el grafo. Las dos respuestas arman la colección con la misma función del
+backend, así que el `id`, el nombre y el polígono son los mismos en las dos; el contrato
+está en [14 §5.2](14-la-api-del-grafo.md).
 
 **No está en el camino del ruteo.** El área limita **las puntas** de una consulta, no el
 recorrido: el camino sigue siendo todo el grafo, y por eso no hay ninguna arista que se

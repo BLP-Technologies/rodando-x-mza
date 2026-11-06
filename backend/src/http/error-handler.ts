@@ -19,9 +19,13 @@ export const notFound: RequestHandler = (_req, res) => {
  * `HttpError` con status ≥ 500— se generaliza a `INTERNAL_ERROR` sin detalles, y
  * el error completo va al log.
  */
-export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
+export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
+  // `req.log` lo agrega pino-http y arrastra el id de la request; sin él, queda el
+  // logger global para los errores que ocurren fuera de una request.
+  const log = req.log ?? getLogger();
+
   if (err instanceof HttpError && err.status < 500) {
-    getLogger().warn({ err }, err.message);
+    log.warn({ err }, err.message);
     res.status(err.status).json({
       error: {
         code: err.code,
@@ -31,6 +35,6 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
     return;
   }
 
-  getLogger().error({ err }, 'Unhandled error');
+  log.error({ err }, 'Unhandled error');
   res.status(500).json({ error: { code: ERROR_CODES.INTERNAL_ERROR } });
 };

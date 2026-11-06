@@ -91,3 +91,35 @@ describe('rutas que exigen sesión', () => {
     expect(res.body as unknown).toEqual({ error: { code: 'UNAUTHENTICATED' } });
   });
 });
+
+describe('GET /api/openapi.json', () => {
+  it('publica los cuatro endpoints del auth y sus componentes', async () => {
+    const res = await request(app).get('/api/openapi.json');
+
+    expect(res.status).toBe(200);
+
+    const document = res.body as {
+      paths: Record<string, Record<string, { responses?: Record<string, unknown> }>>;
+      components: { schemas: Record<string, unknown> };
+    };
+
+    // El contrato se lee, no se transcribe: si un path no está acá, el cliente no lo
+    // puede generar (docs/15 §2).
+    expect(document.paths['/api/auth/register']).toHaveProperty('post');
+    expect(document.paths['/api/auth/login']).toHaveProperty('post');
+    expect(document.paths['/api/auth/me']).toHaveProperty('get');
+    expect(document.paths['/api/auth/logout']).toHaveProperty('post');
+
+    // Los estados que el cliente tiene que saber tratar: el alta choca con un email
+    // repetido y los endpoints con token rechazan la sesión que no sirve.
+    expect(document.paths['/api/auth/register']?.['post']?.responses).toHaveProperty('201');
+    expect(document.paths['/api/auth/register']?.['post']?.responses).toHaveProperty('409');
+    expect(document.paths['/api/auth/login']?.['post']?.responses).toHaveProperty('401');
+    expect(document.paths['/api/auth/me']?.['get']?.responses).toHaveProperty('401');
+    expect(document.paths['/api/auth/logout']?.['post']?.responses).toHaveProperty('204');
+
+    for (const name of ['RegisterRequest', 'LoginRequest', 'User', 'UserResponse', 'LoginResponse']) {
+      expect(Object.keys(document.components.schemas)).toContain(name);
+    }
+  });
+});

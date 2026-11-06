@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRoute, RouteProp } from '@react-navigation/native';
@@ -9,43 +9,35 @@ import { useAuth } from '@/auth/AuthContext';
 import { AppHeader } from '@/components/common/AppHeader';
 import { ScreenHeader } from '@/components/common/ScreenHeader';
 import { RouteStepItem } from '@/components/path/RouteStepItem';
+import { RouteLeg } from '@/services/routesService';
 
-// Opcional: pnpm expo install expo-speech para lectura de voz real
 let Speech: any = null;
 try {
   Speech = require('expo-speech');
 } catch {
-  // Fallback si no está instalado aún
+  // Fallback silencioso si no está instalado
 }
 
 type DetailRouteProp = RouteProp<RouteStackParamList, 'RouteDetail'>;
 
-//¿Debería recibir un json con los detalles de los pasos?
 const DEFAULT_STEPS: RouteStep[] = [
   {
     id: '1',
     stepNumber: 1,
-    instruction: 'Avanza por Recorrido local por la vereda de tu izquierda.',
+    instruction: 'Avanza por la vereda.',
     distance: '180 m',
     status: 'accessible',
   },
   {
     id: '2',
     stepNumber: 2,
-    instruction: 'Cruce con rampa en reparación reportada recientemente.',
+    instruction: 'Cruce peatonal.',
     distance: '40 m',
     status: 'unverified',
   },
   {
     id: '3',
     stepNumber: 3,
-    instruction: 'Continúa por calle secundaria con desnivel moderado.',
-    distance: '120 m',
-    status: 'partially_accessible',
-  },
-  {
-    id: '4',
-    stepNumber: 4,
     instruction: 'Llegaste a tu destino.',
     status: 'accessible',
   },
@@ -54,17 +46,74 @@ const DEFAULT_STEPS: RouteStep[] = [
 export const RouteDetailScreen = () => {
   const { styles } = useStyles(getStyles);
   const route = useRoute<DetailRouteProp>();
-
-  // Consumo de sesión global
   const { isGuest, user, cerrarSesion } = useAuth();
 
-  const originLabel = route.params?.originLabel || 'Casa';
-  const destinationLabel = route.params?.destinationLabel || 'Escuela';
-  const steps = route.params?.steps || DEFAULT_STEPS;
+  const originLabel = route.params?.originLabel || 'Origen';
+  const destinationLabel = route.params?.destinationLabel || 'Destino';
+  const rawLegs: RouteLeg[] = (route.params as any)?.legs || [];
+  const explicitSteps: RouteStep[] = (route.params as any)?.steps;
+
+  // Convertimos los legs del backend en RouteSteps numerados para la UI
+  const steps: RouteStep[] = useMemo(() => {
+    if (explicitSteps && explicitSteps.length > 0) {
+      return explicitSteps;
+    }
+
+    if (!rawLegs || rawLegs.length === 0) {
+      return DEFAULT_STEPS;
+    }
+
+    const formatDist = (meters: number) => {
+      if (meters >= 1000) return `${(meters / 1000).toFixed(1)} km`;
+      return `${Math.round(meters)} m`;
+    };
+
+    const generated: RouteStep[] = rawLegs.map((leg, index) => {
+      const isSidewalk = leg.element_kind === 'sidewalk';
+      const distText = formatDist(leg.meters);
+
+      let status: RouteStep['status'] = 'accessible';
+      if (!leg.is_verified || leg.level === null) {
+        status = 'unverified';
+      } else if (leg.level === 'PARTIAL') {
+        status = 'partially_accessible';
+      } else if (leg.level === 'NOT_ACCESSIBLE') {
+        status = 'partially_accessible';
+      }
+
+      let instruction = '';
+      if (isSidewalk) {
+        instruction = leg.is_verified
+          ? 'Avanzá por vereda verificada.'
+          : 'Avanzá por vereda (tramo sin relevamiento reciente).';
+      } else {
+        instruction = leg.is_verified
+          ? 'Realizá el cruce peatonal por la senda/rampa.'
+          : 'Cruce peatonal en esquina (precaución en cordón).';
+      }
+
+      return {
+        id: `step_${index + 1}`,
+        stepNumber: index + 1,
+        instruction,
+        distance: distText,
+        status,
+      };
+    });
+
+    // Agregamos el paso final de llegada
+    generated.push({
+      id: `step_${generated.length + 1}`,
+      stepNumber: generated.length + 1,
+      instruction: `Llegaste a tu destino: ${destinationLabel}.`,
+      status: 'accessible',
+    });
+
+    return generated;
+  }, [rawLegs, explicitSteps, destinationLabel]);
 
   const [isSpeaking, setIsSpeaking] = useState(false);
 
-  // Detener la reproducción de voz al salir o desmontar la pantalla
   useEffect(() => {
     return () => {
       if (Speech && isSpeaking) {
@@ -79,7 +128,6 @@ export const RouteDetailScreen = () => {
     }
     cerrarSesion();
   };
-
 
   const handleSpeakDirections = () => {
     if (Speech) {
@@ -132,11 +180,11 @@ export const RouteDetailScreen = () => {
 
         {/* Fila: Resumen de origen/destino y botón de lectura por voz */}
         <View style={styles.subHeaderRow}>
-          <Text 
+          <Text
             style={styles.routeSummaryText}
             accessible={true}
             accessibilityLabel={`Trayecto desde ${originLabel} hacia ${destinationLabel}`}
-            >
+          >
             {originLabel} → {destinationLabel}
           </Text>
 
@@ -167,7 +215,7 @@ export const RouteDetailScreen = () => {
         </View>
 
         {/* Lista de pasos numerados */}
-        <View 
+        <View
           style={styles.stepsList}
           accessible={true}
           accessibilityRole="list"

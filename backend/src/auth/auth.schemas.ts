@@ -5,8 +5,8 @@ import { z } from 'zod';
  * perfil y cierre de sesión.
  *
  * Es la única fuente: de acá salen los tipos del backend, la validación de los pedidos y
- * —cuando se registren en el `OpenAPI`— el contrato que leen los clientes
- * ([02 §6](../../../docs/02-stack-y-estructura.md)).
+ * el contrato que leen los clientes ([02 §6](../../../docs/02-stack-y-estructura.md)). Los
+ * paths se publican en `openapi.ts`.
  */
 
 /**

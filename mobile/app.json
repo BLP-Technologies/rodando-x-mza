@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "mobile",
+    "name": "Rodando x Mza",
     "slug": "mobile",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -10,21 +10,31 @@
       "supportsTablet": true
     },
     "android": {
+      "package": "com.blptechnologies.rodandoxmza",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
       "expo-secure-store",
-      "expo-status-bar"
+      "expo-status-bar",
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Permitir que Rodando por MZA acceda al micrófono para dictar direcciones y descripciones por voz.",
+          "speechRecognitionPermission": "Permitir que Rodando por MZA use el reconocimiento de voz para dictar direcciones y descripciones."
+        }
+      ]
     ]
-    }
   }
-
+}

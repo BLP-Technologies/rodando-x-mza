@@ -108,8 +108,11 @@ no se recomienda. El crecimiento esperado lo absorbe primero el disco
   nombre no afecta ninguna otra decisión del documento.
 - **TLS.** Los certificados se emiten con Let's Encrypt y se renuevan
   automáticamente. nginx redirige todo HTTP a HTTPS.
-- **Reglas de exposición.** Solo 80 y 443 son alcanzables desde Internet. El
-  acceso administrativo por SSH se restringe a clave pública, sin contraseña.
+- **Reglas de exposición.** Solo 80 y 443 son alcanzables desde Internet como HTTP/HTTPS.
+  El acceso administrativo por SSH se restringe a clave pública, sin contraseña, y
+  escucha en un puerto distinto del 22. El usuario, la IP y el puerto del servidor de
+  producción están en [19 §3.7](19-guia-de-despliegue-dokploy.md); si cambian, se
+  actualizan ahí y en el `scp` de §3.8.
 - **HSTS y redirección.** Se activan una vez que los certificados están en
   producción; en desarrollo local no aplican.
 
@@ -127,8 +130,10 @@ no se recomienda. El crecimiento esperado lo absorbe primero el disco
   las migraciones— y operar la aplicación, pero no administra el cluster. A futuro,
   con usuarios reales, se separa en dos roles: `migrator` (dueño del esquema) y
   `app` (solo permisos de datos).
-- **Puerto.** No se publica al exterior; se accede solo desde la red interna de
-  Compose o por SSH con un túnel cuando hace falta operar a mano.
+- **Puerto.** No se publica al exterior ni se reenvía: se accede solo desde la red
+  interna de Compose, o entrando por SSH al VPS y abriendo `psql` dentro del
+  contenedor cuando hace falta operar a mano. La secuencia de comandos está en
+  [19 §3.7](19-guia-de-despliegue-dokploy.md).
 - **Migraciones.** Se aplican con `node-pg-migrate` como paso previo al arranque
   de la versión nueva (§8). Las migraciones se escriben **compatibles hacia
   atrás** (primero agregar, después migrar datos, recién después eliminar lo
@@ -237,8 +242,12 @@ APK desde la misma rama integrada, para que lo que se prueba sea lo documentado.
   caída de un proceso.
 - **Aviso de caída.** Un chequeo externo gratuito golpea `/api/health/ready` y avisa
   por el canal de mensajería del equipo si no responde.
-- **Logs.** Se consultan con `docker compose logs` y rotan por tamaño para no
-  llenar el disco.
+- **Logs.** La API registra cada request con `pino-http` (método, ruta, status,
+  duración, IP e id de correlación en `x-request-id`), sin cuerpos ni credenciales;
+  los health checks y `/uploads` quedan afuera. Se consultan con `docker service
+  logs` o el visor de Dokploy, y rotan por tamaño (`max-size`/`max-file` en el
+  daemon) para no llenar el disco. El detalle operativo está en
+  [19 §4.7](19-guia-de-despliegue-dokploy.md#47-logs).
 - **Disco.** Es el recurso que primero se agota (imágenes de reportes). Se controla
   su uso y se avisa al superar un umbral.
 - **Mantenimiento.** Actualizaciones del sistema operativo y de las imágenes base
