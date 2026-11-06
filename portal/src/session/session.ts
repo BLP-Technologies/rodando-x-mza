@@ -22,7 +22,7 @@ export type Session = {
   isModerator: boolean;
 };
 
-/** Tipado a mano: las rutas de auth todavía no están en el OpenAPI. */
+/** Tipado a mano: las rutas de auth todavía no están en `schema.d.ts`. */
 export type ApiUser = {
   id: number;
   name: string;

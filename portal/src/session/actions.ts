@@ -5,12 +5,13 @@ import { redirect } from 'next/navigation';
 import { apiPost } from '@/api/client';
 import { API_URL } from '@/config';
 import { describeLoginError, NOT_MODERATOR_MESSAGE } from './login-errors';
+import { describeRegisterError } from './register-errors';
 import { SESSION_COOKIE, type ApiUser } from './session';
 
 // Lo mismo que dura la sesión en el backend.
 const SESSION_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
 
-type LoginResult = { error: string } | { ok: true };
+type ActionResult = { error: string } | { ok: true };
 
 async function closeApiSession(token: string): Promise<void> {
   try {
@@ -26,9 +27,9 @@ async function closeApiSession(token: string): Promise<void> {
 // No redirige: con `redirect`, Next repite la redirección oculta de `/` a `/login`.
 // Si sale bien, el formulario hace una carga completa de `/`.
 export async function login(
-  _previous: LoginResult | null,
+  _previous: ActionResult | null,
   formData: FormData,
-): Promise<LoginResult> {
+): Promise<ActionResult> {
   let result: { token: string; user: ApiUser };
 
   try {
@@ -53,6 +54,24 @@ export async function login(
     path: '/',
     maxAge: SESSION_MAX_AGE_SECONDS,
   });
+
+  return { ok: true };
+}
+
+// El registro no abre sesión ni da permisos de moderación: eso lo define el backend.
+export async function register(
+  _previous: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    await apiPost('/api/auth/register', {
+      name: formData.get('name'),
+      email: formData.get('email'),
+      password: formData.get('password'),
+    });
+  } catch (error) {
+    return { error: describeRegisterError(error) };
+  }
 
   return { ok: true };
 }
