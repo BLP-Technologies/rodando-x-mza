@@ -182,6 +182,7 @@ export const ProfileScreen = () => {
                   <Text style={styles.userEmailText}>{user?.email || 'Sin correo asociado'}</Text>
                 </View>
 
+                {/** Botón para editar datos 
                 <TouchableOpacity
                   style={styles.editDataButton}
                   onPress={toggleEditar}
@@ -193,7 +194,7 @@ export const ProfileScreen = () => {
                   <Text style={styles.editDataText}>
                     {isEditing ? 'Cancelar' : 'Editar datos'}
                   </Text>
-                </TouchableOpacity>
+                </TouchableOpacity>*/}
               </View>
             </View>
 
