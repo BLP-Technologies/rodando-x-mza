@@ -1,5 +1,7 @@
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useStyles, Theme } from '@/theme';
+const LOGO_IMG = require("@/../assets/images/logo.png");
 
 interface PantallaBienvenida {
   onInvitado: () => void;
@@ -18,7 +20,18 @@ export function Bienvenida({
       <View style={styles.content}>
         {/*LOGO*/}
         <View style={styles.logoPlaceHolder}>
-          <Text style={styles.logoTitle}>RodandoXmza</Text>
+          <Image
+            source={LOGO_IMG}
+            style={styles.logoImage}
+            resizeMode="contain"
+            accessibilityIgnoresInvertColors
+          />
+          <Text style={styles.logoTitle}>
+            RODANDO<Text style={{ color: '#f58d05' }}>X</Text>
+            <Text style={{ color: "rgb(49, 156, 156)" }}>MZA</Text>
+          </Text>
+
+          
           <Text style={styles.logoTagline}>
             — MENDOZA ACCESIBLE, PARA TODXS —
           </Text>
@@ -82,6 +95,11 @@ const styles = StyleSheet.create({
   logoPlaceHolder: {
     alignItems: "center",
     marginBottom: 32,
+  },
+  logoImage: {
+    width: 180,
+    height: 180,
+    marginBottom: 12,
   },
   logoTitle: {
     fontSize: 36,

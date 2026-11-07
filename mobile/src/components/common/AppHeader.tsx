@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity } from 'react-native';
+import { View, Text, TouchableOpacity, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useStyles, Theme } from '@/theme';
 import { LogoutConfirmModal } from '@/components/common/LogoutConfirmModal';
+
+const LOGO_IMG = require('@/../assets/images/logo.png');
+
 
 interface AppHeaderProps {
   userInitial?: string;
@@ -54,10 +57,17 @@ export const AppHeader = ({
           accessibilityRole="header"
           accessibilityLabel="Rodando por Mendoza, ir al inicio"
         >
-          <Text style={styles.logoText}>
+          {/* Imagen del logo */}
+          <Image
+            source={LOGO_IMG}
+            style={styles.logoImage}
+            resizeMode="contain"
+            accessibilityIgnoresInvertColors
+          />
+          {/* <Text style={styles.logoText}>
             RODANDO<Text style={{ color: theme.colors.state.warning }}>X</Text>
             <Text style={{ color: theme.colors.brand.teal }}>MZA</Text>
-          </Text>
+          </Text> */}
         </TouchableOpacity>
 
         {/* Acciones de usuario: botones separados */}
@@ -117,6 +127,10 @@ const getStyles = (theme: Theme) => ({
   logoPlaceholder: {
     justifyContent: 'center' as const,
     minHeight: theme.metrics.minTouch,
+  },
+  logoImage: {
+    width: 80,
+    height: 80,
   },
   logoText: {
     fontSize: theme.metrics.font.title.size,
