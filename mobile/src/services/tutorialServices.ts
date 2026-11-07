@@ -9,7 +9,7 @@ export const tutorialsService = {
   
     // GET /api/tutorials
   async getAll(): Promise<Tutorial[]> {
-    if (!USE_MOCK) {
+    if (USE_MOCK) {
       const response = await apiFetch('/api/tutorials');
       if (!response.ok) {
         throw new Error('Error al obtener la lista de tutoriales');
