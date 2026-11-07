@@ -5,7 +5,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useStyles, Theme } from '@/theme';
 import { LogoutConfirmModal } from '@/components/common/LogoutConfirmModal';
 
-const LOGO_IMG = require('@/../assets/images/logo.png');
+const LOGO_IMG = require('@/../assets/images/logoHeader.jpeg');
 
 
 interface AppHeaderProps {
@@ -129,8 +129,8 @@ const getStyles = (theme: Theme) => ({
     minHeight: theme.metrics.minTouch,
   },
   logoImage: {
-    width: 80,
-    height: 80,
+    width: 210,
+    height: 90,
   },
   logoText: {
     fontSize: theme.metrics.font.title.size,
