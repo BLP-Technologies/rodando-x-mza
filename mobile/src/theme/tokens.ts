@@ -112,15 +112,15 @@ export const darkColors: typeof lightColors = {
     unverified: '#9CA3AF',
   },
   text: {
-    main: '#F8FAFC',
+    main: '#fff',
     muted: '#CBD5E1',
     secondary: '#94A3B8',
-    inverse: '#0F172A',
+    inverse: '#fff',
   },
   surface: {
     background: '#0B0F19',
     card: '#1E293B',
-    subtle: '#334155',
+    subtle: '#94A3B8',
     welcome: '#111827',
   },
   border: {

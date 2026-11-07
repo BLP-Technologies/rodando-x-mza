@@ -34,7 +34,8 @@
           "microphonePermission": "Permitir que Rodando por MZA acceda al micrófono para dictar direcciones y descripciones por voz.",
           "speechRecognitionPermission": "Permitir que Rodando por MZA use el reconocimiento de voz para dictar direcciones y descripciones."
         }
-      ]
+      ],
+      "expo-font"
     ]
   }
 }
