@@ -496,7 +496,7 @@ const getStyles = (theme: Theme) => ({
 
   // --- TARJETA DE BIENVENIDA (Común a ambos) ---
   welcomeCard: {
-    backgroundColor: '#E8F5F5', // Fondo verde menta/cian suave exacto a las capturas
+    backgroundColor: theme.colors.surface.welcome, // Fondo verde menta/cian suave exacto a las capturas
     borderRadius: theme.metrics.radius.card,
     padding: theme.spacing.lg,
     marginBottom: theme.spacing.md,
@@ -593,12 +593,12 @@ const getStyles = (theme: Theme) => ({
   activeAccountTitle: {
     fontSize: theme.metrics.font.body.size,
     fontWeight: '800' as const,
-    color: theme.colors.brand.navy,
+    color: theme.colors.text.main,
     marginBottom: 4,
   },
   activeAccountSubtitle: {
-    fontSize: theme.metrics.font.caption.size,
-    color: theme.colors.text.muted,
+    fontSize: theme.metrics.font.caption.lineHeight,
+    color: theme.colors.text.main,
   },
 
   // --- CASO 2: INVITADO CTA ---
